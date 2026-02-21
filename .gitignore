@@ -137,3 +137,24 @@ dist
 # Vite logs files
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
+
+# Cloudflare
+.wrangler/
+.dev.vars
+
+# OMC (oh-my-claudecode)
+.omc/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Lock files (pnpm is canonical)
+package-lock.json
+yarn.lock

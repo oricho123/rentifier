@@ -1,0 +1,12 @@
+{
+  "name": "@rentifier/db",
+  "private": true,
+  "main": "src/index.ts",
+  "types": "src/index.ts",
+  "dependencies": {
+    "@rentifier/core": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0"
+  }
+}

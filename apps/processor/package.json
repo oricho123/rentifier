@@ -1,0 +1,15 @@
+{
+  "name": "@rentifier/processor",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@rentifier/core": "workspace:*",
+    "@rentifier/db": "workspace:*",
+    "@rentifier/connectors": "workspace:*",
+    "@rentifier/extraction": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0",
+    "wrangler": "^3.28.0"
+  }
+}
