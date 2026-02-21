@@ -1,11 +1,11 @@
 export const PRICE_PATTERNS: { pattern: RegExp; currency: 'ILS' | 'USD' | 'EUR' }[] = [
-  { pattern: /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*(?:ש״ח|שח|shekel|שקל)/i, currency: 'ILS' },
-  { pattern: /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*₪/, currency: 'ILS' },
-  { pattern: /₪\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/, currency: 'ILS' },
-  { pattern: /\$\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/, currency: 'USD' },
-  { pattern: /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*\$/, currency: 'USD' },
-  { pattern: /€\s*(\d{1,3}(?:,\d{3})*(?:\.\d+)?)/, currency: 'EUR' },
-  { pattern: /(\d{1,3}(?:,\d{3})*(?:\.\d+)?)\s*€/, currency: 'EUR' },
+  { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*(?:ש״ח|שח|shekel|שקל)/i, currency: 'ILS' },
+  { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*₪/, currency: 'ILS' },
+  { pattern: /₪\s*(\d+(?:\.\d+)?)/, currency: 'ILS' },
+  { pattern: /\$\s*(\d+(?:\.\d+)?)/, currency: 'USD' },
+  { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*\$/, currency: 'USD' },
+  { pattern: /€\s*(\d+(?:\.\d+)?)/, currency: 'EUR' },
+  { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*€/, currency: 'EUR' },
 ];
 
 export const PERIOD_PATTERNS: { pattern: RegExp; period: 'month' | 'week' | 'day' }[] = [

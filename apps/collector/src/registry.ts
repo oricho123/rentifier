@@ -1,5 +1,5 @@
 import type { Connector } from '@rentifier/connectors';
-import { MockConnector } from '@rentifier/connectors';
+import { MockConnector, Yad2Connector } from '@rentifier/connectors';
 
 export class ConnectorRegistry {
   private connectors = new Map<string, Connector>();
@@ -20,5 +20,6 @@ export class ConnectorRegistry {
 export function createDefaultRegistry(): ConnectorRegistry {
   const registry = new ConnectorRegistry();
   registry.register('mock', new MockConnector());
+  registry.register('yad2', new Yad2Connector());
   return registry;
 }

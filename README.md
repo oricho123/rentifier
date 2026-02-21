@@ -28,7 +28,7 @@ rentifier/
 ├── packages/
 │   ├── core/            # Shared types, Zod schemas, constants
 │   ├── db/              # D1 migrations, schema types, query helpers
-│   ├── connectors/      # Connector interface + mock implementation
+│   ├── connectors/      # Connector interface + Yad2 & mock implementations
 │   └── extraction/      # Rules-based field extraction (Hebrew + English)
 └── .specs/              # Spec-driven development documents
     ├── project/         # PROJECT.md, ROADMAP.md
@@ -43,6 +43,7 @@ rentifier/
 - **Notifications:** Telegram Bot API
 - **Validation:** Zod
 - **Monorepo:** pnpm workspaces
+- **Testing:** Vitest
 - **Tooling:** Wrangler, ESLint, Prettier
 
 ## Prerequisites
@@ -84,19 +85,35 @@ wrangler d1 migrations apply rentifier --local
 wrangler d1 migrations apply rentifier --remote
 ```
 
-### Run a worker locally
+### Run tests
 
 ```bash
-cd apps/collector
-wrangler dev
+pnpm test          # run all tests once
+pnpm test:watch    # run in watch mode
+```
 
-# In another terminal
-cd apps/processor
-wrangler dev
+### Run all workers locally
 
-# In another terminal
-cd apps/notify
-wrangler dev
+```bash
+pnpm dev
+```
+
+This starts all three workers concurrently with colored output. Or run individually:
+
+```bash
+pnpm dev:collector    # port 8787
+pnpm dev:processor    # port 8788
+pnpm dev:notify       # port 8789
+```
+
+### Trigger a scheduled worker manually
+
+While a worker is running locally, trigger its cron handler:
+
+```bash
+pnpm trigger:collector
+pnpm trigger:processor
+pnpm trigger:notify
 ```
 
 ### Deploy to Cloudflare
@@ -136,7 +153,7 @@ Spec documents live in `.specs/features/<feature-name>/`. The project roadmap an
 | Milestone | Description | Status |
 |-----------|-------------|--------|
 | **M1** | Foundation — monorepo, shared packages, D1 schema, 3 workers with mock connector | Done |
-| **M2** | First Live Source — YAD2 connector, extraction tuning, Telegram bot, deploy | Planned |
+| **M2** | First Live Source — YAD2 connector, extraction tuning, Telegram bot, deploy | In Progress |
 | **M3** | Multi-User & Filters — Telegram bot commands, filter management | Planned |
 | **M4** | Additional Sources — Facebook and other connectors | Planned |
 

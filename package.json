@@ -1,12 +1,22 @@
 {
   "name": "rentifier-monorepo",
   "private": true,
+  "type": "module",
   "scripts": {
     "build": "pnpm -r build",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write '**/*.{ts,json,yaml,md}'",
     "format:check": "prettier --check '**/*.{ts,json,yaml,md}'",
-    "typecheck": "pnpm -r exec tsc --noEmit"
+    "typecheck": "pnpm -r exec tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "dev:collector": "pnpm --filter @rentifier/collector exec wrangler dev --test-scheduled --port 8787",
+    "dev:processor": "pnpm --filter @rentifier/processor exec wrangler dev --test-scheduled --port 8788",
+    "dev:notify": "pnpm --filter @rentifier/notify exec wrangler dev --test-scheduled --port 8789",
+    "dev": "concurrently -n collector,processor,notify -c blue,green,yellow \"pnpm dev:collector\" \"pnpm dev:processor\" \"pnpm dev:notify\"",
+    "trigger:collector": "curl -s http://localhost:8787/__scheduled",
+    "trigger:processor": "curl -s http://localhost:8788/__scheduled",
+    "trigger:notify": "curl -s http://localhost:8789/__scheduled"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -16,9 +26,11 @@
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
     "@typescript-eslint/parser": "^7.0.0",
+    "concurrently": "^9.2.1",
     "eslint": "^8.57.0",
     "prettier": "^3.2.0",
     "tsx": "^4.21.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.18"
   }
 }
