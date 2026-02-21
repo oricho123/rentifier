@@ -1,7 +1,7 @@
 import type { DB, ListingRaw, ListingRow } from '@rentifier/db';
 import type { Connector } from '@rentifier/connectors';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
-import { MockConnector } from '@rentifier/connectors';
+import { MockConnector, Yad2Connector } from '@rentifier/connectors';
 import { extractAll } from '@rentifier/extraction';
 
 export interface ProcessingResult {
@@ -31,6 +31,7 @@ class ConnectorRegistry {
 function createDefaultRegistry(): ConnectorRegistry {
   const registry = new ConnectorRegistry();
   registry.register('mock', new MockConnector());
+  registry.register('yad2', new Yad2Connector());
   return registry;
 }
 
@@ -89,6 +90,12 @@ export async function processBatch(db: DB, batchSize: number = 50): Promise<Proc
         posted_at: draft.postedAt?.toISOString() ?? null,
         tags_json: extraction.tags.length > 0 ? JSON.stringify(extraction.tags) : null,
         relevance_score: extraction.overallConfidence > 0 ? extraction.overallConfidence : null,
+        floor: draft.floor ?? null,
+        square_meters: draft.squareMeters ?? null,
+        property_type: draft.propertyType ?? null,
+        latitude: draft.latitude ?? null,
+        longitude: draft.longitude ?? null,
+        image_url: draft.imageUrl ?? null,
       };
 
       await db.upsertListing(listingRow);

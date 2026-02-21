@@ -40,6 +40,12 @@ export interface ListingRow {
   ingested_at: string;
   tags_json: string | null;
   relevance_score: number | null;
+  floor: number | null;
+  square_meters: number | null;
+  property_type: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  image_url: string | null;
 }
 
 export interface User {

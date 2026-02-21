@@ -1,56 +1,23 @@
 # Roadmap
 
-**Current Milestone:** M1 - Foundation
-**Status:** Planning
+**Current Milestone:** M2 - First Live Source
+**Status:** In Progress
 
 ---
 
-## M1 - Foundation
+## M1 - Foundation — DONE
 
 **Goal:** Monorepo scaffolding, shared packages, D1 schema, and the connector interface — everything needed before building the first real connector.
-**Target:** All infrastructure in place; a dummy/mock connector can run end-to-end through collector → processor → notify.
+**Completed:** 2026-02-21
 
 ### Features
 
-**Monorepo Setup** - PLANNED
-
-- pnpm workspace with `apps/` and `packages/` directories
-- Shared TypeScript config, linting, formatting
-- Wrangler configs per worker app
-
-**Shared Packages** - PLANNED
-
-- `packages/core`: canonical types (`Listing`, `ListingCandidate`, `Filter`, etc.), Zod schemas, constants
-- `packages/db`: D1 migrations, schema, query helpers
-- `packages/connectors`: connector interface (`fetchNew`, `normalize`, `nextCursor`)
-- `packages/extraction`: rule-based extraction engine (price, rooms, tags from Hebrew/English text)
-
-**D1 Database Schema** - PLANNED
-
-- `sources` + `source_state` (connector registry and cursor tracking)
-- `listings_raw` (raw ingested payloads)
-- `listings` (canonical normalized listings)
-- `users` + `filters` (user preferences and match criteria)
-- `notifications_sent` (dedup tracking for sent notifications)
-
-**Collector Worker** - PLANNED
-
-- Cron-triggered fetching from enabled connectors
-- Writes raw payloads to `listings_raw`, updates `source_state` cursor
-- Idempotent: safe to re-run without duplicating data
-
-**Processor Worker** - PLANNED
-
-- Reads unprocessed raw listings
-- Runs extraction pipeline (regex/rules, then optional AI fallback)
-- Deduplicates against existing canonical listings
-- Upserts into `listings`
-
-**Notify Worker** - PLANNED
-
-- Matches new listings against saved filters
-- Sends Telegram messages for matches not yet sent
-- Records in `notifications_sent` to prevent double-sends
+**Monorepo Setup** - DONE
+**Shared Packages** - DONE (core, db, connectors, extraction)
+**D1 Database Schema** - DONE (7 tables, indexes, seed data)
+**Collector Worker** - DONE
+**Processor Worker** - DONE
+**Notify Worker** - DONE
 
 ---
 
@@ -60,11 +27,12 @@
 
 ### Features
 
-**YAD2 Connector** - PLANNED
+**YAD2 Connector** - IN PROGRESS
 
-- Research and implement YAD2 API/data access
-- Cursor-based incremental fetching
-- Normalize YAD2 fields to canonical schema
+- Implement Yad2 rental API client with Cloudflare Workers `fetch`
+- Cursor-based incremental fetching with page tracking
+- Normalize Yad2 structured fields to canonical schema
+- Safety mechanisms: retry with backoff, captcha detection, circuit breaker
 
 **Extraction Tuning** - PLANNED
 

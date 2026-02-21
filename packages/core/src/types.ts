@@ -11,6 +11,12 @@ export interface Listing {
   bedrooms: number;                // 0 = studio
   city: string;
   neighborhood: string | null;
+  floor: number | null;
+  squareMeters: number | null;
+  propertyType: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  imageUrl: string | null;
   tags: string[];                  // e.g., ["parking", "balcony", "pets"]
   url: string;
   postedAt: Date;
@@ -43,6 +49,12 @@ export interface ListingDraft {
   tags: string[];
   url: string;
   postedAt: Date | null;
+  floor: number | null;
+  squareMeters: number | null;
+  propertyType: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  imageUrl: string | null;
 }
 
 // User filter criteria

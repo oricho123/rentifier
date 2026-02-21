@@ -58,6 +58,12 @@ export class MockConnector implements Connector {
       tags: [],
       url: candidate.rawUrl,
       postedAt: candidate.rawPostedAt ? new Date(candidate.rawPostedAt) : null,
+      floor: null,
+      squareMeters: null,
+      propertyType: null,
+      latitude: null,
+      longitude: null,
+      imageUrl: null,
     };
   }
 }

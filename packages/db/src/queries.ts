@@ -75,14 +75,16 @@ export function createDB(d1: D1Database): DB {
 
     async upsertListing(listing: Omit<ListingRow, 'id' | 'ingested_at'>): Promise<number> {
       const result = await d1.prepare(
-        `INSERT INTO listings (source_id, source_item_id, title, description, price, currency, price_period, bedrooms, city, neighborhood, area_text, url, posted_at, tags_json, relevance_score)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO listings (source_id, source_item_id, title, description, price, currency, price_period, bedrooms, city, neighborhood, area_text, url, posted_at, tags_json, relevance_score, floor, square_meters, property_type, latitude, longitude, image_url)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          RETURNING id`
       ).bind(
         listing.source_id, listing.source_item_id, listing.title, listing.description,
         listing.price, listing.currency, listing.price_period, listing.bedrooms,
         listing.city, listing.neighborhood, listing.area_text, listing.url,
-        listing.posted_at, listing.tags_json, listing.relevance_score
+        listing.posted_at, listing.tags_json, listing.relevance_score,
+        listing.floor, listing.square_meters, listing.property_type,
+        listing.latitude, listing.longitude, listing.image_url
       ).first<{ id: number }>();
       return result!.id;
     },

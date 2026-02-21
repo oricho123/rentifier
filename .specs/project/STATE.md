@@ -1,7 +1,7 @@
 # State
 
 **Last Updated:** 2026-02-21
-**Current Work:** Project initialization - Planning phase
+**Current Work:** M2 - Yad2 Connector (specify → design → tasks)
 
 ---
 
@@ -35,6 +35,13 @@
 **Trade-off:** Rules require maintenance as source formats change; may miss nuanced listings.
 **Impact:** `packages/extraction` implements a pipeline: rules first, confidence check, AI fallback if below threshold.
 
+### AD-005: Yad2 API safety mechanisms (2026-02-21)
+
+**Decision:** Implement retry with exponential backoff, captcha detection, and a circuit-breaker pattern for the Yad2 connector.
+**Reason:** The Yad2 API is known to be intermittently unavailable and uses Radware Bot Manager for captcha protection. Without safety mechanisms, cron-triggered fetches would silently fail or waste CPU budget on blocked requests.
+**Trade-off:** Adds complexity to the connector; circuit breaker state needs persistence in `source_state`.
+**Impact:** Connector stores failure counts and backoff timestamps in `source_state.cursor` JSON. Collector skips sources in circuit-breaker-open state.
+
 ---
 
 ## Active Blockers
@@ -43,9 +50,19 @@
 
 ---
 
+## Completed Milestones
+
+### M1 - Foundation (2026-02-21)
+
+All 6 features implemented: monorepo setup, shared packages (core, db, connectors, extraction), D1 schema (7 tables + indexes + seed), collector worker, processor worker, notify worker. 37 source files, zero TypeScript errors. Architect-verified.
+
+---
+
 ## Lessons Learned
 
-*None yet.*
+- Store full `ListingCandidate` as `raw_json` in `listings_raw`, not just `sourceData` — the processor needs the complete candidate to reconstruct all fields.
+- All workers should use the `createDB()` factory consistently — bypassing the DB abstraction leads to data contract mismatches.
+- Connector lookup in the processor should be source-name-based (via `db.getSourceById()`), not hardcoded.
 
 ---
 
