@@ -20,6 +20,7 @@ export interface ListingRaw {
   url: string;
   raw_json: string;
   fetched_at: string;
+  processed_at: string | null;
 }
 
 export interface ListingRow {
@@ -78,4 +79,11 @@ export interface NotificationSent {
   filter_id: number | null;
   sent_at: string;
   channel: string;
+}
+
+export interface WorkerState {
+  worker_name: string;
+  last_run_at: string;
+  last_status: 'ok' | 'error' | null;
+  last_error: string | null;
 }

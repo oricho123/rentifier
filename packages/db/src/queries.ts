@@ -1,18 +1,21 @@
-import type { Source, SourceState, ListingRaw, ListingRow, User, FilterRow, NotificationSent } from './schema';
+import type { Source, SourceState, ListingRaw, ListingRow, User, FilterRow, NotificationSent, WorkerState } from './schema';
 
 export interface DB {
   getEnabledSources(): Promise<Source[]>;
   getSourceById(sourceId: number): Promise<Source | null>;
   getSourceState(sourceId: number): Promise<SourceState | null>;
   updateSourceState(sourceId: number, state: Partial<Omit<SourceState, 'source_id'>>): Promise<void>;
-  insertRawListings(listings: Omit<ListingRaw, 'id' | 'fetched_at'>[]): Promise<void>;
+  insertRawListings(listings: Omit<ListingRaw, 'id' | 'fetched_at' | 'processed_at'>[]): Promise<void>;
   getUnprocessedRawListings(limit: number): Promise<ListingRaw[]>;
+  markRawListingProcessed(rawId: number): Promise<void>;
   upsertListing(listing: Omit<ListingRow, 'id' | 'ingested_at'>): Promise<number>;
   getNewListingsSince(since: string): Promise<ListingRow[]>;
   getActiveFilters(): Promise<(FilterRow & { user: User })[]>;
   getUserById(userId: number): Promise<User | null>;
   checkNotificationSent(userId: number, listingId: number): Promise<boolean>;
   recordNotificationSent(userId: number, listingId: number, filterId: number | null, channel: string): Promise<void>;
+  getWorkerState(workerName: string): Promise<{ lastRunAt: string | null }>;
+  updateWorkerState(workerName: string, lastRunAt: string, status: 'ok' | 'error', error?: string): Promise<void>;
 }
 
 export function createDB(d1: D1Database): DB {
@@ -52,7 +55,7 @@ export function createDB(d1: D1Database): DB {
       ).bind(sourceId, ...values, ...values).run();
     },
 
-    async insertRawListings(listings: Omit<ListingRaw, 'id' | 'fetched_at'>[]): Promise<void> {
+    async insertRawListings(listings: Omit<ListingRaw, 'id' | 'fetched_at' | 'processed_at'>[]): Promise<void> {
       if (listings.length === 0) return;
 
       const stmt = d1.prepare(
@@ -65,12 +68,18 @@ export function createDB(d1: D1Database): DB {
 
     async getUnprocessedRawListings(limit: number): Promise<ListingRaw[]> {
       const result = await d1.prepare(
-        `SELECT lr.* FROM listings_raw lr
-         LEFT JOIN listings l ON lr.source_id = l.source_id AND lr.source_item_id = l.source_item_id
-         WHERE l.id IS NULL
+        `SELECT * FROM listings_raw
+         WHERE processed_at IS NULL
+         ORDER BY fetched_at ASC
          LIMIT ?`
       ).bind(limit).all<ListingRaw>();
       return result.results;
+    },
+
+    async markRawListingProcessed(rawId: number): Promise<void> {
+      await d1.prepare(
+        'UPDATE listings_raw SET processed_at = datetime(\'now\') WHERE id = ?'
+      ).bind(rawId).run();
     },
 
     async upsertListing(listing: Omit<ListingRow, 'id' | 'ingested_at'>): Promise<number> {
@@ -164,6 +173,24 @@ export function createDB(d1: D1Database): DB {
       await d1.prepare(
         'INSERT OR IGNORE INTO notifications_sent (user_id, listing_id, filter_id, channel) VALUES (?, ?, ?, ?)'
       ).bind(userId, listingId, filterId, channel).run();
+    },
+
+    async getWorkerState(workerName: string): Promise<{ lastRunAt: string | null }> {
+      const result = await d1.prepare(
+        'SELECT last_run_at FROM worker_state WHERE worker_name = ?'
+      ).bind(workerName).first<{ last_run_at: string }>();
+      return { lastRunAt: result?.last_run_at ?? null };
+    },
+
+    async updateWorkerState(workerName: string, lastRunAt: string, status: 'ok' | 'error', error?: string): Promise<void> {
+      await d1.prepare(
+        `INSERT INTO worker_state (worker_name, last_run_at, last_status, last_error)
+         VALUES (?, ?, ?, ?)
+         ON CONFLICT(worker_name) DO UPDATE SET
+           last_run_at = excluded.last_run_at,
+           last_status = excluded.last_status,
+           last_error = excluded.last_error`
+      ).bind(workerName, lastRunAt, status, error ?? null).run();
     },
   };
 }
