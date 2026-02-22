@@ -67,11 +67,53 @@ pnpm install
 pnpm typecheck
 ```
 
+## Telegram Bot Setup
+
+### 1. Create Your Bot
+
+1. Open Telegram and message [@BotFather](https://t.me/BotFather)
+2. Send `/newbot` and follow prompts to create your bot
+3. Save the bot token (looks like `123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11`)
+4. (Optional) Configure bot description, about text, and profile picture via BotFather
+
+### 2. Get Your Chat ID
+
+To receive notifications, you need your Telegram chat ID:
+
+1. Message [@userinfobot](https://t.me/userinfobot) on Telegram
+2. It will reply with your user info, including your chat ID (a number like `123456789`)
+3. Save this chat ID — you'll need it for seeding the database
+
 ## Local Development
 
 No Docker needed — Wrangler simulates Cloudflare Workers + D1 locally.
 
-### 1. Set up the local database
+**⚠️ VPN Note:** If you experience "internal error; reference = ..." errors when making API calls in local development, try **disabling your VPN**. This is a known issue with Wrangler's local mode where VPN interferes with Miniflare's network stack.
+
+### 1. Set up environment variables
+
+You need two environment files:
+
+**For scripts** (webhook setup, etc.):
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set:
+- `TELEGRAM_BOT_TOKEN`: Your bot token from BotFather
+- `TELEGRAM_WEBHOOK_SECRET`: Any random string for local development
+- `TELEGRAM_WEBHOOK_URL`: Your ngrok URL (update this when you start ngrok)
+
+**For the worker** (runtime):
+```bash
+cp apps/notify/.dev.vars.example apps/notify/.dev.vars
+```
+
+Edit `apps/notify/.dev.vars` and set:
+- `TELEGRAM_BOT_TOKEN`: Your bot token from BotFather (same as above)
+- `TELEGRAM_WEBHOOK_SECRET`: Same secret as in `.env`
+
+### 2. Set up the local database
 
 ```bash
 pnpm db:migrate:local     # Create tables, indexes, seed sources
@@ -80,7 +122,7 @@ pnpm db:seed:local        # Add a dev user + catch-all filter
 
 Edit `scripts/seed-local.sql` first to set your Telegram chat ID (or leave the placeholder for now).
 
-### 2. Run all workers
+### 3. Run all workers
 
 ```bash
 pnpm dev
@@ -88,7 +130,44 @@ pnpm dev
 
 This starts all three workers concurrently (collector:8787, processor:8788, notify:8789).
 
-### 3. Test the pipeline
+### 4. Test the Telegram bot locally
+
+You have two options for local testing:
+
+#### Option A: ngrok tunnel (recommended for full testing)
+
+```bash
+# Install ngrok if needed: brew install ngrok
+ngrok http 8789
+
+# Copy the HTTPS URL (e.g., https://abc123.ngrok.io/webhook)
+# Update TELEGRAM_WEBHOOK_URL in your .env file, then:
+tsx scripts/setup-webhook.ts
+
+# Now send commands to your bot on Telegram:
+# /start, /help, /filter, etc.
+```
+
+#### Option B: Mock testing without ngrok
+
+```bash
+# Test webhook handler directly with curl
+curl -X POST http://localhost:8789/webhook \
+  -H "Content-Type: application/json" \
+  -H "X-Telegram-Bot-Api-Secret-Token: local-dev-secret" \
+  -d '{
+    "update_id": 1,
+    "message": {
+      "message_id": 1,
+      "from": {"id": 123456789, "first_name": "Test"},
+      "chat": {"id": 123456789, "type": "private"},
+      "date": 1234567890,
+      "text": "/start"
+    }
+  }'
+```
+
+### 5. Test the pipeline
 
 ```bash
 # Trigger each worker's cron handler manually:
@@ -101,7 +180,7 @@ pnpm db:query:local "SELECT count(*) FROM listings_raw"
 pnpm db:query:local "SELECT id, title, price, city FROM listings LIMIT 5"
 ```
 
-### 4. Run tests
+### 6. Run tests
 
 ```bash
 pnpm test                  # Run all 43 tests once
@@ -128,12 +207,81 @@ pnpm typecheck             # Type-check all workspaces
 | `pnpm test` | Run all tests |
 | `pnpm typecheck` | Type-check all workspaces |
 
-## Deployment
+## Telegram Bot Commands
 
-Ready to deploy to production? See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for comprehensive step-by-step instructions covering:
-- D1 database setup
-- Worker configuration
-- Manual and automated deployment options
+Once registered via `/start`, users can manage their notification preferences:
+
+| Command | Description |
+|---------|-------------|
+| `/start` | Register as a new user and receive welcome message |
+| `/help` | Show available commands and usage instructions |
+| `/filter` | Create a new filter with guided prompts (name, cities, price, rooms, keywords) |
+| `/list` | Show all your active filters |
+| `/pause <filter_name>` | Pause notifications for a specific filter |
+| `/resume <filter_name>` | Resume notifications for a paused filter |
+| `/delete <filter_name>` | Delete a filter permanently |
+
+Example workflow:
+```
+User: /start
+Bot: Welcome! You're now registered. Use /filter to create your first filter.
+
+User: /filter
+Bot: Let's create a new filter. What should we call it?
+User: Tel Aviv Apartments
+Bot: Great! Which cities? (comma-separated)
+User: תל אביב-יפו, רמת גן
+Bot: Min price? (or 'skip')
+User: 3000
+Bot: Max price? (or 'skip')
+User: 6000
+Bot: Min rooms? (or 'skip')
+User: 2
+Bot: Max rooms? (or 'skip')
+User: 3
+Bot: Any keywords to include? (comma-separated, or 'skip')
+User: מרפסת, חניה
+Bot: ✅ Filter "Tel Aviv Apartments" created successfully!
+
+User: /list
+Bot: Your active filters:
+📌 Tel Aviv Apartments (active)
+   Cities: תל אביב-יפו, רמת גן
+   Price: ₪3,000 - ₪6,000
+   Rooms: 2-3
+   Keywords: מרפסת, חניה
+```
+
+## Production Deployment
+
+### Telegram Bot Webhook
+
+After deploying your workers to Cloudflare:
+
+1. Set secrets in Cloudflare:
+   ```bash
+   wrangler secret put TELEGRAM_BOT_TOKEN --name notify
+   wrangler secret put TELEGRAM_WEBHOOK_SECRET --name notify
+   ```
+
+2. Register webhook with Telegram:
+   ```bash
+   # Update .env with your production webhook URL:
+   # TELEGRAM_WEBHOOK_URL=https://notify.your-subdomain.workers.dev/webhook
+
+   tsx scripts/setup-webhook.ts
+   ```
+
+3. Verify webhook is registered:
+   ```bash
+   curl https://api.telegram.org/bot<YOUR_BOT_TOKEN>/getWebhookInfo
+   ```
+
+See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for comprehensive deployment instructions covering:
+- D1 database setup and migrations
+- Worker configuration and secrets
+- Telegram bot setup and webhook registration
+- Manual and automated deployment workflows
 - Troubleshooting and monitoring
 
 ## Cron Schedules
