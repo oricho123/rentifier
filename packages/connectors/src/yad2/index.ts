@@ -139,6 +139,18 @@ export class Yad2Connector implements Connector {
   normalize(candidate: ListingCandidate): ListingDraft {
     const sd = candidate.sourceData as Partial<Yad2Marker>;
 
+    const street = sd.address?.street?.text || null;
+    const houseNumber = sd.address?.house?.number || null;
+
+    console.log(JSON.stringify({
+      event: 'yad2_normalize',
+      sourceItemId: candidate.sourceItemId,
+      street,
+      houseNumber,
+      rawStreet: sd.address?.street?.text,
+      rawHouse: sd.address?.house?.number
+    }));
+
     return {
       sourceId: this.sourceId,
       sourceItemId: candidate.sourceItemId,
@@ -150,6 +162,8 @@ export class Yad2Connector implements Connector {
       bedrooms: sd.additionalDetails?.roomsCount ?? null,
       city: sd.address?.city?.text ?? null,
       neighborhood: sd.address?.neighborhood?.text ?? null,
+      street,
+      houseNumber,
       tags: this.extractTags(sd),
       url: candidate.rawUrl,
       postedAt: candidate.rawPostedAt ? new Date(candidate.rawPostedAt) : null,

@@ -35,6 +35,8 @@ export interface ListingRow {
   bedrooms: number | null;
   city: string | null;
   neighborhood: string | null;
+  street: string | null;
+  house_number: string | null;
   area_text: string | null;
   url: string;
   posted_at: string | null;

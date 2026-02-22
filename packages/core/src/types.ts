@@ -11,6 +11,8 @@ export interface Listing {
   bedrooms: number;                // 0 = studio
   city: string;
   neighborhood: string | null;
+  street: string | null;
+  houseNumber: string | null;
   floor: number | null;
   squareMeters: number | null;
   propertyType: string | null;
@@ -46,6 +48,8 @@ export interface ListingDraft {
   bedrooms: number | null;
   city: string | null;
   neighborhood: string | null;
+  street: string | null;
+  houseNumber: string | null;
   tags: string[];
   url: string;
   postedAt: Date | null;

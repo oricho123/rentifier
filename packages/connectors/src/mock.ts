@@ -55,6 +55,8 @@ export class MockConnector implements Connector {
       bedrooms: null,
       city: null,
       neighborhood: null,
+      street: null,
+      houseNumber: null,
       tags: [],
       url: candidate.rawUrl,
       postedAt: candidate.rawPostedAt ? new Date(candidate.rawPostedAt) : null,

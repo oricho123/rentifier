@@ -85,6 +85,8 @@ export async function processBatch(db: DB, batchSize: number = 50): Promise<Proc
         bedrooms: extraction.bedrooms ?? draft.bedrooms ?? null,
         city: extraction.location?.city ?? draft.city ?? null,
         neighborhood: extraction.location?.neighborhood ?? draft.neighborhood ?? null,
+        street: draft.street ?? null,
+        house_number: draft.houseNumber ?? null,
         area_text: null,
         url: draft.url,
         posted_at: draft.postedAt?.toISOString() ?? null,
