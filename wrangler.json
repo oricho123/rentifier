@@ -1,0 +1,13 @@
+{
+	"$schema": "https://developers.cloudflare.com/workers/wrangler/configuration/",
+	"name": "rentifier-meta",
+	"compatibility_date": "2026-02-22",
+	"d1_databases": [
+		{
+			"binding": "rentifier",
+			"database_name": "rentifier",
+			"database_id": "554a9f64-3cfb-4e27-b83c-0f92907c8794",
+			"migrations_dir": "packages/db/migrations"
+		}
+	]
+}

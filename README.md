@@ -128,32 +128,13 @@ pnpm typecheck             # Type-check all workspaces
 | `pnpm test` | Run all tests |
 | `pnpm typecheck` | Type-check all workspaces |
 
-## Production Deployment
+## Deployment
 
-### 1. Create the D1 database
-
-```bash
-wrangler d1 create rentifier
-```
-
-Copy the returned `database_id` into each `wrangler.toml` under `apps/collector/`, `apps/processor/`, and `apps/notify/`.
-
-### 2. Apply migrations and set secrets
-
-```bash
-pnpm db:migrate:remote
-
-cd apps/notify
-wrangler secret put TELEGRAM_BOT_TOKEN
-```
-
-### 3. Deploy all workers
-
-```bash
-cd apps/collector && wrangler deploy
-cd apps/processor && wrangler deploy
-cd apps/notify && wrangler deploy
-```
+Ready to deploy to production? See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for comprehensive step-by-step instructions covering:
+- D1 database setup
+- Worker configuration
+- Manual and automated deployment options
+- Troubleshooting and monitoring
 
 ## Cron Schedules
 
