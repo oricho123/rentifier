@@ -55,14 +55,22 @@
 ## M3 - Multi-User & Filters
 
 **Goal:** Multiple users can register via Telegram, set custom filters, and receive personalized notifications.
+**Status:** COMPLETE
+**Completed:** 2026-02-22
 
 ### Features
 
-**Telegram Bot Commands** - PLANNED
+**Telegram Bot Commands** - ✅ COMPLETE
 
-- `/start` registration flow
-- `/filter` create/edit/delete filters (city, price range, rooms, keywords)
-- `/pause` / `/resume` notification control
+- ✅ `/start` registration flow
+- ✅ `/filter` create filters with guided conversation (city, price range, rooms, keywords)
+- ✅ `/list` show all user filters
+- ✅ `/pause` / `/resume` notification control
+- ✅ `/delete` remove filters
+- ✅ `/help` command reference
+- ✅ Webhook handler with secret token validation
+- ✅ Conversation state management with 10-minute TTL
+- ✅ Inline keyboard support for interactive prompts
 
 **Filter Matching Engine** - PLANNED
 
