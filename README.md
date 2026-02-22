@@ -90,15 +90,26 @@ No Docker needed — Wrangler simulates Cloudflare Workers + D1 locally.
 
 ### 1. Set up environment variables
 
-Copy the example file and fill in your values:
+You need two environment files:
 
+**For scripts** (webhook setup, etc.):
+```bash
+cp .env.example .env
+```
+
+Edit `.env` and set:
+- `TELEGRAM_BOT_TOKEN`: Your bot token from BotFather
+- `TELEGRAM_WEBHOOK_SECRET`: Any random string for local development
+- `TELEGRAM_WEBHOOK_URL`: Your ngrok URL (update this when you start ngrok)
+
+**For the worker** (runtime):
 ```bash
 cp apps/notify/.dev.vars.example apps/notify/.dev.vars
 ```
 
 Edit `apps/notify/.dev.vars` and set:
-- `TELEGRAM_BOT_TOKEN`: Your bot token from BotFather
-- `TELEGRAM_WEBHOOK_SECRET`: Any random string for local development
+- `TELEGRAM_BOT_TOKEN`: Your bot token from BotFather (same as above)
+- `TELEGRAM_WEBHOOK_SECRET`: Same secret as in `.env`
 
 ### 2. Set up the local database
 
@@ -127,11 +138,8 @@ You have two options for local testing:
 # Install ngrok if needed: brew install ngrok
 ngrok http 8789
 
-# Copy the HTTPS URL (e.g., https://abc123.ngrok.io)
-# Register webhook with Telegram:
-TELEGRAM_BOT_TOKEN=your_token_here \
-TELEGRAM_WEBHOOK_URL=https://abc123.ngrok.io/webhook \
-TELEGRAM_WEBHOOK_SECRET=local-dev-secret \
+# Copy the HTTPS URL (e.g., https://abc123.ngrok.io/webhook)
+# Update TELEGRAM_WEBHOOK_URL in your .env file, then:
 tsx scripts/setup-webhook.ts
 
 # Now send commands to your bot on Telegram:
@@ -256,9 +264,9 @@ After deploying your workers to Cloudflare:
 
 2. Register webhook with Telegram:
    ```bash
-   TELEGRAM_BOT_TOKEN=your_token_here \
-   TELEGRAM_WEBHOOK_URL=https://notify.your-subdomain.workers.dev/webhook \
-   TELEGRAM_WEBHOOK_SECRET=your_random_secret_here \
+   # Update .env with your production webhook URL:
+   # TELEGRAM_WEBHOOK_URL=https://notify.your-subdomain.workers.dev/webhook
+
    tsx scripts/setup-webhook.ts
    ```
 

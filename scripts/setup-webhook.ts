@@ -3,14 +3,23 @@
  * Setup script to register Telegram webhook
  *
  * Usage:
+ *   1. Copy .env.example to .env and fill in your values
+ *   2. Run: tsx scripts/setup-webhook.ts
+ *
+ * Or pass environment variables directly:
  *   TELEGRAM_BOT_TOKEN=<token> \
- *   WEBHOOK_URL=https://notify.rentifier.workers.dev/webhook \
+ *   TELEGRAM_WEBHOOK_URL=https://notify.rentifier.workers.dev/webhook \
  *   TELEGRAM_WEBHOOK_SECRET=<secret> \
  *   tsx scripts/setup-webhook.ts
  */
 
+import { config } from 'dotenv';
+
+// Load .env file from root
+config();
+
 const botToken = process.env.TELEGRAM_BOT_TOKEN;
-const webhookUrl = process.env.WEBHOOK_URL;
+const webhookUrl = process.env.TELEGRAM_WEBHOOK_URL;
 const secretToken = process.env.TELEGRAM_WEBHOOK_SECRET;
 
 if (!botToken) {
@@ -19,7 +28,7 @@ if (!botToken) {
 }
 
 if (!webhookUrl) {
-  console.error('❌ WEBHOOK_URL environment variable is required');
+  console.error('❌ TELEGRAM_WEBHOOK_URL environment variable is required');
   process.exit(1);
 }
 
