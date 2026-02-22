@@ -81,6 +81,8 @@ describe('Yad2Connector', () => {
       expect(draft.bedrooms).toBe(3);
       expect(draft.city).toBe('תל אביב');
       expect(draft.neighborhood).toBe('פלורנטין');
+      expect(draft.street).toBe('אלנבי');
+      expect(draft.houseNumber).toBe('10');
       expect(draft.floor).toBe(3);
       expect(draft.squareMeters).toBe(75);
       expect(draft.propertyType).toBe('דירה');
@@ -132,6 +134,8 @@ describe('Yad2Connector', () => {
 
       expect(draft.price).toBeNull();
       expect(draft.bedrooms).toBeNull();
+      expect(draft.street).toBeNull();
+      expect(draft.houseNumber).toBeNull();
       expect(draft.floor).toBeNull();
       expect(draft.squareMeters).toBeNull();
       expect(draft.imageUrl).toBeNull();

@@ -15,11 +15,9 @@ export class MessageFormatter {
       parts.push(`🏠 ${roomsText}`);
     }
 
-    if (listing.city) {
-      const location = listing.neighborhood
-        ? `${listing.city} - ${listing.neighborhood}`
-        : listing.city;
-      parts.push(`📍 ${this.escapeHtml(location)}`);
+    const address = this.formatAddress(listing);
+    if (address) {
+      parts.push(`📍 ${address}`);
     }
 
     parts.push(`\n<a href="${listing.url}">View Listing</a>`);
@@ -32,6 +30,84 @@ export class MessageFormatter {
     const formatted = amount.toLocaleString('en-US');
     const periodText = period ? `/${period}` : '';
     return `${symbol}${formatted}${periodText}`;
+  }
+
+  private formatAddress(listing: ListingRow): string | null {
+    // If we have street, show: City - Neighborhood, [Street Number](link)
+    // Otherwise fallback to: City - Neighborhood
+
+    if (!listing.city) return null;
+
+    const locationParts: string[] = [listing.city];
+    if (listing.neighborhood) {
+      locationParts.push(listing.neighborhood);
+    }
+    const location = locationParts.join(' - ');
+
+    if (listing.street) {
+      // Build clickable street address
+      let streetText = listing.street;
+      if (listing.house_number) {
+        // Convert float to integer for cleaner display
+        const houseNum = Math.floor(parseFloat(listing.house_number));
+        streetText += ` ${houseNum}`;
+      }
+
+      const mapsUrl = this.buildMapsUrl(listing);
+      return `${location}, <a href="${mapsUrl}">${this.escapeHtml(streetText)}</a>`;
+    } else {
+      // No street, just show location
+      return location;
+    }
+  }
+
+  private buildMapsUrl(listing: ListingRow): string {
+    const parts: string[] = [];
+
+    if (listing.street) parts.push(listing.street);
+    if (listing.house_number) {
+      // Convert float to integer string for cleaner maps search
+      const houseNum = Math.floor(parseFloat(listing.house_number));
+      parts.push(String(houseNum));
+    }
+    if (listing.city) {
+      // Convert English city names to Hebrew for better maps results
+      const hebrewCity = this.toHebrewCity(listing.city);
+      parts.push(hebrewCity);
+    }
+
+    const query = parts.join(' ');
+    const encoded = encodeURIComponent(query);
+
+    // For Telegram HTML parsing, & in href must be escaped as &amp;
+    return `https://www.google.com/maps/search/?api=1&amp;query=${encoded}`;
+  }
+
+  private toHebrewCity(cityEnglish: string): string {
+    const cityMap: Record<string, string> = {
+      'Tel Aviv': 'תל אביב',
+      'Jerusalem': 'ירושלים',
+      'Haifa': 'חיפה',
+      'Rishon LeZion': 'ראשון לציון',
+      'Petah Tikva': 'פתח תקווה',
+      'Ashdod': 'אשדוד',
+      'Netanya': 'נתניה',
+      'Beersheba': 'באר שבע',
+      'Holon': 'חולון',
+      'Bnei Brak': 'בני ברק',
+      'Ramat Gan': 'רמת גן',
+      'Ashkelon': 'אשקלון',
+      'Rehovot': 'רחובות',
+      'Bat Yam': 'בת ים',
+      'Herzliya': 'הרצליה',
+      'Kfar Saba': 'כפר סבא',
+      'Hadera': 'חדרה',
+      'Modiin': 'מודיעין',
+      'Nazareth': 'נצרת',
+      'Lod': 'לוד',
+      'Ramla': 'רמלה',
+    };
+    return cityMap[cityEnglish] || cityEnglish;
   }
 
   private escapeHtml(text: string): string {
