@@ -67,63 +67,89 @@ pnpm install
 pnpm typecheck
 ```
 
-### Create the D1 database
+## Local Development
+
+No Docker needed — Wrangler simulates Cloudflare Workers + D1 locally.
+
+### 1. Set up the local database
 
 ```bash
-wrangler d1 create rentifier
+pnpm db:migrate:local     # Create tables, indexes, seed sources
+pnpm db:seed:local        # Add a dev user + catch-all filter
 ```
 
-Copy the returned `database_id` into each `wrangler.toml` file under `apps/collector/`, `apps/processor/`, and `apps/notify/`.
+Edit `scripts/seed-local.sql` first to set your Telegram chat ID (or leave the placeholder for now).
 
-### Apply migrations
-
-```bash
-# Local development
-wrangler d1 migrations apply rentifier --local
-
-# Production
-wrangler d1 migrations apply rentifier --remote
-```
-
-### Run tests
-
-```bash
-pnpm test          # run all tests once
-pnpm test:watch    # run in watch mode
-```
-
-### Run all workers locally
+### 2. Run all workers
 
 ```bash
 pnpm dev
 ```
 
-This starts all three workers concurrently with colored output. Or run individually:
+This starts all three workers concurrently (collector:8787, processor:8788, notify:8789).
+
+### 3. Test the pipeline
 
 ```bash
-pnpm dev:collector    # port 8787
-pnpm dev:processor    # port 8788
-pnpm dev:notify       # port 8789
+# Trigger each worker's cron handler manually:
+pnpm trigger:collector     # Fetch listings from sources → listings_raw
+pnpm trigger:processor     # Normalize raw → canonical listings
+pnpm trigger:notify        # Match filters → send Telegram
+
+# Inspect the local DB:
+pnpm db:query:local "SELECT count(*) FROM listings_raw"
+pnpm db:query:local "SELECT id, title, price, city FROM listings LIMIT 5"
 ```
 
-### Trigger a scheduled worker manually
-
-While a worker is running locally, trigger its cron handler:
+### 4. Run tests
 
 ```bash
-pnpm trigger:collector
-pnpm trigger:processor
-pnpm trigger:notify
+pnpm test                  # Run all 43 tests once
+pnpm test:watch            # Watch mode
+pnpm typecheck             # Type-check all workspaces
 ```
 
-### Deploy to Cloudflare
+### All convenience scripts
+
+| Script | Description |
+|--------|-------------|
+| `pnpm dev` | Start all 3 workers concurrently |
+| `pnpm dev:collector` | Start collector only (port 8787) |
+| `pnpm dev:processor` | Start processor only (port 8788) |
+| `pnpm dev:notify` | Start notify only (port 8789) |
+| `pnpm trigger:collector` | Fire collector's scheduled handler |
+| `pnpm trigger:processor` | Fire processor's scheduled handler |
+| `pnpm trigger:notify` | Fire notify's scheduled handler |
+| `pnpm db:migrate:local` | Apply all D1 migrations locally |
+| `pnpm db:seed:local` | Seed dev user + filter from `scripts/seed-local.sql` |
+| `pnpm db:query:local "SQL"` | Run a SQL query against the local DB |
+| `pnpm db:reset:local` | Delete local DB (re-run migrate to recreate) |
+| `pnpm db:migrate:remote` | Apply migrations to production D1 |
+| `pnpm test` | Run all tests |
+| `pnpm typecheck` | Type-check all workspaces |
+
+## Production Deployment
+
+### 1. Create the D1 database
 
 ```bash
-# Set Telegram bot token as a secret (notify worker)
+wrangler d1 create rentifier
+```
+
+Copy the returned `database_id` into each `wrangler.toml` under `apps/collector/`, `apps/processor/`, and `apps/notify/`.
+
+### 2. Apply migrations and set secrets
+
+```bash
+pnpm db:migrate:remote
+
 cd apps/notify
 wrangler secret put TELEGRAM_BOT_TOKEN
+```
 
-# Deploy all workers
+### 3. Deploy all workers
+
+```bash
 cd apps/collector && wrangler deploy
 cd apps/processor && wrangler deploy
 cd apps/notify && wrangler deploy

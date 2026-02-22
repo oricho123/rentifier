@@ -9,7 +9,6 @@
     "@rentifier/extraction": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "^4.20240117.0",
-    "wrangler": "^3.28.0"
+    "@cloudflare/workers-types": "^4.20240117.0"
   }
 }

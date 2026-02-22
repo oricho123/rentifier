@@ -47,20 +47,7 @@ CREATE TABLE listings (
   ingested_at TEXT NOT NULL DEFAULT (datetime('now')),
   tags_json TEXT,
   relevance_score REAL,
-  UNIQUE(source_id, source_item_id) ON CONFLICT DO UPDATE SET
-    title = excluded.title,
-    description = excluded.description,
-    price = excluded.price,
-    currency = excluded.currency,
-    price_period = excluded.price_period,
-    bedrooms = excluded.bedrooms,
-    city = excluded.city,
-    neighborhood = excluded.neighborhood,
-    area_text = excluded.area_text,
-    url = excluded.url,
-    posted_at = excluded.posted_at,
-    tags_json = excluded.tags_json,
-    relevance_score = excluded.relevance_score,
+  UNIQUE(source_id, source_item_id),
   FOREIGN KEY (source_id) REFERENCES sources(id) ON DELETE CASCADE
 );
 
