@@ -1,0 +1,11 @@
+# Telegram Bot Configuration for Local Development
+# Copy this file to .dev.vars and fill in your actual values
+# .dev.vars is gitignored and will not be committed
+
+# Your Telegram bot token from @BotFather
+# Get this by creating a bot: https://t.me/botfather -> /newbot
+TELEGRAM_BOT_TOKEN=123456:ABC-DEF1234ghIkl-zyx57W2v1u123ew11
+
+# Webhook secret for validating incoming Telegram updates (optional but recommended)
+# For local dev, you can use any value. For production, generate with: openssl rand -hex 32
+TELEGRAM_WEBHOOK_SECRET=local-dev-secret-change-me
