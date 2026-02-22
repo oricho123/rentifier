@@ -61,15 +61,24 @@ The Cloudflare GitHub app auto-deploys on merge to main.
 **Configuration for each worker in Cloudflare Dashboard:**
 
 1. Go to Cloudflare Dashboard → Workers & Pages
-2. For each worker (collector, processor, notify):
-   - **Build command**: `pnpm install --frozen-lockfile`
-   - **Deploy command**: `npx wrangler deploy` (or leave default)
-   - **Root directory**:
-     - Collector: `apps/collector`
-     - Processor: `apps/processor`
-     - Notify: `apps/notify`
+2. For each worker, configure:
 
-Cloudflare automatically detects the `wrangler.json` file in each worker directory and uses it for deployment.
+**Collector Worker:**
+- **Root directory**: `apps/collector`
+- **Build command**: `cd ../.. && pnpm install --frozen-lockfile`
+- **Deploy command**: `npx wrangler deploy`
+
+**Processor Worker:**
+- **Root directory**: `apps/processor`
+- **Build command**: `cd ../.. && pnpm install --frozen-lockfile`
+- **Deploy command**: `npx wrangler deploy`
+
+**Notify Worker:**
+- **Root directory**: `apps/notify`
+- **Build command**: `cd ../.. && pnpm install --frozen-lockfile`
+- **Deploy command**: `npx wrangler deploy`
+
+**Why the `cd ../..`?** Since root directory is set to the worker folder, we need to change to the monorepo root to install all dependencies (including shared packages). Then wrangler deploy runs from the worker directory where it finds `wrangler.json`.
 
 ## Step 5: Verify Deployment
 
