@@ -21,10 +21,10 @@ Copy the `database_id` from the output.
 
 ## Step 2: Update Database IDs
 
-Update the `database_id` in all `wrangler.json` files:
+Update the `database_id` in all configuration files:
 
 **Root level:**
-- `wrangler.json` (used for migrations)
+- `wrangler.migrations.json` (used for migrations only)
 
 **Worker configurations:**
 - `apps/collector/wrangler.json`

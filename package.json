@@ -18,7 +18,7 @@
     "trigger:processor": "curl -s http://localhost:8788/__scheduled",
     "trigger:notify": "curl -s http://localhost:8789/__scheduled",
     "db:migrate:local": "pnpm --filter @rentifier/collector exec wrangler d1 migrations apply rentifier --local",
-    "db:migrate:remote": "pnpm exec wrangler d1 migrations apply rentifier --remote",
+    "db:migrate:remote": "pnpm exec wrangler d1 migrations apply rentifier --remote --config wrangler.migrations.json",
     "db:seed:local": "pnpm --filter @rentifier/collector exec wrangler d1 execute rentifier --local --file=../../scripts/seed-local.sql",
     "db:query:local": "pnpm --filter @rentifier/collector exec wrangler d1 execute rentifier --local --command",
     "db:reset:local": "rm -rf apps/collector/.wrangler apps/processor/.wrangler apps/notify/.wrangler && echo 'Local DB reset. Run pnpm db:migrate:local to recreate.'",
