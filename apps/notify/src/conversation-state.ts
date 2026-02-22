@@ -4,6 +4,7 @@ export interface ConversationState {
   step: string;
   data: Record<string, any>;
   createdAt: string;
+  lastMessageId?: number; // Track last message for editing
 }
 
 export class ConversationStateManager {
@@ -28,12 +29,14 @@ export class ConversationStateManager {
       return null;
     }
 
+    const data = JSON.parse(result.data_json);
     return {
       chatId: result.chat_id,
       command: result.command,
       step: result.step,
-      data: JSON.parse(result.data_json),
+      data: data,
       createdAt: result.created_at,
+      lastMessageId: data.__lastMessageId, // Extract from data
     };
   }
 
@@ -42,6 +45,12 @@ export class ConversationStateManager {
     state: Partial<Omit<ConversationState, 'chatId' | 'createdAt'>>
   ): Promise<void> {
     const expiresAt = new Date(Date.now() + 10 * 60 * 1000).toISOString(); // 10 min TTL
+
+    // Store lastMessageId in data for persistence
+    const dataWithMessageId = {
+      ...(state.data || {}),
+      __lastMessageId: state.lastMessageId,
+    };
 
     await this.d1
       .prepare(
@@ -57,7 +66,7 @@ export class ConversationStateManager {
         chatId,
         state.command || '',
         state.step || '',
-        JSON.stringify(state.data || {}),
+        JSON.stringify(dataWithMessageId),
         expiresAt
       )
       .run();

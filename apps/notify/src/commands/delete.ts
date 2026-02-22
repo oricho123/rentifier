@@ -2,6 +2,8 @@ import type { CommandHandler } from './interface';
 import type { TelegramMessage } from '../webhook/types';
 import type { TelegramClient } from '../telegram-client';
 import type { BotService } from '../bot-service';
+import { t } from '../i18n';
+import { KeyboardBuilder } from '../keyboards/builders';
 
 export class DeleteCommand implements CommandHandler {
   constructor(
@@ -16,7 +18,7 @@ export class DeleteCommand implements CommandHandler {
     if (!user) {
       await this.telegram.sendMessage(
         chatId,
-        'Please /start first to register.',
+        t('errors.user_not_found'),
         'HTML'
       );
       return;
@@ -25,7 +27,7 @@ export class DeleteCommand implements CommandHandler {
     if (args.length === 0) {
       await this.telegram.sendMessage(
         chatId,
-        '<b>Usage:</b> /delete &lt;filter_id&gt;\n\nUse /list to see your filter IDs.',
+        t('commands.delete.usage'),
         'HTML'
       );
       return;
@@ -35,26 +37,31 @@ export class DeleteCommand implements CommandHandler {
     if (isNaN(filterId)) {
       await this.telegram.sendMessage(
         chatId,
-        'Invalid filter ID. Please provide a numeric ID.',
+        t('errors.invalid_input'),
         'HTML'
       );
       return;
     }
 
-    const deleted = await this.botService.deleteFilter(user.id, filterId);
+    // Get filter to show its name in confirmation
+    const filters = await this.botService.getFilters(user.id);
+    const filter = filters.find(f => f.id === filterId);
 
-    if (deleted) {
+    if (!filter) {
       await this.telegram.sendMessage(
         chatId,
-        `✅ Filter ${filterId} deleted successfully.`,
+        t('commands.delete.not_found'),
         'HTML'
       );
-    } else {
-      await this.telegram.sendMessage(
-        chatId,
-        `❌ Filter ${filterId} not found or you don't have permission to delete it.`,
-        'HTML'
-      );
+      return;
     }
+
+    // Ask for confirmation with inline keyboard
+    await this.telegram.sendInlineKeyboard(
+      chatId,
+      t('commands.filter.delete_confirm', { name: filter.name }),
+      KeyboardBuilder.confirm('delete', filterId),
+      'HTML'
+    );
   }
 }
