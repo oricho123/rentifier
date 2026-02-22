@@ -7,6 +7,14 @@ export interface TelegramSendResult {
   retryable?: boolean;
 }
 
+export interface SendPhotoResult {
+  success: boolean;
+  messageId?: number;
+  error?: string;
+  retryable: boolean;
+  imageAvailable: boolean;
+}
+
 export class TelegramClient {
   private baseUrl: string;
 
@@ -240,5 +248,58 @@ export class TelegramClient {
         retryable: true,
       };
     }
+  }
+
+  async sendPhoto(
+    chatId: string,
+    photoUrl: string,
+    caption: string,
+    parseMode: 'HTML' | 'MarkdownV2' = 'HTML'
+  ): Promise<SendPhotoResult> {
+    try {
+      const response = await fetch(`${this.baseUrl}/sendPhoto`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          chat_id: chatId,
+          photo: photoUrl,
+          caption,
+          parse_mode: parseMode,
+        }),
+      });
+
+      if (!response.ok) {
+        const error = (await response.json()) as { description?: string; error_code?: number };
+        const isRetryable = this.isRetryableError(response.status);
+
+        return {
+          success: false,
+          error: error.description || 'Unknown Telegram error',
+          retryable: isRetryable,
+          imageAvailable: true,
+        };
+      }
+
+      const data = (await response.json()) as { result?: { message_id?: number } };
+      return {
+        success: true,
+        messageId: data.result?.message_id,
+        retryable: false,
+        imageAvailable: true,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Network error',
+        retryable: true,
+        imageAvailable: true,
+      };
+    }
+  }
+
+  private isRetryableError(errorCode: number): boolean {
+    // Network errors: 502, 503, 504
+    // Rate limiting: 429
+    return [429, 502, 503, 504].includes(errorCode);
   }
 }
