@@ -88,6 +88,8 @@ To receive notifications, you need your Telegram chat ID:
 
 No Docker needed — Wrangler simulates Cloudflare Workers + D1 locally.
 
+**⚠️ VPN Note:** If you experience "internal error; reference = ..." errors when making API calls in local development, try **disabling your VPN**. This is a known issue with Wrangler's local mode where VPN interferes with Miniflare's network stack.
+
 ### 1. Set up environment variables
 
 You need two environment files:
