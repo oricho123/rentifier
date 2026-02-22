@@ -2,6 +2,7 @@ import type { CommandHandler } from './interface';
 import type { TelegramMessage } from '../webhook/types';
 import type { TelegramClient } from '../telegram-client';
 import type { BotService } from '../bot-service';
+import { t } from '../i18n';
 
 export class PauseCommand implements CommandHandler {
   constructor(
@@ -16,7 +17,7 @@ export class PauseCommand implements CommandHandler {
     if (!user) {
       await this.telegram.sendMessage(
         chatId,
-        'Please /start first to register.',
+        t('errors.user_not_found'),
         'HTML'
       );
       return;
@@ -26,7 +27,7 @@ export class PauseCommand implements CommandHandler {
 
     await this.telegram.sendMessage(
       chatId,
-      '⏸️ <b>Notifications paused</b>\n\nAll your filters have been disabled. Send /resume to re-enable them.',
+      t('commands.pause.success'),
       'HTML'
     );
   }

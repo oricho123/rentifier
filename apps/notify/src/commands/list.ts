@@ -2,6 +2,8 @@ import type { CommandHandler } from './interface';
 import type { TelegramMessage } from '../webhook/types';
 import type { TelegramClient } from '../telegram-client';
 import type { BotService, Filter } from '../bot-service';
+import { t } from '../i18n';
+import { KeyboardBuilder } from '../keyboards/builders';
 
 export class ListCommand implements CommandHandler {
   constructor(
@@ -16,7 +18,7 @@ export class ListCommand implements CommandHandler {
     if (!user) {
       await this.telegram.sendMessage(
         chatId,
-        'Please /start first to register.',
+        t('errors.user_not_found'),
         'HTML'
       );
       return;
@@ -27,27 +29,34 @@ export class ListCommand implements CommandHandler {
     if (filters.length === 0) {
       await this.telegram.sendMessage(
         chatId,
-        `You don't have any filters yet.\n\nUse /filter to create your first search filter!`,
+        t('commands.list.no_filters'),
         'HTML'
       );
       return;
     }
 
-    const filterList = filters
-      .map((f) => this.formatFilter(f))
-      .join('\n\n');
-
+    // Send each filter as a separate message with action buttons
     await this.telegram.sendMessage(
       chatId,
-      `<b>Your Filters:</b>\n\n${filterList}`,
+      t('commands.list.title'),
       'HTML'
     );
+
+    for (const filter of filters) {
+      const filterText = this.formatFilter(filter);
+      await this.telegram.sendInlineKeyboard(
+        chatId,
+        filterText,
+        KeyboardBuilder.filterActions(filter.id),
+        'HTML'
+      );
+    }
   }
 
   private formatFilter(filter: Filter): string {
     const parts: string[] = [
-      `<b>${filter.name}</b> (ID: ${filter.id})`,
-      filter.enabled ? '✅ Active' : '⏸️ Paused',
+      t('commands.list.filter_header', { id: String(filter.id), name: filter.name }),
+      filter.enabled ? t('commands.list.filter_status_active') : t('commands.list.filter_status_paused'),
     ];
 
     const criteria: string[] = [];
@@ -55,26 +64,26 @@ export class ListCommand implements CommandHandler {
     if (filter.cities_json) {
       const cities = JSON.parse(filter.cities_json) as string[];
       if (cities.length > 0) {
-        criteria.push(`Cities: ${cities.join(', ')}`);
+        criteria.push(t('commands.filter.summary_cities', { cities: cities.join(', ') }));
       }
     }
 
     if (filter.min_price || filter.max_price) {
-      const min = filter.min_price ? `${filter.min_price}` : '—';
-      const max = filter.max_price ? `${filter.max_price}` : '—';
-      criteria.push(`Price: ${min} - ${max} ILS/month`);
+      const min = filter.min_price ? filter.min_price.toLocaleString('he-IL') : '—';
+      const max = filter.max_price ? filter.max_price.toLocaleString('he-IL') : '—';
+      criteria.push(t('commands.filter.summary_price', { min, max }));
     }
 
     if (filter.min_bedrooms || filter.max_bedrooms) {
-      const min = filter.min_bedrooms ? `${filter.min_bedrooms}` : '—';
-      const max = filter.max_bedrooms ? `${filter.max_bedrooms}` : '—';
-      criteria.push(`Rooms: ${min} - ${max}`);
+      const min = filter.min_bedrooms ? String(filter.min_bedrooms) : '—';
+      const max = filter.max_bedrooms ? String(filter.max_bedrooms) : '—';
+      criteria.push(t('commands.filter.summary_rooms', { min, max }));
     }
 
     if (filter.keywords_json) {
       const keywords = JSON.parse(filter.keywords_json) as string[];
       if (keywords.length > 0) {
-        criteria.push(`Keywords: ${keywords.join(', ')}`);
+        criteria.push(t('commands.filter.summary_keywords', { keywords: keywords.join(', ') }));
       }
     }
 

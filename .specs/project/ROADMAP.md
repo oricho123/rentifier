@@ -55,8 +55,7 @@
 ## M3 - Multi-User & Filters
 
 **Goal:** Multiple users can register via Telegram, set custom filters, and receive personalized notifications.
-**Status:** COMPLETE
-**Completed:** 2026-02-22
+**Status:** IN PROGRESS
 
 ### Features
 
@@ -71,6 +70,17 @@
 - ✅ Webhook handler with secret token validation
 - ✅ Conversation state management with 10-minute TTL
 - ✅ Inline keyboard support for interactive prompts
+
+**Telegram Bot Improvements** - 📝 SPECIFIED (Ready for Implementation)
+
+- Hebrew localization with RTL support
+- Telegram command menu integration (BotCommands API)
+- Interactive filter creation with inline keyboards
+- Quick-select buttons for common cities
+- Interactive list management (edit/delete buttons)
+- Rich message formatting with emojis
+- Progress indicators for multi-step flows
+- One-tap confirmation for actions
 
 **Filter Matching Engine** - PLANNED
 

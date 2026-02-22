@@ -25,7 +25,8 @@
     "deploy:collector": "pnpm --filter @rentifier/collector exec wrangler deploy",
     "deploy:processor": "pnpm --filter @rentifier/processor exec wrangler deploy",
     "deploy:notify": "pnpm --filter @rentifier/notify exec wrangler deploy",
-    "deploy:all": "pnpm deploy:collector && pnpm deploy:processor && pnpm deploy:notify"
+    "deploy:all": "pnpm deploy:collector && pnpm deploy:processor && pnpm deploy:notify",
+    "webhook:setup": "tsx scripts/setup-webhook.ts"
   },
   "engines": {
     "node": ">=18.0.0",

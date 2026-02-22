@@ -4,6 +4,7 @@ import { TelegramClient } from '../telegram-client';
 import { BotService } from '../bot-service';
 import { ConversationStateManager } from '../conversation-state';
 import { CommandRouter } from '../commands/router';
+import { CallbackQueryRouter } from '../callbacks/router';
 
 export interface Env {
   DB: D1Database;
@@ -26,25 +27,28 @@ export async function handleWebhook(request: Request, env: Env): Promise<Respons
     const update = (await request.json()) as TelegramUpdate;
     console.log(JSON.stringify({ event: 'webhook_received', updateId: update.update_id }));
 
-    // 3. Extract message
-    const message = update.message;
-    if (!message || !message.text) {
-      // Ignore non-text messages (photos, stickers, etc.)
-      return new Response('OK', { status: 200 });
-    }
-
-    // 4. Route to command handler
+    // 3. Initialize services
     const telegram = new TelegramClient(env.TELEGRAM_BOT_TOKEN);
     const botService = new BotService(env.DB);
     const stateManager = new ConversationStateManager(env.DB);
     const commandRouter = new CommandRouter(telegram, botService, stateManager);
+    const callbackRouter = new CallbackQueryRouter(telegram, botService, stateManager);
 
-    await commandRouter.route(message);
+    // 4. Route based on update type
+    if (update.callback_query) {
+      // Handle button clicks first (higher priority)
+      await callbackRouter.route(update);
+    } else if (update.message?.text) {
+      // Handle text messages
+      await commandRouter.route(update.message);
+    } else {
+      // Ignore non-text messages and unhandled update types
+      return new Response('OK', { status: 200 });
+    }
 
     console.log(JSON.stringify({
       event: 'webhook_processed',
-      chatId: message.chat.id,
-      command: message.text.split(/\s+/)[0],
+      updateType: update.message ? 'message' : 'callback_query',
     }));
 
     return new Response('OK', { status: 200 });

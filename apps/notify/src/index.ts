@@ -3,6 +3,7 @@ import { TelegramClient } from './telegram-client';
 import { MessageFormatter } from './message-formatter';
 import { NotificationService } from './notification-service';
 import { handleWebhook } from './webhook/handler';
+import { configureBotMenu } from './bot-menu';
 
 export interface Env {
   DB: D1Database;
@@ -36,6 +37,9 @@ export default {
     env: Env,
     _ctx: ExecutionContext
   ): Promise<Response> {
+    // Configure bot menu on startup (idempotent)
+    await configureBotMenu(env.TELEGRAM_BOT_TOKEN);
+
     const url = new URL(request.url);
 
     if (url.pathname === '/webhook' && request.method === 'POST') {

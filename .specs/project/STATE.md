@@ -1,7 +1,32 @@
 # State
 
-**Last Updated:** 2026-02-21
-**Current Work:** M2 - Yad2 Connector (specify → design → tasks)
+**Last Updated:** 2026-02-22
+**Current Work:** M3 - Telegram Bot Improvements (✅ COMPLETE - ready for staging deployment)
+
+---
+
+## Recent Decisions (Last 60 days)
+
+### AD-006: Hebrew-only localization for M3 (2026-02-22)
+
+**Decision:** Implement Hebrew localization exclusively for M3. Multi-language support deferred to future milestone.
+**Reason:** Target audience is Israeli Hebrew speakers. Single-language implementation is simpler and faster to deliver.
+**Trade-off:** Non-Hebrew speakers cannot use the bot. English/Russian/Arabic support requires additional work later.
+**Impact:** All bot messages, command descriptions, and UI elements in Hebrew. Centralized i18n module (`i18n/he.ts`) for maintainability.
+
+### AD-007: Callback query format - colon-separated action hierarchy (2026-02-22)
+
+**Decision:** Use `action:subaction:param` format for inline keyboard callback data (e.g., `filter:delete:5`, `quick:filter`).
+**Reason:** Simple to parse, hierarchical structure allows routing, fits within Telegram's 64-byte limit.
+**Trade-off:** Limited to 3 levels of nesting. Complex data may require database lookup instead of encoding in callback.
+**Impact:** All keyboard builders follow this format. Callback router parses with `data.split(':')`.
+
+### AD-008: Hybrid text/button flows for filter creation (2026-02-22)
+
+**Decision:** Allow users to either click buttons OR type text during filter creation. Callback queries update conversation state mid-flow.
+**Reason:** Flexibility improves UX—power users can type, casual users can click. Conversation state is the single source of truth.
+**Trade-off:** More complex state management. Callback handlers must validate conversation state.
+**Impact:** FilterCommand handles both text replies and callback queries. CallbackQueryRouter updates state and delegates to command handlers.
 
 ---
 
@@ -55,6 +80,21 @@
 ### M1 - Foundation (2026-02-21)
 
 All 6 features implemented: monorepo setup, shared packages (core, db, connectors, extraction), D1 schema (7 tables + indexes + seed), collector worker, processor worker, notify worker. 37 source files, zero TypeScript errors. Architect-verified.
+
+### Telegram Bot Commands (M3, 2026-02-22)
+
+All 7 commands implemented and merged to main via PR #7. Webhook handler, conversation state management, database migration complete. VPN issue documented. Ready for production deployment.
+
+### Telegram Bot Improvements (M3, 2026-02-22)
+
+Complete Hebrew localization and interactive UI upgrade implemented via Ralph autonomous loop. All 12 tasks completed:
+- Phase 1: I18n module, keyboard builders, callback router, telegram client extensions, webhook types
+- Phase 2: Bot menu configurator with Hebrew command descriptions
+- Phase 3-4: All 7 commands migrated to Hebrew with interactive keyboards, callback handlers
+- Verification: TypeScript 0 errors, verifier approved, architect approved (95% deployment ready)
+- Status: Ready for staging deployment and manual testing
+- Files: 16 changed (12 modified, 4 new modules), 1,100+ lines added
+- Documentation: Complete spec, design, tasks, and implementation completion documents
 
 ---
 

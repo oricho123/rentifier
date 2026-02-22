@@ -2,6 +2,8 @@ import type { CommandHandler } from './interface';
 import type { TelegramMessage } from '../webhook/types';
 import type { TelegramClient } from '../telegram-client';
 import type { BotService } from '../bot-service';
+import { t } from '../i18n';
+import { KeyboardBuilder } from '../keyboards/builders';
 
 export class StartCommand implements CommandHandler {
   constructor(
@@ -22,27 +24,28 @@ export class StartCommand implements CommandHandler {
       // Create new user
       user = await this.botService.createUser(chatId, displayName);
 
-      await this.telegram.sendMessage(
+      const welcomeText = `${t('commands.start.welcome_new', { name: displayName })}\n\n` +
+        `${t('commands.start.welcome_new_description')}\n\n` +
+        `${t('commands.start.command_list')}`;
+
+      await this.telegram.sendInlineKeyboard(
         chatId,
-        `Welcome to Rentifier, ${displayName}! 🏠\n\n` +
-          `I'll help you find rental apartments in Israel.\n\n` +
-          `<b>Available commands:</b>\n` +
-          `/filter - Create a new search filter\n` +
-          `/list - View your active filters\n` +
-          `/pause - Pause notifications\n` +
-          `/resume - Resume notifications\n` +
-          `/help - Show all commands`,
+        welcomeText,
+        KeyboardBuilder.quickActions(),
         'HTML'
       );
     } else {
       // Existing user
       const filterCount = await this.botService.getFilterCount(user.id);
+      const plural = filterCount === 1 ? '' : 'ים';
 
-      await this.telegram.sendMessage(
+      const welcomeBackText = `${t('commands.start.welcome_back', { name: displayName })}\n\n` +
+        `${t('commands.start.filter_count', { count: String(filterCount), plural })}`;
+
+      await this.telegram.sendInlineKeyboard(
         chatId,
-        `Welcome back, ${displayName}!\n\n` +
-          `You have ${filterCount} active filter${filterCount === 1 ? '' : 's'}.\n\n` +
-          `Send /help to see available commands.`,
+        welcomeBackText,
+        KeyboardBuilder.quickActions(),
         'HTML'
       );
     }
