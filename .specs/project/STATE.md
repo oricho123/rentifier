@@ -1,11 +1,18 @@
 # State
 
 **Last Updated:** 2026-02-22
-**Current Work:** M3 - Telegram Bot Improvements (✅ COMPLETE - ready for staging deployment)
+**Current Work:** Database scripts architecture refactor (PR #10 - ready for review)
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-009: Database scripts use root wrangler config (2026-02-22)
+
+**Decision:** All database operation scripts (migrate, query, seed) use root `wrangler.migrations.json` as single source of truth, instead of running through individual app contexts.
+**Reason:** Database operations are a shared concern across all workers. Running through `@rentifier/collector` was an architectural inconsistency - migrations should be app-agnostic.
+**Trade-off:** Requires wrangler to be available at root level (already a dev dependency), but this is cleaner than the workaround.
+**Impact:** Scripts simplified from `pnpm --filter @rentifier/collector exec wrangler ...` to `wrangler ... --config wrangler.migrations.json`. Single source of truth, consistent between local and remote operations.
 
 ### AD-006: Hebrew-only localization for M3 (2026-02-22)
 
@@ -103,6 +110,7 @@ Complete Hebrew localization and interactive UI upgrade implemented via Ralph au
 - Store full `ListingCandidate` as `raw_json` in `listings_raw`, not just `sourceData` — the processor needs the complete candidate to reconstruct all fields.
 - All workers should use the `createDB()` factory consistently — bypassing the DB abstraction leads to data contract mismatches.
 - Connector lookup in the processor should be source-name-based (via `db.getSourceById()`), not hardcoded.
+- Database operations are shared concerns — use root-level config instead of running through individual apps. The local D1 database is shared at `.wrangler/` (via `--persist-to` flag), so scripts should reflect that architecture.
 
 ---
 
