@@ -99,6 +99,7 @@ export async function processBatch(db: DB, batchSize: number = 50): Promise<Proc
       };
 
       await db.upsertListing(listingRow);
+      await db.markRawListingProcessed(raw.id);
       result.processed++;
 
     } catch (error) {

@@ -1,11 +1,18 @@
 # State
 
 **Last Updated:** 2026-02-22
-**Current Work:** Database scripts architecture refactor (PR #10 - ready for review)
+**Current Work:** Data duplication bug fix - IMPLEMENTED and migration applied
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-010: Processing tracking with processed_at and worker state (2026-02-22)
+
+**Decision:** Add explicit `processed_at` timestamp to `listings_raw` table and cursor-based notification tracking via `worker_state` table.
+**Reason:** The original LEFT JOIN approach for detecting unprocessed listings was fragile and led to re-processing all data on every processor run. Notifications were being sent multiple times due to lack of cursor tracking between notify worker runs.
+**Trade-off:** Adds `worker_state` table and `processed_at` column, slightly more complex state management, but guarantees idempotent operations and prevents duplicate notifications.
+**Impact:** Migration 0007 adds `processed_at` to `listings_raw`, creates `worker_state` table, and backfills existing data. Processor uses simple `WHERE processed_at IS NULL` query with partial index. Notify worker tracks last run time to avoid re-processing listings. Both workers are now fully idempotent.
 
 ### AD-009: Database scripts use root wrangler config (2026-02-22)
 

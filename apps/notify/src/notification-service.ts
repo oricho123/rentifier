@@ -91,16 +91,25 @@ export class NotificationService {
   async processNotifications(): Promise<NotificationResult> {
     const result: NotificationResult = { sent: 0, failed: 0, skipped: 0, errors: [] };
 
+    // Get last notification run timestamp
+    const state = await this.db.getWorkerState('notify');
+    const since = state.lastRunAt ?? new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
+    const currentRunTime = new Date().toISOString();
+
     const filtersWithUsers = await this.db.getActiveFilters();
-    console.log(JSON.stringify({ event: 'notify_start', activeFilters: filtersWithUsers.length }));
+    console.log(JSON.stringify({ event: 'notify_start', activeFilters: filtersWithUsers.length, since }));
 
-    if (filtersWithUsers.length === 0) return result;
+    if (filtersWithUsers.length === 0) {
+      await this.db.updateWorkerState('notify', currentRunTime, 'ok');
+      return result;
+    }
 
-    // Get listings from last 24 hours
-    const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString();
     const recentListings = await this.db.getNewListingsSince(since);
 
-    if (recentListings.length === 0) return result;
+    if (recentListings.length === 0) {
+      await this.db.updateWorkerState('notify', currentRunTime, 'ok');
+      return result;
+    }
 
     for (const filterWithUser of filtersWithUsers) {
       const { user, ...filter } = filterWithUser;
@@ -164,6 +173,7 @@ export class NotificationService {
       }
     }
 
+    await this.db.updateWorkerState('notify', currentRunTime, 'ok');
     console.log(JSON.stringify({ event: 'notify_complete', ...result }));
     return result;
   }
