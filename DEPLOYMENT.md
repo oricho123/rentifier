@@ -21,13 +21,17 @@ Copy the `database_id` from the output.
 
 ## Step 2: Update Database IDs
 
-Update the `database_id` in:
-- `wrangler.json` (root - used for migrations)
-- `apps/collector/wrangler.toml`
-- `apps/processor/wrangler.toml`
-- `apps/notify/wrangler.toml`
+Update the `database_id` in all `wrangler.json` files:
 
-Replace `00000000-0000-0000-0000-000000000000` with your actual database ID.
+**Root level:**
+- `wrangler.json` (used for migrations)
+
+**Worker configurations:**
+- `apps/collector/wrangler.json`
+- `apps/processor/wrangler.json`
+- `apps/notify/wrangler.json`
+
+Replace `00000000-0000-0000-0000-000000000000` with your actual database ID in all files.
 
 ## Step 3: Run Migrations
 
@@ -50,20 +54,22 @@ pnpm deploy:processor
 pnpm deploy:notify
 ```
 
-### Option B: Automated Deployment (GitHub Actions)
+### Option B: Automated Deployment (Cloudflare GitHub App)
 
-1. Add your Cloudflare API Token to GitHub Secrets:
-   - Go to your repository Settings → Secrets and variables → Actions
-   - Click "New repository secret"
-   - Name: `CLOUDFLARE_API_TOKEN`
-   - Value: Your Cloudflare API token
+The Cloudflare GitHub app auto-deploys on merge to main.
 
-2. Push to main branch:
-   ```bash
-   git push origin main
-   ```
+**Configuration for each worker in Cloudflare Dashboard:**
 
-The GitHub Action will automatically deploy all three workers.
+1. Go to Cloudflare Dashboard → Workers & Pages
+2. For each worker (collector, processor, notify):
+   - **Build command**: `pnpm install --frozen-lockfile`
+   - **Deploy command**: `npx wrangler deploy` (or leave default)
+   - **Root directory**:
+     - Collector: `apps/collector`
+     - Processor: `apps/processor`
+     - Notify: `apps/notify`
+
+Cloudflare automatically detects the `wrangler.json` file in each worker directory and uses it for deployment.
 
 ## Step 5: Verify Deployment
 
@@ -78,10 +84,10 @@ Each worker should appear:
 ## Troubleshooting
 
 ### "Missing entry-point to Worker script"
-This error occurs when deploying from the wrong directory. Always use the deployment scripts or GitHub Actions, which deploy from each worker's directory.
+This error occurs when `wrangler.json` is missing or the deploy command is running from the wrong directory. Ensure each worker directory has a `wrangler.json` file and the Cloudflare app root directory is set correctly.
 
 ### Database ID is still placeholder
-Make sure you've updated all three `wrangler.toml` files with your actual D1 database ID.
+Make sure you've updated all `wrangler.json` files (root + all three workers) with your actual D1 database ID.
 
 ### Workers not triggering on schedule
 Scheduled triggers (crons) only work in production. In development, use the manual trigger commands:
@@ -99,9 +105,12 @@ If you need to add secrets or environment variables:
 # Set a secret for a worker
 pnpm --filter @rentifier/collector exec wrangler secret put SECRET_NAME
 
-# Or add to wrangler.toml:
-[vars]
-ENVIRONMENT = "production"
+# Or add to wrangler.json:
+{
+  "vars": {
+    "ENVIRONMENT": "production"
+  }
+}
 ```
 
 ## Monitoring
