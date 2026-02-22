@@ -16,7 +16,12 @@
     "dev": "concurrently -n collector,processor,notify -c blue,green,yellow \"pnpm dev:collector\" \"pnpm dev:processor\" \"pnpm dev:notify\"",
     "trigger:collector": "curl -s http://localhost:8787/__scheduled",
     "trigger:processor": "curl -s http://localhost:8788/__scheduled",
-    "trigger:notify": "curl -s http://localhost:8789/__scheduled"
+    "trigger:notify": "curl -s http://localhost:8789/__scheduled",
+    "db:migrate:local": "pnpm --filter @rentifier/collector exec wrangler d1 migrations apply rentifier --local",
+    "db:migrate:remote": "pnpm --filter @rentifier/collector exec wrangler d1 migrations apply rentifier --remote",
+    "db:seed:local": "pnpm --filter @rentifier/collector exec wrangler d1 execute rentifier --local --file=../../scripts/seed-local.sql",
+    "db:query:local": "pnpm --filter @rentifier/collector exec wrangler d1 execute rentifier --local --command",
+    "db:reset:local": "rm -rf apps/collector/.wrangler apps/processor/.wrangler apps/notify/.wrangler && echo 'Local DB reset. Run pnpm db:migrate:local to recreate.'"
   },
   "engines": {
     "node": ">=18.0.0",
@@ -31,6 +36,7 @@
     "prettier": "^3.2.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.0.18"
+    "vitest": "^4.0.18",
+    "wrangler": "^4.67.0"
   }
 }

@@ -77,6 +77,26 @@ export function createDB(d1: D1Database): DB {
       const result = await d1.prepare(
         `INSERT INTO listings (source_id, source_item_id, title, description, price, currency, price_period, bedrooms, city, neighborhood, area_text, url, posted_at, tags_json, relevance_score, floor, square_meters, property_type, latitude, longitude, image_url)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(source_id, source_item_id) DO UPDATE SET
+           title = excluded.title,
+           description = excluded.description,
+           price = excluded.price,
+           currency = excluded.currency,
+           price_period = excluded.price_period,
+           bedrooms = excluded.bedrooms,
+           city = excluded.city,
+           neighborhood = excluded.neighborhood,
+           area_text = excluded.area_text,
+           url = excluded.url,
+           posted_at = excluded.posted_at,
+           tags_json = excluded.tags_json,
+           relevance_score = excluded.relevance_score,
+           floor = excluded.floor,
+           square_meters = excluded.square_meters,
+           property_type = excluded.property_type,
+           latitude = excluded.latitude,
+           longitude = excluded.longitude,
+           image_url = excluded.image_url
          RETURNING id`
       ).bind(
         listing.source_id, listing.source_item_id, listing.title, listing.description,
