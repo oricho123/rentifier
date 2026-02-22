@@ -18,10 +18,14 @@
     "trigger:processor": "curl -s http://localhost:8788/__scheduled",
     "trigger:notify": "curl -s http://localhost:8789/__scheduled",
     "db:migrate:local": "pnpm --filter @rentifier/collector exec wrangler d1 migrations apply rentifier --local",
-    "db:migrate:remote": "pnpm --filter @rentifier/collector exec wrangler d1 migrations apply rentifier --remote",
+    "db:migrate:remote": "pnpm exec wrangler d1 migrations apply rentifier --remote",
     "db:seed:local": "pnpm --filter @rentifier/collector exec wrangler d1 execute rentifier --local --file=../../scripts/seed-local.sql",
     "db:query:local": "pnpm --filter @rentifier/collector exec wrangler d1 execute rentifier --local --command",
-    "db:reset:local": "rm -rf apps/collector/.wrangler apps/processor/.wrangler apps/notify/.wrangler && echo 'Local DB reset. Run pnpm db:migrate:local to recreate.'"
+    "db:reset:local": "rm -rf apps/collector/.wrangler apps/processor/.wrangler apps/notify/.wrangler && echo 'Local DB reset. Run pnpm db:migrate:local to recreate.'",
+    "deploy:collector": "pnpm --filter @rentifier/collector exec wrangler deploy --config wrangler.toml",
+    "deploy:processor": "pnpm --filter @rentifier/processor exec wrangler deploy --config wrangler.toml",
+    "deploy:notify": "pnpm --filter @rentifier/notify exec wrangler deploy --config wrangler.toml",
+    "deploy:all": "pnpm deploy:collector && pnpm deploy:processor && pnpm deploy:notify"
   },
   "engines": {
     "node": ">=18.0.0",
