@@ -95,21 +95,25 @@ No Docker needed — Wrangler simulates Cloudflare Workers + D1 locally.
 You need two environment files:
 
 **For scripts** (webhook setup, etc.):
+
 ```bash
 cp .env.example .env
 ```
 
 Edit `.env` and set:
+
 - `TELEGRAM_BOT_TOKEN`: Your bot token from BotFather
 - `TELEGRAM_WEBHOOK_SECRET`: Any random string for local development
 - `TELEGRAM_WEBHOOK_URL`: Your ngrok URL (update this when you start ngrok)
 
 **For the worker** (runtime):
+
 ```bash
 cp apps/notify/.dev.vars.example apps/notify/.dev.vars
 ```
 
 Edit `apps/notify/.dev.vars` and set:
+
 - `TELEGRAM_BOT_TOKEN`: Your bot token from BotFather (same as above)
 - `TELEGRAM_WEBHOOK_SECRET`: Same secret as in `.env`
 
@@ -190,38 +194,39 @@ pnpm typecheck             # Type-check all workspaces
 
 ### All convenience scripts
 
-| Script | Description |
-|--------|-------------|
-| `pnpm dev` | Start all 3 workers concurrently |
-| `pnpm dev:collector` | Start collector only (port 8787) |
-| `pnpm dev:processor` | Start processor only (port 8788) |
-| `pnpm dev:notify` | Start notify only (port 8789) |
-| `pnpm trigger:collector` | Fire collector's scheduled handler |
-| `pnpm trigger:processor` | Fire processor's scheduled handler |
-| `pnpm trigger:notify` | Fire notify's scheduled handler |
-| `pnpm db:migrate:local` | Apply all D1 migrations locally |
-| `pnpm db:seed:local` | Seed dev user + filter from `scripts/seed-local.sql` |
-| `pnpm db:query:local "SQL"` | Run a SQL query against the local DB |
-| `pnpm db:reset:local` | Delete local DB (re-run migrate to recreate) |
-| `pnpm db:migrate:remote` | Apply migrations to production D1 |
-| `pnpm test` | Run all tests |
-| `pnpm typecheck` | Type-check all workspaces |
+| Script                      | Description                                          |
+| --------------------------- | ---------------------------------------------------- |
+| `pnpm dev`                  | Start all 3 workers concurrently                     |
+| `pnpm dev:collector`        | Start collector only (port 8787)                     |
+| `pnpm dev:processor`        | Start processor only (port 8788)                     |
+| `pnpm dev:notify`           | Start notify only (port 8789)                        |
+| `pnpm trigger:collector`    | Fire collector's scheduled handler                   |
+| `pnpm trigger:processor`    | Fire processor's scheduled handler                   |
+| `pnpm trigger:notify`       | Fire notify's scheduled handler                      |
+| `pnpm db:migrate:local`     | Apply all D1 migrations locally                      |
+| `pnpm db:seed:local`        | Seed dev user + filter from `scripts/seed-local.sql` |
+| `pnpm db:query:local "SQL"` | Run a SQL query against the local DB                 |
+| `pnpm db:reset:local`       | Delete local DB (re-run migrate to recreate)         |
+| `pnpm db:migrate:remote`    | Apply migrations to production D1                    |
+| `pnpm test`                 | Run all tests                                        |
+| `pnpm typecheck`            | Type-check all workspaces                            |
 
 ## Telegram Bot Commands
 
 Once registered via `/start`, users can manage their notification preferences:
 
-| Command | Description |
-|---------|-------------|
-| `/start` | Register as a new user and receive welcome message |
-| `/help` | Show available commands and usage instructions |
-| `/filter` | Create a new filter with guided prompts (name, cities, price, rooms, keywords) |
-| `/list` | Show all your active filters |
-| `/pause <filter_name>` | Pause notifications for a specific filter |
-| `/resume <filter_name>` | Resume notifications for a paused filter |
-| `/delete <filter_name>` | Delete a filter permanently |
+| Command                 | Description                                                                    |
+| ----------------------- | ------------------------------------------------------------------------------ |
+| `/start`                | Register as a new user and receive welcome message                             |
+| `/help`                 | Show available commands and usage instructions                                 |
+| `/filter`               | Create a new filter with guided prompts (name, cities, price, rooms, keywords) |
+| `/list`                 | Show all your active filters                                                   |
+| `/pause <filter_name>`  | Pause notifications for a specific filter                                      |
+| `/resume <filter_name>` | Resume notifications for a paused filter                                       |
+| `/delete <filter_name>` | Delete a filter permanently                                                    |
 
 Example workflow:
+
 ```
 User: /start
 Bot: Welcome! You're now registered. Use /filter to create your first filter.
@@ -259,12 +264,14 @@ Bot: Your active filters:
 After deploying your workers to Cloudflare:
 
 1. Set secrets in Cloudflare:
+
    ```bash
-   wrangler secret put TELEGRAM_BOT_TOKEN --name notify
-   wrangler secret put TELEGRAM_WEBHOOK_SECRET --name notify
+   pnpm --filter @rentifier/notify exec wrangler secret put TELEGRAM_BOT_TOKEN --name rentifier-notify
+   pnpm --filter @rentifier/notify exec wrangler secret put TELEGRAM_WEBHOOK_SECRET --name rentifier-notify
    ```
 
 2. Register webhook with Telegram:
+
    ```bash
    # Update .env with your production webhook URL:
    # TELEGRAM_WEBHOOK_URL=https://notify.your-subdomain.workers.dev/webhook
@@ -278,6 +285,7 @@ After deploying your workers to Cloudflare:
    ```
 
 See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for comprehensive deployment instructions covering:
+
 - D1 database setup and migrations
 - Worker configuration and secrets
 - Telegram bot setup and webhook registration
@@ -286,11 +294,11 @@ See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for comprehensive deployment instructio
 
 ## Cron Schedules
 
-| Worker    | Schedule     | Purpose                              |
-|-----------|--------------|--------------------------------------|
-| Collector | Every 30 min | Fetch new listings from sources      |
-| Processor | Every 15 min | Normalize and extract structured data|
-| Notify    | Every 5 min  | Match filters and send Telegram msgs |
+| Worker    | Schedule     | Purpose                               |
+| --------- | ------------ | ------------------------------------- |
+| Collector | Every 30 min | Fetch new listings from sources       |
+| Processor | Every 15 min | Normalize and extract structured data |
+| Notify    | Every 5 min  | Match filters and send Telegram msgs  |
 
 ## Development Methodology
 
@@ -305,12 +313,12 @@ Spec documents live in `.specs/features/<feature-name>/`. The project roadmap an
 
 ## Roadmap
 
-| Milestone | Description | Status |
-|-----------|-------------|--------|
-| **M1** | Foundation — monorepo, shared packages, D1 schema, 3 workers with mock connector | Done |
-| **M2** | First Live Source — YAD2 connector, extraction tuning, Telegram bot, deploy | In Progress |
-| **M3** | Multi-User & Filters — Telegram bot commands, filter management | Planned |
-| **M4** | Additional Sources — Facebook and other connectors | Planned |
+| Milestone | Description                                                                      | Status      |
+| --------- | -------------------------------------------------------------------------------- | ----------- |
+| **M1**    | Foundation — monorepo, shared packages, D1 schema, 3 workers with mock connector | Done        |
+| **M2**    | First Live Source — YAD2 connector, extraction tuning, Telegram bot, deploy      | In Progress |
+| **M3**    | Multi-User & Filters — Telegram bot commands, filter management                  | Planned     |
+| **M4**    | Additional Sources — Facebook and other connectors                               | Planned     |
 
 ## License
 
