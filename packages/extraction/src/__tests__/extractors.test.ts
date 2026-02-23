@@ -126,16 +126,16 @@ describe('extractLocation', () => {
   it('should match Tel Aviv in Hebrew', () => {
     const result = extractLocation('דירה בתל אביב');
     expect(result).toEqual({
-      city: 'Tel Aviv',
+      city: 'תל אביב',
       neighborhood: null,
       confidence: 0.8,
     });
   });
 
-  it('should match Tel Aviv in English', () => {
+  it('should match Tel Aviv in English and normalize to Hebrew', () => {
     const result = extractLocation('apartment in tel aviv');
     expect(result).toEqual({
-      city: 'Tel Aviv',
+      city: 'תל אביב',
       neighborhood: null,
       confidence: 0.8,
     });
@@ -144,8 +144,8 @@ describe('extractLocation', () => {
   it('should match city and neighborhood', () => {
     const result = extractLocation('דירה בתל אביב בפלורנטין');
     expect(result).toEqual({
-      city: 'Tel Aviv',
-      neighborhood: 'Florentin',
+      city: 'תל אביב',
+      neighborhood: 'פלורנטין',
       confidence: 0.9,
     });
   });
@@ -153,7 +153,7 @@ describe('extractLocation', () => {
   it('should match Jerusalem', () => {
     const result = extractLocation('ירושלים');
     expect(result).toEqual({
-      city: 'Jerusalem',
+      city: 'ירושלים',
       neighborhood: null,
       confidence: 0.8,
     });
@@ -162,7 +162,7 @@ describe('extractLocation', () => {
   it('should match Haifa', () => {
     const result = extractLocation('חיפה');
     expect(result).toEqual({
-      city: 'Haifa',
+      city: 'חיפה',
       neighborhood: null,
       confidence: 0.8,
     });
@@ -191,8 +191,8 @@ describe('extractAll', () => {
     expect(result.tags).toContain('parking');
     expect(result.tags).toContain('balcony');
     expect(result.location).toEqual({
-      city: 'Tel Aviv',
-      neighborhood: 'Florentin',
+      city: 'תל אביב',
+      neighborhood: 'פלורנטין',
       confidence: 0.9,
     });
     expect(result.overallConfidence).toBe(0.9);

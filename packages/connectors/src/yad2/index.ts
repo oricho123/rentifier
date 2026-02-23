@@ -2,6 +2,7 @@ import type { Connector, FetchResult } from '../interface';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import type { Yad2Marker, Yad2CursorState } from './types';
 import { fetchWithRetry, Yad2ApiError } from './client';
+import { normalizeCity } from '@rentifier/extraction';
 import {
   YAD2_CITY_CODES,
   MAX_CONSECUTIVE_FAILURES,
@@ -142,13 +143,20 @@ export class Yad2Connector implements Connector {
     const street = sd.address?.street?.text || null;
     const houseNumber = sd.address?.house?.number || null;
 
+    // Normalize city name to Hebrew canonical form
+    const rawCity = sd.address?.city?.text;
+    const normalizedCity = rawCity ? normalizeCity(rawCity) : null;
+    // If normalization fails (unknown city), fall back to raw value
+    const city = normalizedCity ?? rawCity ?? null;
+
     console.log(JSON.stringify({
       event: 'yad2_normalize',
       sourceItemId: candidate.sourceItemId,
+      rawCity,
+      normalizedCity,
+      city,
       street,
       houseNumber,
-      rawStreet: sd.address?.street?.text,
-      rawHouse: sd.address?.house?.number
     }));
 
     return {
@@ -160,7 +168,7 @@ export class Yad2Connector implements Connector {
       currency: 'ILS',
       pricePeriod: 'month',
       bedrooms: sd.additionalDetails?.roomsCount ?? null,
-      city: sd.address?.city?.text ?? null,
+      city,
       neighborhood: sd.address?.neighborhood?.text ?? null,
       street,
       houseNumber,

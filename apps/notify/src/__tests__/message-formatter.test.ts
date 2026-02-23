@@ -49,7 +49,8 @@ describe('MessageFormatter', () => {
     expect(message).toContain('📍');
     expect(message).toContain('תל אביב - פלורנטין');
     expect(message).toContain('רוטשילד 12');
-    expect(message).toContain('https://www.google.com/maps/search/?api=1&query=');
+    // URL is HTML-encoded, so & becomes &amp;
+    expect(message).toContain('https://www.google.com/maps/search/?api=1&amp;query=');
     expect(message).toContain(encodeURIComponent('רוטשילד 12 תל אביב'));
   });
 
@@ -65,7 +66,8 @@ describe('MessageFormatter', () => {
 
     expect(message).toContain('תל אביב - פלורנטין');
     expect(message).toContain('רוטשילד');
-    expect(message).toContain('https://www.google.com/maps/search/?api=1&query=');
+    // URL is HTML-encoded, so & becomes &amp;
+    expect(message).toContain('https://www.google.com/maps/search/?api=1&amp;query=');
   });
 
   it('should fall back to city/neighborhood when street missing', () => {

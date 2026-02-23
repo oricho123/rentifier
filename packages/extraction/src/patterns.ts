@@ -31,68 +31,10 @@ export const TAG_KEYWORDS: Record<string, string[]> = {
   'air-conditioning': ['מזגן', 'מזגנים', 'ac', 'a/c', 'air-conditioning', 'air conditioning', 'מיזוג', 'מיזוג אוויר'],
 };
 
-// Hebrew city names mapped to English canonical names
-export const CITY_NAMES: Record<string, string> = {
-  'תל אביב': 'Tel Aviv',
-  'תל-אביב': 'Tel Aviv',
-  'tel aviv': 'Tel Aviv',
-  'ירושלים': 'Jerusalem',
-  'jerusalem': 'Jerusalem',
-  'חיפה': 'Haifa',
-  'haifa': 'Haifa',
-  'הרצליה': 'Herzliya',
-  'herzliya': 'Herzliya',
-  'רמת גן': 'Ramat Gan',
-  'רמת-גן': 'Ramat Gan',
-  'ramat gan': 'Ramat Gan',
-  'נתניה': 'Netanya',
-  'netanya': 'Netanya',
-  'באר שבע': 'Beer Sheva',
-  'באר-שבע': 'Beer Sheva',
-  'beer sheva': 'Beer Sheva',
-};
+// Import city normalization data from centralized module
+// All city names now normalize to Hebrew canonical form
+import { CITY_VARIANTS, CITY_NEIGHBORHOODS } from './cities';
 
-export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
-  'Tel Aviv': {
-    'פלורנטין': 'Florentin',
-    'florentin': 'Florentin',
-    'נווה צדק': 'Neve Tzedek',
-    'neve tzedek': 'Neve Tzedek',
-    'הצפון הישן': 'Old North',
-    'old north': 'Old North',
-    'יפו': 'Jaffa',
-    'jaffa': 'Jaffa',
-    'רוטשילד': 'Rothschild',
-    'rothschild': 'Rothschild',
-    'לב העיר': 'City Center',
-    'city center': 'City Center',
-  },
-  'Jerusalem': {
-    'נחלאות': 'Nachlaot',
-    'nachlaot': 'Nachlaot',
-    'המושבה הגרמנית': 'German Colony',
-    'german colony': 'German Colony',
-    'רחביה': 'Rehavia',
-    'rehavia': 'Rehavia',
-    'בקעה': 'Baka',
-    'baka': 'Baka',
-    'טלביה': 'Talbiya',
-    'talbiya': 'Talbiya',
-  },
-  'Haifa': {
-    'כרמל': 'Carmel',
-    'carmel': 'Carmel',
-    'הדר': 'Hadar',
-    'hadar': 'Hadar',
-    'עיר תחתית': 'Downtown',
-    'downtown': 'Downtown',
-  },
-  'Herzliya': {
-    'הרצליה פיתוח': 'Herzliya Pituach',
-    'herzliya pituach': 'Herzliya Pituach',
-  },
-  'Ramat Gan': {
-    'בורסה': 'Bursa',
-    'bursa': 'Bursa',
-  },
-};
+// Re-export for backward compatibility with extractors.ts
+export const CITY_NAMES = CITY_VARIANTS;
+export { CITY_NEIGHBORHOODS };
