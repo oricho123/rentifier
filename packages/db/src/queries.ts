@@ -122,7 +122,7 @@ export function createDB(d1: D1Database): DB {
 
     async getNewListingsSince(since: string): Promise<ListingRow[]> {
       const result = await d1.prepare(
-        'SELECT * FROM listings WHERE ingested_at > ? ORDER BY ingested_at DESC'
+        'SELECT * FROM listings WHERE datetime(ingested_at) > datetime(?) ORDER BY ingested_at DESC'
       ).bind(since).all<ListingRow>();
       return result.results;
     },
