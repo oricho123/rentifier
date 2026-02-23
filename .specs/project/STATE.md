@@ -1,7 +1,7 @@
 # State
 
-**Last Updated:** 2026-02-22
-**Current Work:** Street address with Google Maps links - IMPLEMENTED and ready for deployment
+**Last Updated:** 2026-02-23
+**Current Work:** Listing images in Telegram - IMPLEMENTATION COMPLETE, ready for testing and deployment
 
 ---
 
@@ -109,6 +109,31 @@ Complete Hebrew localization and interactive UI upgrade implemented via Ralph au
 - Status: Ready for staging deployment and manual testing
 - Files: 16 changed (12 modified, 4 new modules), 1,100+ lines added
 - Documentation: Complete spec, design, tasks, and implementation completion documents
+
+### Street Address with Google Maps Links (2026-02-23)
+
+Complete implementation of clickable street addresses in Telegram notifications. All tasks completed:
+- Database: Added `street` and `house_number` columns (migration 0008)
+- YAD2 Connector: Extract street and house number from API response
+- Message Formatter: Format street as clickable Google Maps link with Hebrew city names
+- Data Processing: Convert house numbers to integers, escape HTML URLs properly
+- Testing: 48 test notifications sent successfully with working links
+- Status: MERGED to main via PR #12
+- Files: 11 changed (schema, types, connector, formatter, queries, tests)
+- Documentation: Complete spec, design, and task breakdown
+
+### Listing Images in Telegram Notifications (2026-02-23)
+
+Complete implementation of photo messages in Telegram notifications. All tasks completed:
+- TelegramClient: Added sendPhoto() method with intelligent error handling
+- NotificationService: Image support with fallback to text-only on failures
+- Error Handling: Distinguish retryable (502, 503, 504, 429) vs non-retryable errors (400)
+- Metrics: Track imageSuccess, imageFallback, noImage counts + imageSuccessRate
+- Testing: 15 new tests (7 telegram-client + 8 notification-service), all passing
+- TypeScript: Zero compilation errors
+- Status: Implementation complete, ready for manual testing and deployment
+- Files: 4 changed (telegram-client, notification-service, 2 test files)
+- Documentation: Complete spec, design, tasks, and implementation notes
 
 ---
 

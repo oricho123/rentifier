@@ -7,6 +7,9 @@ export interface NotificationResult {
   failed: number;
   skipped: number;
   errors: NotificationError[];
+  imageSuccess: number;
+  imageFallback: number;
+  noImage: number;
 }
 
 export interface NotificationError {
@@ -89,7 +92,15 @@ export class NotificationService {
   ) {}
 
   async processNotifications(): Promise<NotificationResult> {
-    const result: NotificationResult = { sent: 0, failed: 0, skipped: 0, errors: [] };
+    const result: NotificationResult = {
+      sent: 0,
+      failed: 0,
+      skipped: 0,
+      errors: [],
+      imageSuccess: 0,
+      imageFallback: 0,
+      noImage: 0
+    };
 
     // Get last notification run timestamp
     const state = await this.db.getWorkerState('notify');
@@ -129,9 +140,63 @@ export class NotificationService {
             continue;
           }
 
-          // Format and send
+          // Format message
           const message = this.formatter.format(listing);
-          const sendResult = await this.telegram.sendMessage(user.telegram_chat_id, message, 'HTML');
+          let sendResult;
+
+          if (listing.image_url) {
+            // Try sending with image
+            console.log(JSON.stringify({
+              event: 'image_send_attempt',
+              listingId: listing.id,
+              userId: user.id,
+              imageUrl: listing.image_url
+            }));
+
+            sendResult = await this.telegram.sendPhoto(
+              user.telegram_chat_id,
+              listing.image_url,
+              message,
+              'HTML'
+            );
+
+            if (sendResult.success) {
+              result.imageSuccess++;
+              console.log(JSON.stringify({
+                event: 'image_send_success',
+                listingId: listing.id,
+                userId: user.id,
+                messageId: sendResult.messageId
+              }));
+            } else if (!sendResult.retryable) {
+              // Image failed with non-retryable error, fall back to text
+              console.log(JSON.stringify({
+                event: 'image_send_failed',
+                listingId: listing.id,
+                userId: user.id,
+                error: sendResult.error,
+                fallbackToText: true
+              }));
+
+              sendResult = await this.telegram.sendMessage(
+                user.telegram_chat_id,
+                message,
+                'HTML'
+              );
+
+              if (sendResult.success) {
+                result.imageFallback++;
+              }
+            }
+          } else {
+            // No image, send text-only
+            result.noImage++;
+            sendResult = await this.telegram.sendMessage(
+              user.telegram_chat_id,
+              message,
+              'HTML'
+            );
+          }
 
           if (sendResult.success) {
             await this.db.recordNotificationSent(user.id, listing.id, filter.id, 'telegram');
@@ -174,7 +239,17 @@ export class NotificationService {
     }
 
     await this.db.updateWorkerState('notify', currentRunTime, 'ok');
-    console.log(JSON.stringify({ event: 'notify_complete', ...result }));
+
+    const totalImageAttempts = result.imageSuccess + result.imageFallback + result.noImage;
+    const imageSuccessRate = totalImageAttempts > 0
+      ? result.imageSuccess / totalImageAttempts
+      : 0;
+
+    console.log(JSON.stringify({
+      event: 'notify_complete',
+      ...result,
+      imageSuccessRate
+    }));
     return result;
   }
 }
