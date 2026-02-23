@@ -1,11 +1,24 @@
 # State
 
 **Last Updated:** 2026-02-23
-**Current Work:** Listing images in Telegram - IMPLEMENTATION COMPLETE, ready for testing and deployment
+**Current Work:** All M3 features complete (Telegram bot, Hebrew UI, images, street addresses, city normalization). System ready for production deployment or Filter Matching Engine (M3).
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-011: Hebrew city name normalization (2026-02-23)
+
+**Decision:** Normalize all city names to Hebrew canonical form throughout the system. Created centralized `normalizeCity()` function in `@rentifier/extraction` package.
+**Reason:** Database had inconsistent city names (Hebrew/English mix) due to conflicting normalization logic. YAD2 API returns inconsistent language, extraction patterns mapped to English, resulting in mixed data that broke filtering.
+**Trade-off:** Requires all future data sources to call `normalizeCity()` in their connector. Single-language (Hebrew) for now; multi-language support deferred.
+**Impact:**
+- Created `packages/extraction/src/cities.ts` with CITY_VARIANTS mapping (Hebrew + English variants → Hebrew canonical)
+- Updated extraction patterns to return Hebrew city names
+- YAD2 connector applies normalization with graceful fallback
+- Migration 0009 converts existing English city names to Hebrew
+- All tests updated and passing (99 tests)
+- Future-proofed: all connectors must import and use `normalizeCity()`
 
 ### AD-010: Processing tracking with processed_at and worker state (2026-02-22)
 

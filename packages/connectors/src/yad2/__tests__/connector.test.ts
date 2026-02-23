@@ -240,6 +240,59 @@ describe('Yad2Connector', () => {
       const draft2 = connector.normalize(candidate2);
       expect(draft2.tags).toContain('high-floor');
     });
+
+    it('should normalize English city names to Hebrew', () => {
+      const marker = createTestMarker({
+        address: {
+          city: { text: 'Tel Aviv' }, // English variant
+          area: { text: 'מרכז' },
+          neighborhood: { text: 'פלורנטין' },
+          street: { text: 'אלנבי' },
+          house: { number: '10', floor: 3 },
+          coords: { lat: 32.06, lon: 34.77 },
+        },
+      });
+
+      const candidate: ListingCandidate = {
+        source: 'yad2',
+        sourceItemId: marker.orderId,
+        rawTitle: 'Test',
+        rawDescription: 'Test',
+        rawUrl: 'https://www.yad2.co.il/realestate/rent',
+        rawPostedAt: null,
+        sourceData: marker as unknown as Record<string, unknown>,
+      };
+
+      const draft = connector.normalize(candidate);
+      expect(draft.city).toBe('תל אביב');
+    });
+
+    it('should handle unknown city names gracefully', () => {
+      const marker = createTestMarker({
+        address: {
+          city: { text: 'Unknown City' },
+          area: { text: 'מרכז' },
+          neighborhood: { text: 'test' },
+          street: { text: 'test' },
+          house: { number: '1', floor: 1 },
+          coords: { lat: 0, lon: 0 },
+        },
+      });
+
+      const candidate: ListingCandidate = {
+        source: 'yad2',
+        sourceItemId: marker.orderId,
+        rawTitle: 'Test',
+        rawDescription: 'Test',
+        rawUrl: 'https://www.yad2.co.il/realestate/rent',
+        rawPostedAt: null,
+        sourceData: marker as unknown as Record<string, unknown>,
+      };
+
+      const draft = connector.normalize(candidate);
+      // Should fall back to raw value when normalization fails
+      expect(draft.city).toBe('Unknown City');
+    });
   });
 
   describe('fetchNew', () => {
