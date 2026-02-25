@@ -1,11 +1,12 @@
 import { Connector, FetchResult } from './interface';
 import { ListingCandidate, ListingDraft } from '@rentifier/core';
+import type { DB } from '@rentifier/db';
 
 export class MockConnector implements Connector {
   sourceId = 'mock';
   sourceName = 'Mock Source';
 
-  async fetchNew(cursor: string | null): Promise<FetchResult> {
+  async fetchNew(cursor: string | null, _db: DB): Promise<FetchResult> {
     if (cursor !== null) {
       return { candidates: [], nextCursor: null };
     }

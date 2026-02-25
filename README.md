@@ -126,6 +126,13 @@ pnpm db:seed:local        # Add a dev user + catch-all filter
 
 Edit `scripts/seed-local.sql` first to set your Telegram chat ID (or leave the placeholder for now).
 
+**Default monitored cities:** The migration seeds 3 cities by default:
+- תל אביב (Tel Aviv) - priority 100
+- ירושלים (Jerusalem) - priority 90
+- חיפה (Haifa) - priority 80
+
+See [City Configuration](#city-configuration) below to add or remove cities.
+
 ### 3. Run all workers
 
 ```bash
@@ -299,6 +306,91 @@ See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for comprehensive deployment instructio
 | Collector | Every 30 min | Fetch new listings from sources       |
 | Processor | Every 15 min | Normalize and extract structured data |
 | Notify    | Every 5 min  | Match filters and send Telegram msgs  |
+
+## City Configuration
+
+The YAD2 connector fetches listings from specific cities stored in the `monitored_cities` table. This ensures complete coverage of target markets (YAD2's API returns max 200 results per request, so national queries would miss most new posts).
+
+### Default Cities
+
+Three cities are configured by default (from migration 0010):
+
+- **תל אביב** (Tel Aviv) - Code: 5000, Priority: 100
+- **ירושלים** (Jerusalem) - Code: 3000, Priority: 90
+- **חיפה** (Haifa) - Code: 4000, Priority: 80
+
+The collector rotates through enabled cities in **priority order** (highest first), fetching one city per run.
+
+### Managing Cities
+
+#### View current cities
+
+```bash
+pnpm db:query:local "SELECT * FROM monitored_cities ORDER BY priority DESC"
+```
+
+#### Add a new city
+
+```bash
+pnpm db:query:local "
+  INSERT INTO monitored_cities (city_name, city_code, enabled, priority)
+  VALUES ('רמת גן', 8600, 1, 70)
+"
+```
+
+**Common YAD2 city codes:**
+
+| City            | Code |
+| --------------- | ---- |
+| תל אביב         | 5000 |
+| ירושלים         | 3000 |
+| חיפה            | 4000 |
+| הרצליה          | 6400 |
+| רמת גן          | 8600 |
+| גבעתיים         | 6300 |
+| באר שבע         | 7900 |
+| נתניה           | 7400 |
+| ראשון לציון     | 8300 |
+| פתח תקווה       | 7900 |
+
+#### Disable a city
+
+```bash
+pnpm db:query:local "UPDATE monitored_cities SET enabled=0 WHERE city_code=8600"
+```
+
+#### Re-enable a city
+
+```bash
+pnpm db:query:local "UPDATE monitored_cities SET enabled=1 WHERE city_code=8600"
+```
+
+#### Change priority
+
+Higher priority cities are fetched first in rotation:
+
+```bash
+pnpm db:query:local "UPDATE monitored_cities SET priority=95 WHERE city_code=5000"
+```
+
+### Coverage Monitoring
+
+The collector logs warnings when a city returns exactly 200 results (API limit), indicating potential truncation:
+
+```json
+{
+  "event": "yad2_result_limit_warning",
+  "city": "תל אביב",
+  "cityCode": 5000,
+  "resultCount": 200,
+  "message": "City may have truncated results. Consider splitting query."
+}
+```
+
+For high-volume cities hitting the limit, consider:
+- Increasing collector frequency (fetch more often)
+- Reducing the number of monitored cities
+- Future: split into multiple queries (price ranges, neighborhoods)
 
 ## Development Methodology
 

@@ -1,4 +1,5 @@
-import type { Source, SourceState, ListingRaw, ListingRow, User, FilterRow, NotificationSent, WorkerState } from './schema';
+import type { Source, SourceState, ListingRaw, ListingRow, User, FilterRow, NotificationSent, WorkerState, MonitoredCity } from './schema';
+import type { D1Database } from '@cloudflare/workers-types';
 
 export interface DB {
   getEnabledSources(): Promise<Source[]>;
@@ -16,6 +17,11 @@ export interface DB {
   recordNotificationSent(userId: number, listingId: number, filterId: number | null, channel: string): Promise<void>;
   getWorkerState(workerName: string): Promise<{ lastRunAt: string | null }>;
   updateWorkerState(workerName: string, lastRunAt: string, status: 'ok' | 'error', error?: string): Promise<void>;
+  getEnabledCities(): Promise<MonitoredCity[]>;
+  getCityByCode(cityCode: number): Promise<MonitoredCity | null>;
+  addMonitoredCity(cityName: string, cityCode: number, priority?: number): Promise<number>;
+  disableCity(cityCode: number): Promise<void>;
+  enableCity(cityCode: number): Promise<void>;
 }
 
 export function createDB(d1: D1Database): DB {
@@ -135,7 +141,7 @@ export function createDB(d1: D1Database): DB {
          WHERE f.enabled = 1`
       ).all<FilterRow & { user_id_join: number; telegram_chat_id: string; display_name: string; user_created_at: string }>();
 
-      return result.results.map(row => ({
+      return result.results.map((row: any) => ({
         id: row.id,
         user_id: row.user_id,
         name: row.name,
@@ -193,6 +199,39 @@ export function createDB(d1: D1Database): DB {
            last_status = excluded.last_status,
            last_error = excluded.last_error`
       ).bind(workerName, lastRunAt, status, error ?? null).run();
+    },
+
+    async getEnabledCities(): Promise<MonitoredCity[]> {
+      const result = await d1.prepare(
+        'SELECT * FROM monitored_cities WHERE enabled = 1 ORDER BY priority DESC, id ASC'
+      ).all<MonitoredCity>();
+      return result.results;
+    },
+
+    async getCityByCode(cityCode: number): Promise<MonitoredCity | null> {
+      const result = await d1.prepare(
+        'SELECT * FROM monitored_cities WHERE city_code = ?'
+      ).bind(cityCode).first<MonitoredCity>();
+      return result ?? null;
+    },
+
+    async addMonitoredCity(cityName: string, cityCode: number, priority: number = 0): Promise<number> {
+      const result = await d1.prepare(
+        'INSERT INTO monitored_cities (city_name, city_code, priority) VALUES (?, ?, ?) RETURNING id'
+      ).bind(cityName, cityCode, priority).first<{ id: number }>();
+      return result!.id;
+    },
+
+    async disableCity(cityCode: number): Promise<void> {
+      await d1.prepare(
+        'UPDATE monitored_cities SET enabled = 0 WHERE city_code = ?'
+      ).bind(cityCode).run();
+    },
+
+    async enableCity(cityCode: number): Promise<void> {
+      await d1.prepare(
+        'UPDATE monitored_cities SET enabled = 1 WHERE city_code = ?'
+      ).bind(cityCode).run();
     },
   };
 }

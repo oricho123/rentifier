@@ -5,6 +5,7 @@
   "types": "src/index.ts",
   "dependencies": {
     "@rentifier/core": "workspace:*",
+    "@rentifier/db": "workspace:*",
     "@rentifier/extraction": "workspace:*"
   }
 }

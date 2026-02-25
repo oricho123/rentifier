@@ -95,6 +95,9 @@ importers:
       '@rentifier/core':
         specifier: workspace:*
         version: link:../core
+      '@rentifier/db':
+        specifier: workspace:*
+        version: link:../db
       '@rentifier/extraction':
         specifier: workspace:*
         version: link:../extraction
