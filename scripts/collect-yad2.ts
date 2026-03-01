@@ -71,12 +71,23 @@ async function main() {
 
   console.log(JSON.stringify({ event: 'collect_start', sourceId, hasCursor: !!cursor }));
 
+  // Build a minimal DB adapter that uses the D1 REST API
+  // (the full DB object requires a D1Database binding, unavailable outside Workers)
+  const db = {
+    async getEnabledCities() {
+      const res = await d1Query(
+        'SELECT * FROM monitored_cities WHERE enabled = 1 ORDER BY priority DESC, id ASC'
+      );
+      return res.results as { id: number; city_name: string; city_code: number; enabled: boolean; priority: number; created_at: string }[];
+    },
+  };
+
   const connector = new Yad2Connector();
   let candidates: Awaited<ReturnType<typeof connector.fetchNew>>['candidates'];
   let nextCursor: string | null;
 
   try {
-    ({ candidates, nextCursor } = await connector.fetchNew(cursor));
+    ({ candidates, nextCursor } = await connector.fetchNew(cursor, db as any));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(JSON.stringify({ event: 'collect_error', error: message }));
