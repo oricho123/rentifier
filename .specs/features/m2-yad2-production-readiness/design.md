@@ -10,6 +10,34 @@
 
 This feature refactors the YAD2 connector to use configurable city lists and removes mock connector pollution. The design prioritizes simplicity for single-user deployment while future-proofing for multi-user scenarios.
 
+**Post-implementation update:** yad2 scraping was moved to GitHub Actions because Cloudflare Workers AS13335 is hard-blocked by Radware Bot Manager. See [GitHub Actions Scraper](#github-actions-scraper-post-implementation) below.
+
+```
+GitHub Actions cron (every 30min)
+  │
+  │  scripts/collect-yad2.ts
+  │  uses @rentifier/connectors (Yad2Connector)
+  │  reads cursor + writes listings via D1 REST API
+  ▼
+┌──────────────────────────────────────────────────────────────┐
+│                      Cloudflare D1                           │
+│  source_state (cursor) │ listings_raw │ sources              │
+└──────────────────────────────────────────────────────────────┘
+  ▲
+  │  Processor + Notify Workers unchanged
+  │  (read listings_raw, write listings, send Telegram)
+
+┌─────────────────────────────────────────────────────────────┐
+│           Collector Worker (still runs)                     │
+│                                                              │
+│  - Handles non-yad2 sources                                 │
+│  - Yad2Connector disabled in production                     │
+│  - Enabled locally via ENABLE_YAD2_CONNECTOR=true           │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Original design (still applies to Collector Worker for other sources)
+
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                      Collector Worker                        │
@@ -27,6 +55,27 @@ This feature refactors the YAD2 connector to use configurable city lists and rem
                     │  (no mock data)  │
                     └──────────────────┘
 ```
+
+---
+
+## GitHub Actions Scraper (Post-Implementation)
+
+**Root cause:** Cloudflare Workers' IP range (AS13335) is hard-blocked by Radware Bot Manager on yad2.co.il. This is not a header/cookie issue — the ASN itself is flagged. No request from a Worker will ever reach yad2's API.
+
+**Why GitHub Actions works:** GitHub's runner IPs are not flagged by Radware.
+
+**Implementation:**
+
+| File | Role |
+|------|------|
+| `scripts/collect-yad2.ts` | Reads cursor from D1 REST API, calls `Yad2Connector.fetchNew()`, writes listings + new cursor back via D1 REST API |
+| `.github/workflows/collect-yad2.yml` | Cron `*/30 * * * *` + `workflow_dispatch` for manual testing |
+| `apps/collector/src/registry.ts` | Yad2Connector removed from production Worker; conditionally registered when `ENABLE_YAD2_CONNECTOR=true` (local dev only) |
+| `apps/collector/.dev.vars` | `ENABLE_YAD2_CONNECTOR=true` — gitignored, create manually for local dev |
+
+**Single writer constraint:** Only GitHub Actions writes to yad2 cursor state. The Worker never touches it in production. This avoids split-brain cursor corruption.
+
+**D1 REST API:** `POST https://api.cloudflare.com/client/v4/accounts/{CF_ACCOUNT_ID}/d1/database/{CF_D1_DATABASE_ID}/query` with Bearer token. Requires `CF_ACCOUNT_ID`, `CF_API_TOKEN` (D1:Edit), `CF_D1_DATABASE_ID` as GitHub Actions secrets.
 
 ---
 
