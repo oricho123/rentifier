@@ -27,28 +27,26 @@
 
 ### Features
 
-**YAD2 Connector** - IN PROGRESS
+**YAD2 Production Readiness** - ✅ COMPLETE (.specs/features/m2-yad2-production-readiness/)
 
-- Implement Yad2 rental API client with Cloudflare Workers `fetch`
-- Cursor-based incremental fetching with page tracking
-- Normalize Yad2 structured fields to canonical schema
-- Safety mechanisms: retry with backoff, captcha detection, circuit breaker
+- ✅ Removed mock connector (disabled in database, kept for tests)
+- ✅ Verified YAD2 rental API endpoint (all 3 cities working, 200 results each)
+- ✅ Implemented configurable city selection (monitored_cities table)
+- ✅ Addressed 200-result API limit with targeted city fetching
+- ✅ Monitor coverage with result count tracking and warnings
+- ✅ End-to-end testing: collector → processor → notify (1868 listings, 100 notifications)
 
 **Extraction Tuning** - PLANNED
 
-- Tune regex/rules for YAD2's data format
+- Tune regex/rules for YAD2's data format (if needed after real data testing)
 - Handle Hebrew text patterns for price, rooms, neighborhoods
-
-**Telegram Bot Setup** - PLANNED
-
-- Create bot, configure chat_id as Cloudflare secret
-- Format listing messages (title, price, rooms, link)
 
 **Deploy to Cloudflare** - PLANNED
 
 - Deploy all three workers with D1 bindings
 - Configure cron schedules (collector: 30min, processor: 15min, notify: 5min)
-- Verify end-to-end flow with real data
+- Set up Cloudflare secrets (Telegram bot token, webhook secret)
+- Verify end-to-end flow in production
 
 ---
 
@@ -71,16 +69,18 @@
 - ✅ Conversation state management with 10-minute TTL
 - ✅ Inline keyboard support for interactive prompts
 
-**Telegram Bot Improvements** - 📝 SPECIFIED (Ready for Implementation)
+**Telegram Bot Improvements** - ✅ COMPLETE
 
-- Hebrew localization with RTL support
-- Telegram command menu integration (BotCommands API)
-- Interactive filter creation with inline keyboards
-- Quick-select buttons for common cities
-- Interactive list management (edit/delete buttons)
-- Rich message formatting with emojis
-- Progress indicators for multi-step flows
-- One-tap confirmation for actions
+- ✅ Hebrew localization with RTL support
+- ✅ Telegram command menu integration (BotCommands API)
+- ✅ Interactive filter creation with inline keyboards
+- ✅ Quick-select buttons for common cities
+- ✅ Interactive list management (edit/delete buttons)
+- ✅ Rich message formatting with emojis
+- ✅ Progress indicators for multi-step flows
+- ✅ One-tap confirmation for actions
+- ✅ Street addresses with clickable Google Maps links
+- ✅ Listing images in photo messages
 
 **Filter Matching Engine** - PLANNED
 
@@ -108,8 +108,22 @@
 
 ## Future Considerations
 
+### User Experience
 - Web UI for browsing listings, managing filters, viewing history
-- AI-powered relevance scoring and listing summarization
-- Geo-based filtering with map view
-- Listing price trend analytics
 - WhatsApp notification channel
+- Mobile app (React Native)
+
+### Data & Intelligence
+- AI-powered relevance scoring and listing summarization
+- Listing price trend analytics
+- Geo-based filtering with map view
+- Duplicate detection across sources
+
+### Infrastructure & Automation
+- **Dynamic city discovery** - Auto-discover YAD2 city codes instead of manual mapping
+  - Options: scrape frontend dropdown, reverse-engineer from API, user-provided codes
+  - Benefit: Easier to add new cities, better multi-user support
+  - See: `.specs/features/dynamic-city-discovery/analysis.md`
+- Automated deployment pipeline (CI/CD)
+- Monitoring and alerting (error rates, API health)
+- Rate limiting and quota management

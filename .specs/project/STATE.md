@@ -1,11 +1,18 @@
 # State
 
-**Last Updated:** 2026-02-23
-**Current Work:** All M3 features complete (Telegram bot, Hebrew UI, images, street addresses, city normalization). System ready for production deployment or Filter Matching Engine (M3).
+**Last Updated:** 2026-03-01
+**Current Work:** M2 complete and PR ready for merge. System fully production-ready with zero mock data pollution, configurable city monitoring, and verified end-to-end flow.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-012: M2 YAD2 Production Readiness (2026-02-23)
+
+**Decision:** Prioritize M2 completion over M3 Filter Matching Engine. Focus on production-ready YAD2 connector with configurable city selection and mock connector removal.
+**Reason:** YAD2 connector has critical issues: (1) 200-result API limit means unfocused fetching misses posts in target cities, (2) Mock connector pollutes production data, (3) Rental endpoint unverified, (4) Hardcoded city list prevents deployment flexibility.
+**Trade-off:** Delays Filter Matching Engine (multi-user matching), but ensures single-user deployment works reliably.
+**Impact:** Created feature spec at `.specs/features/m2-yad2-production-readiness/`. Will implement configurable city selection (likely database table for future multi-user support), remove mock connector entirely, verify rental API endpoint, add coverage monitoring for 200-result limit.
 
 ### AD-011: Hebrew city name normalization (2026-02-23)
 
@@ -147,6 +154,24 @@ Complete implementation of photo messages in Telegram notifications. All tasks c
 - Status: Implementation complete, ready for manual testing and deployment
 - Files: 4 changed (telegram-client, notification-service, 2 test files)
 - Documentation: Complete spec, design, tasks, and implementation notes
+
+### M2 - YAD2 Production Readiness (2026-03-01)
+
+Complete YAD2 connector production readiness with full mock data removal. All 15 tasks completed:
+- **Database:** monitored_cities table with 3 seeded cities (תל אביב, ירושלים, חיפה)
+- **Connector:** Dynamic city fetching from DB, 200-result monitoring and warnings, breaking change to accept DB parameter
+- **Mock removal:** Complete removal of all mock data from migrations and seed scripts
+  - Deleted migration 0003 (mock source creation)
+  - Removed seed-local.sql entirely (all seeding via migrations)
+  - Removed db:seed:local npm script
+  - MockConnector class retained in code for unit tests only
+- **Verification:** API endpoint confirmed working, all 3 cities return 200 results
+- **End-to-end:** Full pipeline tested - 1,868 YAD2 listings fetched → normalized → 100 notifications sent
+- **TypeScript:** Zero compilation errors
+- **Tests:** All 26 unit tests passing with updated DB mocking
+- **Status:** PR #17 ready for merge - zero mock data pollution, production-ready
+- **Files:** 21 files changed (+2,084 -76 lines), 5 commits
+- **Documentation:** Complete spec, design, tasks, test results, city configuration guide, and dynamic city discovery analysis
 
 ---
 

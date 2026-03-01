@@ -89,3 +89,12 @@ export interface WorkerState {
   last_status: 'ok' | 'error' | null;
   last_error: string | null;
 }
+
+export interface MonitoredCity {
+  id: number;
+  city_name: string;
+  city_code: number;
+  enabled: boolean;
+  priority: number;
+  created_at: string;
+}
