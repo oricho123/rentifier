@@ -169,7 +169,18 @@ The YAD2 connector exists but has critical issues preventing production use:
 | YAD2 rental endpoint differs from sales endpoint | Medium | High | Test early; fallback to sales endpoint if needed |
 | 200-result limit causes missed posts | High | High | Fetch specific cities, monitor logs, future: multi-query |
 | Rate limiting triggers circuit breaker | Medium | Medium | Already handled; monitor frequency |
-| Captcha blocks during testing | Low | Medium | Test from different IPs; respect delays |
+| ~~Captcha blocks during testing~~ | ~~Low~~ | ~~Medium~~ | **RESOLVED** — Cloudflare Workers AS13335 is hard-blocked by Radware. Moved yad2 scraping to GitHub Actions (see [GitHub Actions Scraper](#github-actions-scraper)). |
+
+## GitHub Actions Scraper
+
+**Added post-spec:** Radware Bot Manager permanently blocks Cloudflare's AS13335 IP range on yad2.co.il. No header combination bypasses this — the IP itself is flagged. GitHub Actions runners use different, unblocked IPs.
+
+**Solution implemented:**
+- `scripts/collect-yad2.ts` — standalone scraper using `@rentifier/connectors` via `tsx`; reads/writes D1 state via Cloudflare REST API
+- `.github/workflows/collect-yad2.yml` — cron every 30 min + `workflow_dispatch`
+- `apps/collector/src/registry.ts` — Yad2Connector removed from Worker in production; conditionally enabled via `ENABLE_YAD2_CONNECTOR=true` for local dev
+
+**Required GitHub secrets:** `CF_ACCOUNT_ID`, `CF_API_TOKEN` (D1:Edit), `CF_D1_DATABASE_ID`
 
 ---
 

@@ -4,18 +4,20 @@ Automated apartment-listing aggregator for Israeli rental markets. Ingests posts
 
 ## Architecture
 
-Three Cloudflare Workers running on cron schedules, sharing a D1 (SQLite) database:
+Two Cloudflare Workers + one GitHub Actions workflow, sharing a D1 (SQLite) database:
 
 ```
-Collector (every 30min)     Processor (every 15min)     Notify (every 5min)
-   │                           │                           │
-   │ fetch from sources        │ normalize + extract       │ match filters
-   │ store raw JSON            │ upsert canonical listings │ send Telegram
-   ▼                           ▼                           ▼
-┌──────────────────────── Cloudflare D1 ────────────────────────────┐
-│ sources │ source_state │ listings_raw │ listings │ users │ filters│
-└──────────────────────────────────────────────────────────────────-┘
+GitHub Actions (every 30min)   Processor (every 15min)     Notify (every 5min)
+   │                               │                           │
+   │ scrape yad2 via D1 REST API   │ normalize + extract       │ match filters
+   │ (GitHub IPs bypass Radware)   │ upsert canonical listings │ send Telegram
+   ▼                               ▼                           ▼
+┌──────────────────────────── Cloudflare D1 ────────────────────────────────┐
+│ sources │ source_state │ listings_raw │ listings │ users │ filters        │
+└──────────────────────────────────────────────────────────────────────────-┘
 ```
+
+> **Why GitHub Actions for yad2?** Cloudflare's AS13335 IP range is hard-blocked by Radware Bot Manager on yad2.co.il. GitHub Actions runners use different IPs that are not flagged. The Collector Worker still handles other sources. Locally (`wrangler dev`) yad2 scraping works normally via your machine's IP — enable it with `ENABLE_YAD2_CONNECTOR=true` in `apps/collector/.dev.vars`.
 
 ## Project Structure
 
@@ -106,7 +108,7 @@ Edit `.env` and set:
 - `TELEGRAM_WEBHOOK_SECRET`: Any random string for local development
 - `TELEGRAM_WEBHOOK_URL`: Your ngrok URL (update this when you start ngrok)
 
-**For the worker** (runtime):
+**For the notify worker** (runtime):
 
 ```bash
 cp apps/notify/.dev.vars.example apps/notify/.dev.vars
@@ -116,6 +118,14 @@ Edit `apps/notify/.dev.vars` and set:
 
 - `TELEGRAM_BOT_TOKEN`: Your bot token from BotFather (same as above)
 - `TELEGRAM_WEBHOOK_SECRET`: Same secret as in `.env`
+
+**For the collector worker** (optional — enables yad2 scraping locally):
+
+```bash
+echo "ENABLE_YAD2_CONNECTOR=true" > apps/collector/.dev.vars
+```
+
+This enables the Yad2Connector in `wrangler dev`. It works locally because outbound requests go through your machine's IP, not Cloudflare's blocked AS13335 range. In production the Worker omits yad2 — GitHub Actions handles it instead.
 
 ### 2. Set up the local database
 
@@ -301,11 +311,24 @@ See **[DEPLOYMENT.md](./DEPLOYMENT.md)** for comprehensive deployment instructio
 
 ## Cron Schedules
 
-| Worker    | Schedule     | Purpose                               |
-| --------- | ------------ | ------------------------------------- |
-| Collector | Every 30 min | Fetch new listings from sources       |
-| Processor | Every 15 min | Normalize and extract structured data |
-| Notify    | Every 5 min  | Match filters and send Telegram msgs  |
+| Runner              | Schedule     | Purpose                                          |
+| ------------------- | ------------ | ------------------------------------------------ |
+| GitHub Actions      | Every 30 min | Scrape yad2 listings → write to D1 via REST API  |
+| Collector Worker    | Every 30 min | Fetch new listings from other sources            |
+| Processor Worker    | Every 15 min | Normalize and extract structured data            |
+| Notify Worker       | Every 5 min  | Match filters and send Telegram msgs             |
+
+### GitHub Actions Yad2 Scraper
+
+The yad2 scraper runs as a GitHub Actions workflow (`.github/workflows/collect-yad2.yml`) because Cloudflare's AS13335 IP range is blocked by Radware Bot Manager on yad2.co.il. It requires three repository secrets:
+
+| Secret              | Description                                      |
+| ------------------- | ------------------------------------------------ |
+| `CF_ACCOUNT_ID`     | Cloudflare account ID                            |
+| `CF_API_TOKEN`      | CF API token with **D1:Edit** permission         |
+| `CF_D1_DATABASE_ID` | D1 database ID                                   |
+
+Set these in GitHub → Settings → Secrets and variables → Actions. The workflow can also be triggered manually via `workflow_dispatch` for testing.
 
 ## City Configuration
 
