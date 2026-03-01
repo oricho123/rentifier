@@ -1,3 +1,4 @@
 -- Seed the mock source for development and testing
-INSERT INTO sources (name, enabled) VALUES ('mock', 1)
+-- Created as disabled - tests can enable it if needed
+INSERT INTO sources (name, enabled) VALUES ('mock', 0)
 ON CONFLICT(name) DO NOTHING;

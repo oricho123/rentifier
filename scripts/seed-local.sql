@@ -1,10 +1,25 @@
 -- Local development seed data
 -- Run with: pnpm db:seed:local
+--
+-- IMPORTANT: This file is for local development only.
+-- To test locally, uncomment the examples below and replace with your actual Telegram chat ID.
+-- Your chat ID can be found by messaging @userinfobot on Telegram.
 
--- Seed a dev user (update telegram_chat_id with your real one)
-INSERT OR IGNORE INTO users (telegram_chat_id, display_name)
-VALUES ('REPLACE_WITH_YOUR_CHAT_ID', 'Dev User');
+-- Example: Add yourself as a test user
+-- INSERT OR IGNORE INTO users (telegram_chat_id, display_name)
+-- VALUES ('123456789', 'Your Name');
 
--- Seed a catch-all filter for the dev user
-INSERT OR IGNORE INTO filters (user_id, name, enabled)
-VALUES (1, 'All listings', 1);
+-- Example: Create a specific filter (NOT a catch-all)
+-- INSERT OR IGNORE INTO filters (
+--   user_id, name,
+--   min_price, max_price,
+--   min_bedrooms, max_bedrooms,
+--   cities_json, neighborhoods_json,
+--   enabled
+-- ) VALUES (
+--   1, 'Tel Aviv 2-3BR under 7000',
+--   4000, 7000,
+--   2, 3,
+--   '["תל אביב"]', NULL,
+--   1
+-- );
