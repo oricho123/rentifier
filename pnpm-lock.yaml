@@ -11,6 +11,9 @@ importers:
       '@rentifier/connectors':
         specifier: workspace:*
         version: link:packages/connectors
+      '@rentifier/db':
+        specifier: workspace:*
+        version: link:packages/db
     devDependencies:
       '@types/node':
         specifier: ^20.11.0

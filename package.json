@@ -35,7 +35,8 @@
     "pnpm": ">=10.0.0"
   },
   "dependencies": {
-    "@rentifier/connectors": "workspace:*"
+    "@rentifier/connectors": "workspace:*",
+    "@rentifier/db": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
