@@ -125,6 +125,18 @@ describe('matchesFilter', () => {
       const filter = createFilter({ min_bedrooms: 2 });
       expect(matchesFilter(createListing({ bedrooms: null }), filter)).toBe(false);
     });
+
+    it('should match half-room counts (e.g. 3.5)', () => {
+      const filter = createFilter({ min_bedrooms: 3, max_bedrooms: 4 });
+      expect(matchesFilter(createListing({ bedrooms: 3.5 }), filter)).toBe(true);
+    });
+
+    it('should filter with half-room bounds', () => {
+      const filter = createFilter({ min_bedrooms: 2.5, max_bedrooms: 3.5 });
+      expect(matchesFilter(createListing({ bedrooms: 3 }), filter)).toBe(true);
+      expect(matchesFilter(createListing({ bedrooms: 2 }), filter)).toBe(false);
+      expect(matchesFilter(createListing({ bedrooms: 4 }), filter)).toBe(false);
+    });
   });
 
   // --- Cities ---
