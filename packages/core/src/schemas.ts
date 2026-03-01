@@ -1,5 +1,7 @@
 import { z } from 'zod';
 
+const halfRooms = z.number().min(0).refine((n) => n % 0.5 === 0, { message: 'Must be a whole or half number (e.g. 3, 3.5)' });
+
 export const listingSchema = z.object({
   id: z.number().int().positive(),
   sourceId: z.string().min(1),
@@ -9,7 +11,7 @@ export const listingSchema = z.object({
   price: z.number().positive(),
   currency: z.enum(['ILS', 'USD', 'EUR']),
   pricePeriod: z.enum(['month', 'week', 'day']),
-  bedrooms: z.number().int().min(0),
+  bedrooms: halfRooms,
   city: z.string().min(1),
   neighborhood: z.string().nullable(),
   tags: z.array(z.string()),
@@ -34,8 +36,8 @@ export const filterSchema = z.object({
   name: z.string().min(1),
   minPrice: z.number().positive().nullable(),
   maxPrice: z.number().positive().nullable(),
-  minBedrooms: z.number().int().min(0).nullable(),
-  maxBedrooms: z.number().int().min(0).nullable(),
+  minBedrooms: halfRooms.nullable(),
+  maxBedrooms: halfRooms.nullable(),
   cities: z.array(z.string()),
   neighborhoods: z.array(z.string()),
   keywords: z.array(z.string()),
@@ -52,7 +54,7 @@ export const listingDraftSchema = z.object({
   price: z.number().positive().nullable(),
   currency: z.enum(['ILS', 'USD', 'EUR']).nullable(),
   pricePeriod: z.enum(['month', 'week', 'day']).nullable(),
-  bedrooms: z.number().int().min(0).nullable(),
+  bedrooms: halfRooms.nullable(),
   city: z.string().nullable(),
   neighborhood: z.string().nullable(),
   tags: z.array(z.string()),

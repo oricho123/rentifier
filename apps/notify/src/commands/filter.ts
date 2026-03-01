@@ -214,8 +214,8 @@ export class FilterCommand implements StatefulCommandHandler {
 
   private async handleRoomsMinStep(chatId: string, text: string, state: ConversationState): Promise<void> {
     if (text.toLowerCase() !== 'skip' && text.toLowerCase() !== 'דלג') {
-      const rooms = parseInt(text, 10);
-      if (isNaN(rooms) || rooms < 0) {
+      const rooms = parseFloat(text);
+      if (isNaN(rooms) || rooms < 0 || rooms % 0.5 !== 0) {
         if (state.lastMessageId) {
           await this.telegram.editMessageText(
             chatId,
@@ -252,8 +252,8 @@ export class FilterCommand implements StatefulCommandHandler {
 
   private async handleRoomsMaxStep(chatId: string, text: string, state: ConversationState): Promise<void> {
     if (text.toLowerCase() !== 'skip' && text.toLowerCase() !== 'דלג') {
-      const rooms = parseInt(text, 10);
-      if (isNaN(rooms) || rooms < 0) {
+      const rooms = parseFloat(text);
+      if (isNaN(rooms) || rooms < 0 || rooms % 0.5 !== 0) {
         if (state.lastMessageId) {
           await this.telegram.editMessageText(
             chatId,
