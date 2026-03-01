@@ -19,7 +19,7 @@ export interface NotificationError {
   error: string;
 }
 
-function parseJsonArray(json: string | null): string[] {
+export function parseJsonArray(json: string | null): string[] {
   if (!json) return [];
   try {
     return JSON.parse(json) as string[];
@@ -28,7 +28,7 @@ function parseJsonArray(json: string | null): string[] {
   }
 }
 
-function matchesFilter(listing: ListingRow, filter: FilterRow): boolean {
+export function matchesFilter(listing: ListingRow, filter: FilterRow): boolean {
   // Price range check
   if (filter.min_price != null && (listing.price == null || listing.price < filter.min_price)) {
     return false;
