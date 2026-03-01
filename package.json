@@ -20,7 +20,6 @@
     "trigger:all": "pnpm trigger:collector && pnpm trigger:processor && pnpm trigger:notify",
     "db:migrate:local": "wrangler d1 migrations apply rentifier --local --config wrangler.migrations.json --persist-to .wrangler",
     "db:migrate:remote": "wrangler d1 migrations apply rentifier --remote --config wrangler.migrations.json",
-    "db:seed:local": "wrangler d1 execute rentifier --local --config wrangler.migrations.json --file=scripts/seed-local.sql --persist-to .wrangler",
     "db:query:local": "wrangler d1 execute rentifier --local --config wrangler.migrations.json --persist-to .wrangler --command",
     "db:reset:local": "rm -rf .wrangler && echo 'Local DB reset. Run pnpm db:migrate:local to recreate.'",
     "deploy:collector": "pnpm --filter @rentifier/collector exec wrangler deploy",
