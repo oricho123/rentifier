@@ -1,5 +1,6 @@
 import type { Connector } from '@rentifier/connectors';
-import { MockConnector } from '@rentifier/connectors';
+import { MockConnector, Yad2Connector } from '@rentifier/connectors';
+import type { Env } from './index';
 
 export class ConnectorRegistry {
   private connectors = new Map<string, Connector>();
@@ -17,10 +18,15 @@ export class ConnectorRegistry {
   }
 }
 
-export function createDefaultRegistry(): ConnectorRegistry {
+export function createDefaultRegistry(env: Env): ConnectorRegistry {
   const registry = new ConnectorRegistry();
   registry.register('mock', new MockConnector());
-  // yad2 scraping moved to GitHub Actions (scripts/collect-yad2.ts)
-  // to bypass Radware IP block on Cloudflare's AS13335 range.
+
+  if (env.ENABLE_YAD2_CONNECTOR === 'true') {
+    // Local dev only — GitHub Actions handles yad2 in production
+    // to bypass Radware IP block on Cloudflare's AS13335 range.
+    registry.register('yad2', new Yad2Connector());
+  }
+
   return registry;
 }
