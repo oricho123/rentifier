@@ -1,7 +1,7 @@
 # State
 
-**Last Updated:** 2026-02-25
-**Current Work:** M2 complete. System ready for production deployment with configurable city monitoring, no mock data pollution, and verified end-to-end flow.
+**Last Updated:** 2026-03-01
+**Current Work:** M2 complete and PR ready for merge. System fully production-ready with zero mock data pollution, configurable city monitoring, and verified end-to-end flow.
 
 ---
 
@@ -155,19 +155,23 @@ Complete implementation of photo messages in Telegram notifications. All tasks c
 - Files: 4 changed (telegram-client, notification-service, 2 test files)
 - Documentation: Complete spec, design, tasks, and implementation notes
 
-### M2 - YAD2 Production Readiness (2026-02-25)
+### M2 - YAD2 Production Readiness (2026-03-01)
 
-Complete YAD2 connector production readiness. All 15 tasks completed:
+Complete YAD2 connector production readiness with full mock data removal. All 15 tasks completed:
 - **Database:** monitored_cities table with 3 seeded cities (תל אביב, ירושלים, חיפה)
-- **Connector:** Dynamic city fetching from DB, 200-result monitoring and warnings
-- **Mock removal:** Disabled in database (enabled=0), kept for tests
+- **Connector:** Dynamic city fetching from DB, 200-result monitoring and warnings, breaking change to accept DB parameter
+- **Mock removal:** Complete removal of all mock data from migrations and seed scripts
+  - Deleted migration 0003 (mock source creation)
+  - Removed seed-local.sql entirely (all seeding via migrations)
+  - Removed db:seed:local npm script
+  - MockConnector class retained in code for unit tests only
 - **Verification:** API endpoint confirmed working, all 3 cities return 200 results
-- **End-to-end:** Full pipeline tested - 1868 YAD2 listings fetched → normalized → 100 notifications sent
+- **End-to-end:** Full pipeline tested - 1,868 YAD2 listings fetched → normalized → 100 notifications sent
 - **TypeScript:** Zero compilation errors
-- **Tests:** Unit tests updated with new DB mocking
-- **Status:** Ready for production deployment
-- **Files:** 15 modified (migration, DB schema/queries, connector interface, YAD2 connector, collector, tests, package.json, README)
-- **Documentation:** Spec, design, tasks, test results, and city configuration guide in README
+- **Tests:** All 26 unit tests passing with updated DB mocking
+- **Status:** PR #17 ready for merge - zero mock data pollution, production-ready
+- **Files:** 21 files changed (+2,084 -76 lines), 5 commits
+- **Documentation:** Complete spec, design, tasks, test results, city configuration guide, and dynamic city discovery analysis
 
 ---
 
