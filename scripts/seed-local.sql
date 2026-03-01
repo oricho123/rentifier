@@ -5,6 +5,9 @@
 -- To test locally, uncomment the examples below and replace with your actual Telegram chat ID.
 -- Your chat ID can be found by messaging @userinfobot on Telegram.
 
+-- No-op statement (required for wrangler to accept the file)
+SELECT 1;
+
 -- Example: Add yourself as a test user
 -- INSERT OR IGNORE INTO users (telegram_chat_id, display_name)
 -- VALUES ('123456789', 'Your Name');
