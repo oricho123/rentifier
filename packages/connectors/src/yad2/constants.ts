@@ -1,5 +1,7 @@
-// TODO: This endpoint is based on the known sales endpoint (/forsale/map).
-// The actual rental endpoint may differ. Update when the real rental API is confirmed.
+// Active endpoint — confirmed rental map API.
+// Alternative endpoints to try if this gets blocked:
+//   https://gw.yad2.co.il/feed/realestate/rent
+//   https://gw.yad2.co.il/realestate-feed/forrent/map
 export const YAD2_API_BASE = 'https://gw.yad2.co.il/realestate-feed/rent/map';
 
 export const YAD2_HEADERS: Record<string, string> = {
@@ -11,6 +13,10 @@ export const YAD2_HEADERS: Record<string, string> = {
   'Sec-Fetch-Mode': 'cors',
   'Sec-Fetch-Site': 'same-site',
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
+  // Chrome client hints — must match User-Agent platform
+  'sec-ch-ua': '"Chromium";v="137", "Not/A)Brand";v="24", "Google Chrome";v="137"',
+  'sec-ch-ua-mobile': '?0',
+  'sec-ch-ua-platform': '"macOS"',
 };
 
 /** Yad2 city codes for rental listings */

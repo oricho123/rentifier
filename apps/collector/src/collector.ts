@@ -1,4 +1,5 @@
 import type { DB } from '@rentifier/db';
+import type { Env } from './index';
 import { createDefaultRegistry } from './registry';
 import { fetchSource } from './fetch-source';
 
@@ -11,8 +12,8 @@ export interface CollectorResult {
   errors: Array<{ sourceId: number; error: string }>;
 }
 
-export async function runCollector(db: DB): Promise<CollectorResult> {
-  const registry = createDefaultRegistry();
+export async function runCollector(db: DB, env: Env): Promise<CollectorResult> {
+  const registry = createDefaultRegistry(env);
   const sources = await db.getEnabledSources();
 
   if (sources.length === 0) {
