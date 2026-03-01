@@ -43,4 +43,6 @@ export interface Yad2CursorState {
   lastCityIndex: number;
   /** Track result counts per city for coverage monitoring (cityCode → last result count) */
   resultCounts?: Record<number, number>;
+  /** Lowest orderId from last batch — skip markers at or below this on next fetch */
+  minOrderId?: number;
 }
