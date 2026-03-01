@@ -15,8 +15,8 @@ export const PERIOD_PATTERNS: { pattern: RegExp; period: 'month' | 'week' | 'day
 ];
 
 export const BEDROOM_PATTERNS: { pattern: RegExp; extractor: (match: RegExpMatchArray) => number }[] = [
-  { pattern: /(\d+(?:\.5)?)\s*(?:חדרים|חדר)/i, extractor: (m) => parseFloat(m[1]) },
-  { pattern: /(\d+(?:\.5)?)\s*(?:rooms?|br|bed(?:rooms?)?)/i, extractor: (m) => parseFloat(m[1]) },
+  { pattern: /(?<!\.\d*)(\d+)(?!\.\d)\s*(?:חדרים|חדר)/i, extractor: (m) => parseInt(m[1], 10) },
+  { pattern: /(?<!\.\d*)(\d+)(?!\.\d)\s*(?:rooms?|br|bed(?:rooms?)?)/i, extractor: (m) => parseInt(m[1], 10) },
   { pattern: /(?:סטודיו|studio)/i, extractor: () => 0 },
 ];
 

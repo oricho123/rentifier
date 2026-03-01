@@ -61,7 +61,7 @@ describe('extractPrice', () => {
 describe('extractBedrooms', () => {
   it('should extract number of rooms in Hebrew', () => {
     expect(extractBedrooms('3 חדרים')).toBe(3);
-    expect(extractBedrooms('2.5 חדר')).toBe(2.5);
+    expect(extractBedrooms('2.5 חדר')).toBeNull();
   });
 
   it('should extract number of rooms in English', () => {
