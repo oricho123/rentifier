@@ -1,6 +1,5 @@
--- Migration 0010: Monitored Cities and Mock Source Cleanup
+-- Migration 0010: Monitored Cities
 -- Create monitored_cities table for configurable city selection
--- Disable mock source for production use
 
 -- Create monitored_cities table
 CREATE TABLE IF NOT EXISTS monitored_cities (
@@ -23,6 +22,3 @@ INSERT INTO monitored_cities (city_name, city_code, enabled, priority) VALUES
   ('ירושלים', 3000, 1, 90),
   ('חיפה', 4000, 1, 80)
 ON CONFLICT(city_code) DO NOTHING;
-
--- Disable mock source (keep for testing, but not active in production)
-UPDATE sources SET enabled=0 WHERE name='mock';
