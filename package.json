@@ -34,6 +34,9 @@
     "node": ">=18.0.0",
     "pnpm": ">=10.0.0"
   },
+  "dependencies": {
+    "@rentifier/connectors": "workspace:*"
+  },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "@typescript-eslint/eslint-plugin": "^7.0.0",
