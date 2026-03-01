@@ -29,9 +29,10 @@
     "webhook:setup": "tsx scripts/setup-webhook.ts",
     "test:yad2": "tsx scripts/test-yad2-api.ts"
   },
+  "packageManager": "pnpm@10.6.2",
   "engines": {
     "node": ">=18.0.0",
-    "pnpm": ">=8.0.0"
+    "pnpm": ">=10.0.0"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
