@@ -1,10 +1,10 @@
 import type { Connector, FetchResult } from '../interface';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import type { Yad2Marker, Yad2CursorState } from './types';
+import type { DB } from '@rentifier/db';
 import { fetchWithRetry, Yad2ApiError } from './client';
 import { normalizeCity } from '@rentifier/extraction';
 import {
-  YAD2_CITY_CODES,
   MAX_CONSECUTIVE_FAILURES,
   CIRCUIT_OPEN_DURATION_MS,
   MAX_KNOWN_ORDER_IDS,
@@ -33,9 +33,16 @@ export class Yad2Connector implements Connector {
   sourceId = 'yad2';
   sourceName = 'Yad2';
 
-  async fetchNew(cursor: string | null): Promise<FetchResult> {
+  async fetchNew(cursor: string | null, db: DB): Promise<FetchResult> {
     const state = parseCursorState(cursor);
-    const cityCodes = Object.values(YAD2_CITY_CODES);
+
+    // Fetch enabled cities from database
+    const cities = await db.getEnabledCities();
+
+    if (cities.length === 0) {
+      console.warn('No monitored cities enabled, skipping YAD2 fetch');
+      return { candidates: [], nextCursor: JSON.stringify(state) };
+    }
 
     // Circuit breaker check
     if (state.circuitOpenUntil) {
@@ -54,19 +61,18 @@ export class Yad2Connector implements Connector {
     }
 
     // Round-robin city selection
-    const cityIndex = state.lastCityIndex % cityCodes.length;
-    const cityCode = cityCodes[cityIndex];
-    const cityName = Object.keys(YAD2_CITY_CODES)[cityIndex];
+    const cityIndex = state.lastCityIndex % cities.length;
+    const city = cities[cityIndex];
 
     try {
       console.log(JSON.stringify({
         event: 'yad2_fetch_start',
-        city: cityName,
-        cityCode,
+        city: city.city_name,
+        cityCode: city.city_code,
         cityIndex,
       }));
 
-      const response = await fetchWithRetry(cityCode);
+      const response = await fetchWithRetry(city.city_code);
       const markers = response.data.markers;
 
       // Filter out already-known orderIds
@@ -75,7 +81,7 @@ export class Yad2Connector implements Connector {
 
       // Map to ListingCandidate
       const candidates: ListingCandidate[] = newMarkers.map(marker =>
-        this.markerToCandidate(marker, cityName)
+        this.markerToCandidate(marker, city.city_name)
       );
 
       // Update cursor state
@@ -83,17 +89,36 @@ export class Yad2Connector implements Connector {
       const updatedKnownIds = [...state.knownOrderIds, ...newOrderIds]
         .slice(-MAX_KNOWN_ORDER_IDS); // Keep last N (FIFO)
 
+      // Track result count for coverage monitoring
+      const resultCount = markers.length;
+      const updatedResultCounts = {
+        ...(state.resultCounts || {}),
+        [city.city_code]: resultCount,
+      };
+
+      // Warn if hitting 200-result limit
+      if (resultCount === 200) {
+        console.log(JSON.stringify({
+          event: 'yad2_result_limit_warning',
+          city: city.city_name,
+          cityCode: city.city_code,
+          resultCount: 200,
+          message: 'City may have truncated results. Consider splitting query.'
+        }));
+      }
+
       const updatedState: Yad2CursorState = {
         lastFetchedAt: new Date().toISOString(),
         knownOrderIds: updatedKnownIds,
         consecutiveFailures: 0,
         circuitOpenUntil: null,
         lastCityIndex: cityIndex + 1,
+        resultCounts: updatedResultCounts,
       };
 
       console.log(JSON.stringify({
         event: 'yad2_fetch_complete',
-        city: cityName,
+        city: city.city_name,
         totalMarkers: markers.length,
         newMarkers: newMarkers.length,
       }));
@@ -124,7 +149,7 @@ export class Yad2Connector implements Connector {
 
       console.log(JSON.stringify({
         event: 'yad2_fetch_failed',
-        city: cityName,
+        city: city.city_name,
         error: errorMessage,
         errorType,
         consecutiveFailures: state.consecutiveFailures,

@@ -19,7 +19,7 @@ export async function fetchSource(
     const cursor = state?.cursor ?? null;
 
     console.log(`Fetching from ${source.name} with cursor: ${cursor}`);
-    const { candidates, nextCursor } = await connector.fetchNew(cursor);
+    const { candidates, nextCursor } = await connector.fetchNew(cursor, db);
     console.log(`Fetched ${candidates.length} candidates from ${source.name}`);
 
     // Store full candidate as raw_json so processor can reconstruct it

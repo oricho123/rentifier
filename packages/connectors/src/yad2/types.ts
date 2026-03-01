@@ -41,4 +41,6 @@ export interface Yad2CursorState {
   consecutiveFailures: number;
   circuitOpenUntil: string | null;
   lastCityIndex: number;
+  /** Track result counts per city for coverage monitoring (cityCode → last result count) */
+  resultCounts?: Record<number, number>;
 }

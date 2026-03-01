@@ -302,7 +302,13 @@ describe('Yad2Connector', () => {
         data: { markers: mockMarkers },
       });
 
-      const result = await connector.fetchNew(null);
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([
+          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+        ]),
+      } as any;
+
+      const result = await connector.fetchNew(null, mockDb);
 
       expect(result.candidates).toHaveLength(1);
       expect(result.nextCursor).toBeTruthy();
@@ -324,7 +330,13 @@ describe('Yad2Connector', () => {
         lastCityIndex: 0,
       });
 
-      const result = await connector.fetchNew(cursor);
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([
+          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+        ]),
+      } as any;
+
+      const result = await connector.fetchNew(cursor, mockDb);
 
       expect(result.candidates).toHaveLength(0);
       expect(client.fetchWithRetry).not.toHaveBeenCalled();
@@ -348,7 +360,13 @@ describe('Yad2Connector', () => {
         data: { markers: mockMarkers },
       });
 
-      const result = await connector.fetchNew(cursor);
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([
+          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+        ]),
+      } as any;
+
+      const result = await connector.fetchNew(cursor, mockDb);
 
       expect(result.candidates).toHaveLength(1);
       expect(result.candidates[0].sourceItemId).toBe('test-789');
@@ -367,13 +385,101 @@ describe('Yad2Connector', () => {
         new Error('Network error')
       );
 
-      const result = await connector.fetchNew(cursor);
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([
+          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+        ]),
+      } as any;
+
+      const result = await connector.fetchNew(cursor, mockDb);
 
       expect(result.candidates).toHaveLength(0);
 
       const cursorState = JSON.parse(result.nextCursor!);
       expect(cursorState.consecutiveFailures).toBe(5);
       expect(cursorState.circuitOpenUntil).toBeTruthy();
+    });
+
+    it('should skip fetch when no cities are enabled', async () => {
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([]),
+      } as any;
+
+      const result = await connector.fetchNew(null, mockDb);
+
+      expect(result.candidates).toHaveLength(0);
+      expect(client.fetchWithRetry).not.toHaveBeenCalled();
+      expect(mockDb.getEnabledCities).toHaveBeenCalled();
+    });
+
+    it('should fetch from enabled cities only', async () => {
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([
+          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 2, city_name: 'ירושלים', city_code: 3000, enabled: true, priority: 90, created_at: '2026-02-25' },
+        ]),
+      } as any;
+
+      const mockMarkers = [createTestMarker()];
+      vi.mocked(client.fetchWithRetry).mockResolvedValue({
+        data: { markers: mockMarkers },
+      });
+
+      const result = await connector.fetchNew(null, mockDb);
+
+      expect(mockDb.getEnabledCities).toHaveBeenCalled();
+      expect(client.fetchWithRetry).toHaveBeenCalledWith(5000);
+      expect(result.candidates).toHaveLength(1);
+    });
+
+    it('should track resultCounts in cursor state', async () => {
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([
+          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+        ]),
+      } as any;
+
+      const mockMarkers = [createTestMarker(), createTestMarker({ orderId: 'test-456' })];
+      vi.mocked(client.fetchWithRetry).mockResolvedValue({
+        data: { markers: mockMarkers },
+      });
+
+      const result = await connector.fetchNew(null, mockDb);
+
+      const cursorState = JSON.parse(result.nextCursor!);
+      expect(cursorState.resultCounts).toBeDefined();
+      expect(cursorState.resultCounts[5000]).toBe(2);
+    });
+
+    it('should log warning when hitting 200-result limit', async () => {
+      const consoleLogSpy = vi.spyOn(console, 'log');
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([
+          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+        ]),
+      } as any;
+
+      // Create exactly 200 markers
+      const mockMarkers = Array.from({ length: 200 }, (_, i) =>
+        createTestMarker({ orderId: `test-${i}` })
+      );
+
+      vi.mocked(client.fetchWithRetry).mockResolvedValue({
+        data: { markers: mockMarkers },
+      });
+
+      await connector.fetchNew(null, mockDb);
+
+      const warningLog = consoleLogSpy.mock.calls.find(call =>
+        call[0].includes('yad2_result_limit_warning')
+      );
+      expect(warningLog).toBeDefined();
+
+      const logData = JSON.parse(warningLog![0]);
+      expect(logData.resultCount).toBe(200);
+      expect(logData.city).toBe('תל אביב');
+
+      consoleLogSpy.mockRestore();
     });
   });
 });
