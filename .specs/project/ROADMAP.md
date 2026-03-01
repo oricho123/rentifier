@@ -1,7 +1,7 @@
 # Roadmap
 
-**Current Milestone:** M2 - First Live Source
-**Status:** In Progress
+**Current Milestone:** M3 - Multi-User & Filters
+**Status:** Complete
 
 ---
 
@@ -21,9 +21,10 @@
 
 ---
 
-## M2 - First Live Source
+## M2 - First Live Source — DONE
 
 **Goal:** YAD2 connector fully operational, delivering real listings to Telegram.
+**Completed:** 2026-03-01
 
 ### Features
 
@@ -82,10 +83,12 @@
 - ✅ Street addresses with clickable Google Maps links
 - ✅ Listing images in photo messages
 
-**Filter Matching Engine** - PLANNED
+**Filter Matching Engine** - ✅ COMPLETE
 
-- Match listings against multiple users' filters efficiently
-- Support: price range, room count, city, neighborhood, keyword inclusion/exclusion, tags
+- ✅ Match listings against multiple users' filters (matchesFilter in notification-service.ts)
+- ✅ Price range, room count, city, neighborhood, keyword (OR), must-have tags (AND), exclude tags (NOT)
+- ✅ Deduplication via notifications_sent table
+- ✅ 37 unit tests covering all matching criteria
 
 ---
 
