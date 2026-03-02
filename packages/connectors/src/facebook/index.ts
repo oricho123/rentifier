@@ -2,7 +2,7 @@ import type { Connector, FetchResult } from '../interface';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import type { DB } from '@rentifier/db';
 import type { FacebookCursorState } from './types';
-import { fetchWithRetry, FacebookClientError } from './client';
+import { fetchWithRetry, setSortingChronological, FacebookClientError } from './client';
 import { parseGraphQLResponse } from './parser';
 import { getAccounts, getGraphQLTokens, selectAccount } from './accounts';
 import { extractAll } from '@rentifier/extraction';
@@ -107,6 +107,13 @@ export class FacebookConnector implements Connector {
           groupId: group.groupId,
           accountId: selected.account.id,
         }),
+      );
+
+      // Switch sorting to chronological before fetching
+      await setSortingChronological(
+        group.groupId,
+        selected.account.cookies,
+        tokens,
       );
 
       const responseText = await fetchWithRetry(

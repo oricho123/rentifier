@@ -5,6 +5,7 @@ import type { ListingCandidate } from '@rentifier/core';
 // Mock the client to avoid real HTTP requests
 vi.mock('../client', () => ({
   fetchWithRetry: vi.fn(),
+  setSortingChronological: vi.fn().mockResolvedValue(undefined),
   FacebookClientError: class FacebookClientError extends Error {
     constructor(
       message: string,
