@@ -34,6 +34,7 @@ export const CITY_VARIANTS: Record<string, string> = {
   // Tel Aviv variants
   'תל אביב': 'תל אביב',
   'תל-אביב': 'תל אביב',
+  'תל אביב יפו': 'תל אביב',
   'ת"א': 'תל אביב',
   'tel aviv': 'תל אביב',
   'tel-aviv': 'תל אביב',
@@ -63,14 +64,14 @@ export const CITY_VARIANTS: Record<string, string> = {
   // Giv'atayim variants
   'גבעתיים': 'גבעתיים',
   'givatayim': 'גבעתיים',
-  'giv\'atayim': 'גבעתיים',
+  "giv'atayim": 'גבעתיים',
 
   // Be'er Sheva variants
   'באר שבע': 'באר שבע',
   'באר-שבע': 'באר שבע',
   'ב"ש': 'באר שבע',
   'beer sheva': 'באר שבע',
-  'be\'er sheva': 'באר שבע',
+  "be'er sheva": 'באר שבע',
   'beersheba': 'באר שבע',
 
   // Netanya variants
@@ -127,11 +128,13 @@ export function normalizeCity(input: string | null | undefined): string | null {
   }
 
   // Not recognized - log warning and return null
-  console.log(JSON.stringify({
-    event: 'unknown_city',
-    input: trimmedInput,
-    message: 'City name not in normalization map - consider adding to CITY_VARIANTS',
-  }));
+  console.log(
+    JSON.stringify({
+      event: 'unknown_city',
+      input: trimmedInput,
+      message: 'City name not in normalization map - consider adding to CITY_VARIANTS',
+    })
+  );
 
   return null;
 }
@@ -180,7 +183,7 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'herzliya pituach': 'הרצליה פיתוח',
   },
   'רמת גן': {
-    'בורסה': 'בורסה',
-    'bursa': 'בורסה',
+    בורסה: 'בורסה',
+    bursa: 'בורסה',
   },
 };
