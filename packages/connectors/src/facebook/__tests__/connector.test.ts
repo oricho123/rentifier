@@ -24,6 +24,11 @@ vi.mock('../accounts', () => ({
     account: { id: '1', cookies: 'test_cookie' },
     nextIndex: 1,
   })),
+  getGraphQLTokens: vi.fn(() => ({
+    docId: 'test_doc_id',
+    fbDtsg: 'test_dtsg',
+    lsd: 'test_lsd',
+  })),
 }));
 
 // Mock constants with test groups
@@ -111,6 +116,16 @@ describe('FacebookConnector', () => {
       MONITORED_GROUPS.push(...original);
     });
 
+    it('returns empty when GraphQL tokens are missing', async () => {
+      const { getGraphQLTokens } = await import('../accounts');
+      vi.mocked(getGraphQLTokens).mockReturnValueOnce(null);
+
+      const mockDb = {} as any;
+      const result = await connector.fetchNew(null, mockDb);
+
+      expect(result.candidates).toHaveLength(0);
+    });
+
     it('respects circuit breaker', async () => {
       const cursor = JSON.stringify({
         lastFetchedAt: null,
@@ -130,29 +145,58 @@ describe('FacebookConnector', () => {
       expect(result.candidates).toHaveLength(0);
     });
 
-    it('deduplicates known post IDs', async () => {
+    it('parses GraphQL response and deduplicates', async () => {
       const { fetchWithRetry } = await import('../client');
       const mockFetch = vi.mocked(fetchWithRetry);
 
-      // Return HTML with posts
-      mockFetch.mockResolvedValueOnce(`
-        <html><body>
-          <article>
-            <p>Some rental post content that is long enough</p>
-            <a href="/groups/111/permalink/100001/">1 hr</a>
-            <abbr>1 hr</abbr>
-          </article>
-          <article>
-            <p>Another rental post content that is long enough</p>
-            <a href="/groups/111/permalink/100002/">2 hrs</a>
-            <abbr>2 hrs</abbr>
-          </article>
-        </body></html>
-      `);
+      // Return NDJSON with two Story nodes
+      const line0 = JSON.stringify({
+        data: {
+          node: {
+            __typename: 'GroupsSectionHeaderUnit',
+            group_feed: { edges: [] },
+          },
+        },
+      });
+      const line1 = JSON.stringify({
+        data: {
+          node: {
+            __typename: 'Story',
+            post_id: '100001',
+            permalink_url: 'https://www.facebook.com/groups/111/posts/100001/',
+            actors: [{ name: 'Alice' }],
+            comet_sections: {
+              content: {
+                story: { message: { text: 'דירת 3 חדרים להשכרה בתל אביב 5000 שח' } },
+              },
+              timestamp: { story: { creation_time: 1772471819 } },
+            },
+          },
+        },
+      });
+      const line2 = JSON.stringify({
+        data: {
+          node: {
+            __typename: 'Story',
+            post_id: '100002',
+            permalink_url: 'https://www.facebook.com/groups/111/posts/100002/',
+            actors: [{ name: 'Bob' }],
+            comet_sections: {
+              content: {
+                story: { message: { text: 'סטודיו בירושלים 3500 שח לחודש' } },
+              },
+              timestamp: { story: { creation_time: 1772471700 } },
+            },
+          },
+        },
+      });
 
+      mockFetch.mockResolvedValueOnce([line0, line1, line2].join('\n'));
+
+      // 100001 is already known
       const cursor = JSON.stringify({
         lastFetchedAt: null,
-        knownPostIds: ['100001'], // Already known
+        knownPostIds: ['100001'],
         consecutiveFailures: 0,
         circuitOpenUntil: null,
         lastGroupIndex: 0,

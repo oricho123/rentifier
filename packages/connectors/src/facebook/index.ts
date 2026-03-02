@@ -3,8 +3,8 @@ import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import type { DB } from '@rentifier/db';
 import type { FacebookCursorState } from './types';
 import { fetchWithRetry, FacebookClientError } from './client';
-import { parseGroupPage } from './parser';
-import { getAccounts, selectAccount } from './accounts';
+import { parseGraphQLResponse } from './parser';
+import { getAccounts, getGraphQLTokens, selectAccount } from './accounts';
 import { extractAll } from '@rentifier/extraction';
 import {
   MONITORED_GROUPS,
@@ -44,6 +44,19 @@ export class FacebookConnector implements Connector {
     const groups = MONITORED_GROUPS;
     if (groups.length === 0) {
       console.warn('No monitored Facebook groups configured, skipping fetch');
+      return { candidates: [], nextCursor: JSON.stringify(state) };
+    }
+
+    // GraphQL tokens check
+    const tokens = getGraphQLTokens();
+    if (!tokens) {
+      console.log(
+        JSON.stringify({
+          event: 'fb_missing_tokens',
+          message:
+            'Missing FB_DOC_ID, FB_DTSG, or FB_LSD env vars — cannot make GraphQL requests',
+        }),
+      );
       return { candidates: [], nextCursor: JSON.stringify(state) };
     }
 
@@ -96,8 +109,12 @@ export class FacebookConnector implements Connector {
         }),
       );
 
-      const html = await fetchWithRetry(group.groupId, selected.account.cookies);
-      const { posts } = parseGroupPage(html, group.groupId);
+      const responseText = await fetchWithRetry(
+        group.groupId,
+        selected.account.cookies,
+        tokens,
+      );
+      const posts = parseGraphQLResponse(responseText, group.groupId);
 
       // Filter out known post IDs
       const knownSet = new Set(state.knownPostIds);

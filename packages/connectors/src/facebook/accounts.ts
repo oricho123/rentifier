@@ -1,4 +1,8 @@
-import type { FacebookAccount, FacebookCursorState } from './types';
+import type {
+  FacebookAccount,
+  FacebookCursorState,
+  FacebookGraphQLTokens,
+} from './types';
 
 /**
  * Read Facebook accounts from environment variables.
@@ -16,6 +20,20 @@ export function getAccounts(): FacebookAccount[] {
   }
 
   return accounts;
+}
+
+/**
+ * Read GraphQL tokens from environment variables.
+ * These are shared across all accounts (extracted from DevTools once).
+ */
+export function getGraphQLTokens(): FacebookGraphQLTokens | null {
+  const docId = process.env.FB_DOC_ID;
+  const fbDtsg = process.env.FB_DTSG;
+  const lsd = process.env.FB_LSD;
+
+  if (!docId || !fbDtsg || !lsd) return null;
+
+  return { docId, fbDtsg, lsd };
 }
 
 /**

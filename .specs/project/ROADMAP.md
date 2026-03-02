@@ -1,7 +1,7 @@
 # Roadmap
 
-**Current Milestone:** M3 - Multi-User & Filters
-**Status:** Complete
+**Current Milestone:** M4 - Additional Sources
+**Status:** In Progress
 
 ---
 
@@ -37,24 +37,25 @@
 - ✅ Monitor coverage with result count tracking and warnings
 - ✅ End-to-end testing: collector → processor → notify (1868 listings, 100 notifications)
 
-**Extraction Tuning** - PLANNED
+**Extraction Tuning** - DEFERRED
 
 - Tune regex/rules for YAD2's data format (if needed after real data testing)
 - Handle Hebrew text patterns for price, rooms, neighborhoods
 
-**Deploy to Cloudflare** - PLANNED
+**Deploy to Cloudflare** - ✅ COMPLETE
 
-- Deploy all three workers with D1 bindings
-- Configure cron schedules (collector: 30min, processor: 15min, notify: 5min)
-- Set up Cloudflare secrets (Telegram bot token, webhook secret)
-- Verify end-to-end flow in production
+- ✅ All three workers deployed with D1 bindings
+- ✅ Cron schedules configured (collector: 30min, processor: 15min, notify: 5min)
+- ✅ Cloudflare secrets set (Telegram bot token, webhook secret)
+- ✅ GitHub Actions yad2 scraper (bypasses Radware IP block)
+- ✅ CI workflow for PRs (typecheck + tests)
 
 ---
 
-## M3 - Multi-User & Filters
+## M3 - Multi-User & Filters — DONE
 
 **Goal:** Multiple users can register via Telegram, set custom filters, and receive personalized notifications.
-**Status:** IN PROGRESS
+**Completed:** 2026-03-01
 
 ### Features
 
@@ -98,10 +99,20 @@
 
 ### Features
 
-**Facebook Connector** - PLANNED
+**Facebook Connector** - ✅ IMPLEMENTED (PR #26 — pending merge)
 
-- Research compliant access method (Graph API, partnership, browser extension, etc.)
-- Implement connector interface
+- ✅ Research: Graph API shut down (April 2024), mbasic blocked, GraphQL API works
+- ✅ GraphQL client (`POST /api/graphql/`) with jazoest CSRF checksum
+- ✅ NDJSON parser for Relay incremental delivery response format
+- ✅ Multi-account cookie rotation with disabled account tracking
+- ✅ FacebookConnector implementing Connector interface
+- ✅ Collection script with admin Telegram notification on cookie expiry
+- ✅ GitHub Actions workflow (30-min cron)
+- ✅ DB migration seeding facebook source row
+- ✅ 15 unit tests (parser + connector), 166 total
+- ✅ Manual testing: 3 posts fetched from live group via GraphQL
+- ⬜ Auto-extract fb_dtsg/lsd tokens (see facebook-token-refresh spec)
+- ⬜ Merge PR #26 to main
 
 **Additional Source Connectors** - PLANNED
 

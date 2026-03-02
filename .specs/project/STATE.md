@@ -1,11 +1,56 @@
 # State
 
-**Last Updated:** 2026-03-01
-**Current Work:** M2 complete and PR ready for merge. System fully production-ready with zero mock data pollution, configurable city monitoring, and verified end-to-end flow.
+**Last Updated:** 2026-03-02
+**Current Work:** M4 in progress. Half-room support merged (PR #24). YAD2 listing recency filtering merged (PR #25). Facebook Groups connector rewritten to GraphQL API (PR #26 — pending merge). Next: auto-extract fb_dtsg tokens. System live in production.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-019: Facebook connector rewrite to GraphQL API (2026-03-02)
+
+**Decision:** Replace mbasic.facebook.com HTML scraping with Facebook's internal GraphQL API (`POST /api/graphql/`). Key discovery: `jazoest` CSRF checksum (computed from `fb_dtsg`) is required for all requests.
+**Reason:** mbasic.facebook.com now blocks all non-browser HTTP clients with an "unsupported browser" interstitial page. GraphQL API returns structured NDJSON (Relay incremental delivery) — no HTML parsing or Cheerio needed.
+**Trade-off:** Requires `fb_dtsg`/`lsd` CSRF tokens that expire in 24–48h (will be auto-extracted from homepage in next iteration). `doc_id` can change on Facebook deploys. Response format is NDJSON, not single JSON.
+**Impact:** All Facebook connector files rewritten. Cheerio removed. 15 tests (9 parser + 6 connector). 166 total tests. Confirmed working with live data (3 posts fetched).
+
+### AD-018: Facebook connector via mbasic.facebook.com — SUPERSEDED (2026-03-02)
+
+**Decision:** ~~Scrape Facebook group posts from `mbasic.facebook.com`.~~ Superseded by AD-019 (GraphQL API).
+**Reason:** mbasic approach blocked by Facebook's "unsupported browser" interstitial for all non-browser HTTP clients.
+
+### AD-017: YAD2 listing recency via orderId + image date (2026-03-02)
+
+**Decision:** Filter old YAD2 listings using orderId threshold (higher = newer) and extract approximate post date from image URL filenames.
+**Reason:** YAD2 map API returns no date fields. Users were receiving notifications for stale listings.
+**Trade-off:** orderId is a proxy, not exact date. Image URL pattern may change.
+**Impact:** PR #25 adds `minOrderId` to cursor state, `parseImageDate()` utility, 9 new tests. 151 total tests.
+
+### AD-016: Half-room support (3.5 rooms) (2026-03-02)
+
+**Decision:** Support half-room counts (e.g., 3.5) in filters and listings. SQLite dynamic typing handles floats without migration.
+**Reason:** Israeli real estate commonly uses half-rooms. System was rejecting valid values like 3.5.
+**Trade-off:** Validation constrains to 0.5 increments (not arbitrary decimals like 3.7).
+**Impact:** PR #24 changes `parseInt` → `parseFloat` with `% 0.5` validation, removes `.int()` from Zod schemas. 2 new filter matching tests.
+
+### AD-015: CI workflow for PRs (2026-03-01)
+
+**Decision:** Add `.github/workflows/ci.yml` to run typecheck and tests on every PR to main and push to main.
+**Reason:** No CI existed for pull requests. Tests and typecheck were only run locally.
+**Impact:** PR #22 adds the workflow. 136 tests run in ~21s on GitHub Actions.
+
+### AD-014: Reusable D1 REST API adapter (2026-03-01)
+
+**Decision:** Extract inline D1 REST API code from `scripts/collect-yad2.ts` into a reusable `D1RestClient` class in `@rentifier/db`.
+**Reason:** The script had ~50 lines of inline HTTP calls with `as any` casts. As more scripts may need D1 REST access, a proper typed adapter prevents duplication.
+**Trade-off:** Single `as unknown as D1Database` cast at the factory boundary; consumers are fully typed.
+**Impact:** `packages/db/src/rest-client.ts` provides `D1RestClient`, `createRestDB`, `createRestDBFromEnv`. Script shrunk from ~135 to ~80 lines with zero raw SQL and zero `as any`.
+
+### AD-013: Filter matching engine tests (2026-03-01)
+
+**Decision:** Add 33 dedicated unit tests for `matchesFilter()` and export it for testability.
+**Reason:** Core business logic for personalized notifications had zero dedicated tests despite supporting 7 filter criteria.
+**Impact:** PR #21 adds comprehensive coverage: price range (9), bedrooms (4), cities (5), neighborhoods (4), keywords (6), must-have tags (3), exclude tags (3), combined (2). Total test count: 136.
 
 ### AD-012: M2 YAD2 Production Readiness (2026-02-23)
 
@@ -161,17 +206,47 @@ Complete YAD2 connector production readiness with full mock data removal. All 15
 - **Database:** monitored_cities table with 3 seeded cities (תל אביב, ירושלים, חיפה)
 - **Connector:** Dynamic city fetching from DB, 200-result monitoring and warnings, breaking change to accept DB parameter
 - **Mock removal:** Complete removal of all mock data from migrations and seed scripts
-  - Deleted migration 0003 (mock source creation)
-  - Removed seed-local.sql entirely (all seeding via migrations)
-  - Removed db:seed:local npm script
-  - MockConnector class retained in code for unit tests only
-- **Verification:** API endpoint confirmed working, all 3 cities return 200 results
+- **GitHub Actions:** Yad2 scraper runs every 30min via cron (bypasses Radware IP block)
+- **D1 REST Client:** Reusable typed adapter in `@rentifier/db` for scripts running outside Workers
+- **CI pipeline:** Fixed pnpm version, workspace deps, DB adapter for GitHub Actions
 - **End-to-end:** Full pipeline tested - 1,868 YAD2 listings fetched → normalized → 100 notifications sent
-- **TypeScript:** Zero compilation errors
-- **Tests:** All 26 unit tests passing with updated DB mocking
-- **Status:** PR #17 ready for merge - zero mock data pollution, production-ready
-- **Files:** 21 files changed (+2,084 -76 lines), 5 commits
-- **Documentation:** Complete spec, design, tasks, test results, city configuration guide, and dynamic city discovery analysis
+- **Status:** Deployed to production, all PRs merged (#17-#20)
+
+### M3 - Filter Matching Engine (2026-03-01)
+
+Filter matching was already implemented in `notification-service.ts` during M3 bot work. Added dedicated test coverage:
+- **matchesFilter():** 7 criteria — price, bedrooms, city, neighborhood, keywords (OR), must-have tags (AND), exclude tags (NOT)
+- **Tests:** 33 unit tests covering all matching criteria (PR #21)
+- **CI:** Added `.github/workflows/ci.yml` — typecheck + tests on every PR (PR #22)
+- **Total tests:** 136 across 8 test files
+
+### Half-Room Support (2026-03-02)
+
+- Support for 3.5-style room counts in filters and listings (PR #24)
+- SQLite dynamic typing handles floats without migration
+- Zod validation constrains to 0.5 increments
+
+### YAD2 Listing Recency (2026-03-02)
+
+- orderId-based filtering skips old listings (PR #25)
+- Image URL date extraction for `rawPostedAt`
+- 9 new tests, 151 total
+
+### M4 - Facebook Groups Connector (2026-03-02)
+
+- **Research:** Comprehensive analysis of all Facebook data access methods (Graph API shutdown, CrowdTangle shutdown, mbasic approach)
+- **Consensus plan:** Planner → Architect → Critic ralplan workflow, approved after 1 iteration
+- **Implementation:** 12 new files, 1617 lines added (PR #26)
+  - HTTP client for mbasic.facebook.com with retry + auth detection
+  - Cheerio HTML parser with canary check for selector breakage
+  - Multi-account cookie rotation with disabled account tracking
+  - FacebookConnector implementing Connector interface
+  - Collection script with admin Telegram notification on cookie expiry
+  - GitHub Actions workflow (30-min cron)
+  - DB migration seeding facebook source row
+  - 18 unit tests (parser + connector)
+- **Status:** PR #26 open, pending merge + manual testing with real cookies
+- **Total tests:** 169 across 11 test files
 
 ---
 

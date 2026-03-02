@@ -1,202 +1,185 @@
-import * as cheerio from 'cheerio';
-import type { FacebookPost, FacebookGroupPageResult } from './types';
+import type { FacebookPost } from './types';
 
 /**
- * Relative time string → approximate ISO date.
- * Handles English time strings (accounts must be set to English locale).
- */
-export function parseRelativeTime(text: string): string | null {
-  if (!text) return null;
-
-  const now = Date.now();
-  const t = text.trim().toLowerCase();
-
-  // "Just now" / "1 min"
-  if (t === 'just now' || t === 'now') {
-    return new Date(now).toISOString();
-  }
-
-  // "X mins", "X min"
-  const minMatch = t.match(/^(\d+)\s*min/);
-  if (minMatch) {
-    return new Date(now - parseInt(minMatch[1], 10) * 60_000).toISOString();
-  }
-
-  // "X hrs", "X hr"
-  const hrMatch = t.match(/^(\d+)\s*hr/);
-  if (hrMatch) {
-    return new Date(now - parseInt(hrMatch[1], 10) * 3_600_000).toISOString();
-  }
-
-  // "Yesterday"
-  if (t.includes('yesterday')) {
-    return new Date(now - 86_400_000).toISOString();
-  }
-
-  // "X days ago" / "X d"
-  const dayMatch = t.match(/^(\d+)\s*d/);
-  if (dayMatch) {
-    return new Date(
-      now - parseInt(dayMatch[1], 10) * 86_400_000,
-    ).toISOString();
-  }
-
-  return null;
-}
-
-/**
- * Extract post ID from a Facebook permalink URL.
- * Patterns:
- *   /groups/{gid}/permalink/{pid}/
- *   /story.php?story_fbid={pid}&id=...
- *   /permalink/{pid}/
- */
-export function extractPostId(url: string): string | null {
-  // /permalink/{pid}/
-  const permalinkMatch = url.match(/\/permalink\/(\d+)/);
-  if (permalinkMatch) return permalinkMatch[1];
-
-  // /story.php?story_fbid={pid}
-  const storyMatch = url.match(/story_fbid=(\d+)/);
-  if (storyMatch) return storyMatch[1];
-
-  return null;
-}
-
-/**
- * Parse mbasic.facebook.com group page HTML into structured posts.
+ * Parse Facebook GraphQL NDJSON response into structured posts.
  *
- * mbasic.facebook.com structure (simplified):
- *   <div id="m_group_stories_container">
- *     <article> or <div data-ft>
- *       <header> → author name + link
- *       <div> → post content text
- *       <footer> → permalink + timestamp
- *       <img> → optional image
- *     </article>
- *   </div>
- *   <a href="..."> → "See more posts" pagination link
+ * Facebook returns NDJSON (newline-delimited JSON) using Relay incremental delivery:
+ *   Line 0: Initial skeleton (contains section header, not actual posts)
+ *   Lines 1..N-1: Streamed Story nodes at path ['node', 'group_feed', 'edges', i]
+ *   Last line: page_info for pagination
  *
- * NOTE: Exact selectors may need adjustment based on real HTML.
- * The parser uses multiple fallback strategies.
+ * Each Story node contains:
+ *   - post_id
+ *   - comet_sections.content.story.message.text  (post text)
+ *   - comet_sections.timestamp.story.creation_time  (unix timestamp)
+ *   - permalink_url
+ *   - actors[0].name  (author)
+ *   - attachments[0].styles.attachment.all_subattachments.nodes[0].url  (image)
  */
-export function parseGroupPage(
-  html: string,
+export function parseGraphQLResponse(
+  responseText: string,
   groupId: string,
-): FacebookGroupPageResult {
-  const $ = cheerio.load(html);
+): FacebookPost[] {
+  const lines = responseText.split('\n').filter((l) => l.trim());
   const posts: FacebookPost[] = [];
 
-  // Strategy 1: look for article elements (common mbasic pattern)
-  // Strategy 2: look for div[data-ft] elements
-  // Strategy 3: look for divs with permalink links inside
-  const postElements = $('article').length > 0
-    ? $('article')
-    : $('div[data-ft]').length > 0
-      ? $('div[data-ft]')
-      : $('div[id^="u_"]');
+  for (const line of lines) {
+    try {
+      const json = JSON.parse(line);
 
-  postElements.each((_, el) => {
-    const $el = $(el);
+      // Skip non-story entries (page_info, errors, etc.)
+      const node = json?.data?.node;
+      if (!node || node.__typename !== 'Story') continue;
 
-    // Extract permalink — the most reliable anchor
-    let permalink = '';
-    let postId = '';
-
-    // Look for permalink-style links
-    $el.find('a[href*="permalink"], a[href*="story.php"]').each((_, link) => {
-      const href = $(link).attr('href') || '';
-      const id = extractPostId(href);
-      if (id) {
-        postId = id;
-        permalink = href.startsWith('http')
-          ? href
-          : `https://www.facebook.com${href}`;
-      }
-    });
-
-    // Skip if no post ID found — can't dedup without it
-    if (!postId) return;
-
-    // Extract author name — usually first link in the post
-    const authorLink = $el.find('a[href*="profile"], a[href*="user"]').first();
-    const authorName = authorLink.text().trim() ||
-      $el.find('strong').first().text().trim() ||
-      'Unknown';
-
-    // Extract post content — collect text from paragraphs and divs
-    // Skip author name, timestamps, and UI elements
-    let content = '';
-    $el.find('p, div[data-ft] > div > div').each((_, textEl) => {
-      const text = $(textEl).text().trim();
-      if (text && text !== authorName && text.length > 5) {
-        content += (content ? '\n' : '') + text;
-      }
-    });
-
-    // Fallback: get all text if no structured content found
-    if (!content) {
-      content = $el.text().trim();
-      // Try to remove author name from the beginning
-      if (content.startsWith(authorName)) {
-        content = content.slice(authorName.length).trim();
-      }
+      const post = extractPostFromStoryNode(node, groupId);
+      if (post) posts.push(post);
+    } catch {
+      // Skip unparseable lines
     }
+  }
 
-    // Skip posts with no meaningful content
-    if (!content || content.length < 10) return;
-
-    // Extract timestamp — look for abbr or small time text
-    const timeText =
-      $el.find('abbr').text().trim() ||
-      $el.find('span[data-utime]').text().trim() ||
-      '';
-    const postedAt = parseRelativeTime(timeText);
-
-    // Extract first image
-    const imgSrc =
-      $el.find('img[src*="scontent"]').first().attr('src') ||
-      $el.find('img[src*="fbcdn"]').first().attr('src') ||
-      null;
-
-    posts.push({
-      postId,
-      authorName,
-      content,
-      permalink,
-      postedAt,
-      imageUrl: imgSrc,
-      groupId,
-    });
-  });
-
-  // Canary check: if HTML has content but we found no posts, warn
-  if (posts.length === 0 && html.length > 1000) {
+  // Canary: if response was large but yielded no posts, warn
+  if (posts.length === 0 && responseText.length > 1000) {
     console.log(
       JSON.stringify({
         event: 'fb_parser_canary_failed',
         groupId,
-        htmlLength: html.length,
+        responseLength: responseText.length,
+        lineCount: lines.length,
         message:
-          'Non-empty HTML yielded 0 posts — selectors may need updating',
+          'Non-empty GraphQL response yielded 0 posts — response format may have changed',
       }),
     );
   }
 
-  // Extract pagination ("See more posts" / "See More")
-  let nextPageUrl: string | null = null;
-  $('a').each((_, link) => {
-    const text = $(link).text().trim().toLowerCase();
-    const href = $(link).attr('href') || '';
-    if (
-      (text.includes('see more') || text.includes('more stories')) &&
-      href.includes('/groups/')
-    ) {
-      nextPageUrl = href.startsWith('http')
-        ? href
-        : `${href}`;
-    }
-  });
+  return posts;
+}
 
-  return { posts, nextPageUrl };
+/**
+ * Extract a FacebookPost from a GraphQL Story node.
+ * Returns null if the node lacks required data (post_id or content).
+ */
+export function extractPostFromStoryNode(
+  node: Record<string, unknown>,
+  groupId: string,
+): FacebookPost | null {
+  const postId = getNestedString(node, 'post_id');
+  if (!postId) return null;
+
+  // Extract message text — try multiple paths
+  const content =
+    getNestedString(node, 'comet_sections', 'content', 'story', 'message', 'text') || '';
+
+  // Skip posts with no meaningful content
+  if (content.length < 10) return null;
+
+  // Extract author name
+  const actors = getNestedArray(node, 'actors');
+  const authorName =
+    actors.length > 0 ? getNestedString(actors[0] as Record<string, unknown>, 'name') || 'Unknown' : 'Unknown';
+
+  // Extract permalink
+  const permalink =
+    getNestedString(node, 'permalink_url') ||
+    getNestedString(node, 'comet_sections', 'timestamp', 'story', 'url') ||
+    `https://www.facebook.com/groups/${groupId}/posts/${postId}/`;
+
+  // Extract creation time (unix timestamp → ISO string)
+  let postedAt: string | null = null;
+  const creationTime =
+    getNestedNumber(node, 'comet_sections', 'timestamp', 'story', 'creation_time') ??
+    getNestedNumber(node, 'comet_sections', 'context_layout', 'story', 'comet_sections', 'metadata', 0, 'story', 'creation_time');
+  if (creationTime) {
+    postedAt = new Date(creationTime * 1000).toISOString();
+  }
+
+  // Extract first image URL from attachments
+  const imageUrl = extractFirstImageUrl(node);
+
+  return {
+    postId,
+    authorName,
+    content,
+    permalink,
+    postedAt,
+    imageUrl,
+    groupId,
+  };
+}
+
+/**
+ * Extract first image URL from a Story node's attachments.
+ * Tries subattachments first, then falls back to the main attachment media.
+ */
+function extractFirstImageUrl(node: Record<string, unknown>): string | null {
+  // Path: attachments[0].styles.attachment.all_subattachments.nodes[0]
+  const attachments = getNestedArray(node, 'attachments');
+  if (attachments.length === 0) return null;
+
+  const attachment = attachments[0] as Record<string, unknown>;
+  const subNodes = getNestedArray(
+    attachment,
+    'styles',
+    'attachment',
+    'all_subattachments',
+    'nodes',
+  );
+
+  if (subNodes.length > 0) {
+    const firstSub = subNodes[0] as Record<string, unknown>;
+    // Try media.image.uri first (actual image URL), then url (page URL)
+    const mediaUri = getNestedString(firstSub, 'media', 'image', 'uri');
+    if (mediaUri) return mediaUri;
+  }
+
+  // Fallback: try media.image.uri on the main attachment
+  const mainMediaUri = getNestedString(
+    attachment,
+    'styles',
+    'attachment',
+    'media',
+    'image',
+    'uri',
+  );
+  if (mainMediaUri) return mainMediaUri;
+
+  return null;
+}
+
+// --- Utility helpers for safe nested access ---
+
+function getNestedValue(
+  obj: unknown,
+  ...path: (string | number)[]
+): unknown {
+  let current: unknown = obj;
+  for (const key of path) {
+    if (current == null || typeof current !== 'object') return undefined;
+    current = (current as Record<string | number, unknown>)[key];
+  }
+  return current;
+}
+
+function getNestedString(
+  obj: Record<string, unknown>,
+  ...path: (string | number)[]
+): string | null {
+  const val = getNestedValue(obj, ...path);
+  return typeof val === 'string' ? val : null;
+}
+
+function getNestedNumber(
+  obj: Record<string, unknown>,
+  ...path: (string | number)[]
+): number | null {
+  const val = getNestedValue(obj, ...path);
+  return typeof val === 'number' ? val : null;
+}
+
+function getNestedArray(
+  obj: Record<string, unknown>,
+  ...path: (string | number)[]
+): unknown[] {
+  const val = getNestedValue(obj, ...path);
+  return Array.isArray(val) ? val : [];
 }

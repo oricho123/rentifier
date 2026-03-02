@@ -1,7 +1,7 @@
 /**
  * GitHub Actions scraper for Facebook Groups.
  *
- * Fetches posts from mbasic.facebook.com using pre-authenticated cookies.
+ * Fetches posts via Facebook's internal GraphQL API using cookie-based auth.
  * Uses D1RestClient to access the database via Cloudflare's D1 REST API.
  *
  * Required env vars (set as GitHub Actions secrets):
@@ -10,6 +10,9 @@
  *   CF_D1_DATABASE_ID    — D1 database ID
  *   FB_ACCOUNT_COUNT     — Number of Facebook accounts (default: 1)
  *   FB_COOKIES_1..N      — Cookie strings per account
+ *   FB_DOC_ID            — GraphQL doc_id for group feed query
+ *   FB_DTSG              — Facebook CSRF token (from DevTools)
+ *   FB_LSD               — Facebook LSD token (from DevTools)
  *   TELEGRAM_BOT_TOKEN   — Telegram bot token (for admin alerts)
  *   TELEGRAM_ADMIN_CHAT_ID — Admin's Telegram chat ID (for cookie expiry alerts)
  */

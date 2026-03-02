@@ -1,4 +1,4 @@
-/** Parsed post from mbasic.facebook.com group page */
+/** Parsed post from Facebook GraphQL API */
 export interface FacebookPost {
   postId: string;
   authorName: string;
@@ -9,16 +9,17 @@ export interface FacebookPost {
   groupId: string;
 }
 
-/** Result of parsing a group page */
-export interface FacebookGroupPageResult {
-  posts: FacebookPost[];
-  nextPageUrl: string | null;
-}
-
 /** Facebook account for cookie-based auth */
 export interface FacebookAccount {
   id: string;
   cookies: string;
+}
+
+/** GraphQL tokens needed for API requests */
+export interface FacebookGraphQLTokens {
+  docId: string;
+  fbDtsg: string;
+  lsd: string;
 }
 
 /** Cursor state persisted in source_state.cursor */

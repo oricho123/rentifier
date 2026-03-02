@@ -1,6 +1,9 @@
+import type { FacebookGraphQLTokens } from './types';
 import {
-  MBASIC_BASE_URL,
-  MBASIC_HEADERS,
+  GRAPHQL_API_URL,
+  GRAPHQL_HEADERS,
+  GRAPHQL_POST_COUNT,
+  GRAPHQL_QUERY_NAME,
   MAX_RETRIES,
   INITIAL_RETRY_DELAY_MS,
   REQUEST_TIMEOUT_MS,
@@ -12,7 +15,8 @@ export type FacebookErrorType =
   | 'rate_limited'
   | 'banned'
   | 'parse'
-  | 'timeout';
+  | 'timeout'
+  | 'token_expired';
 
 export class FacebookClientError extends Error {
   constructor(
@@ -26,38 +30,87 @@ export class FacebookClientError extends Error {
 }
 
 /**
- * Fetch a Facebook group page from mbasic.facebook.com.
- * Returns raw HTML string.
+ * Compute jazoest checksum from fb_dtsg.
+ * Required by Facebook's CSRF validation.
+ */
+export function computeJazoest(fbDtsg: string): string {
+  let sum = 0;
+  for (let i = 0; i < fbDtsg.length; i++) {
+    sum += fbDtsg.charCodeAt(i);
+  }
+  return '2' + sum;
+}
+
+/**
+ * Extract c_user ID from cookie string.
+ */
+function extractCUser(cookies: string): string {
+  const match = cookies.match(/c_user=(\d+)/);
+  return match ? match[1] : '';
+}
+
+/**
+ * Fetch group feed posts via Facebook's internal GraphQL API.
+ * Returns raw response text (NDJSON format).
  *
  * SECURITY: cookies are never logged.
  */
-export async function fetchGroupPage(
+export async function fetchGroupGraphQL(
   groupId: string,
   cookies: string,
+  tokens: FacebookGraphQLTokens,
 ): Promise<string> {
-  const url = `${MBASIC_BASE_URL}/groups/${groupId}`;
+  const cUser = extractCUser(cookies);
+  const jazoest = computeJazoest(tokens.fbDtsg);
+
+  const variables = JSON.stringify({
+    count: GRAPHQL_POST_COUNT,
+    feedLocation: 'GROUP',
+    feedType: 'DISCUSSION',
+    feedbackSource: 0,
+    id: groupId,
+    renderLocation: 'group',
+    scale: 2,
+    sortingSetting: 'TOP_POSTS',
+    stream_initial_count: 1,
+    useDefaultActor: false,
+  });
+
+  const body = new URLSearchParams({
+    av: cUser,
+    __user: cUser,
+    __a: '1',
+    __comet_req: '15',
+    dpr: '2',
+    fb_api_caller_class: 'RelayModern',
+    fb_api_req_friendly_name: GRAPHQL_QUERY_NAME,
+    variables,
+    doc_id: tokens.docId,
+    fb_dtsg: tokens.fbDtsg,
+    lsd: tokens.lsd,
+    jazoest,
+  });
 
   const controller = new AbortController();
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {
-    const response = await fetch(url, {
+    const response = await fetch(GRAPHQL_API_URL, {
+      method: 'POST',
       headers: {
-        ...MBASIC_HEADERS,
+        ...GRAPHQL_HEADERS,
         Cookie: cookies,
+        Referer: `https://www.facebook.com/groups/${groupId}`,
+        'x-fb-friendly-name': GRAPHQL_QUERY_NAME,
+        'x-fb-lsd': tokens.lsd,
       },
-      redirect: 'manual',
+      body: body.toString(),
       signal: controller.signal,
     });
 
-    // Redirect to login → cookies expired
-    const location = response.headers.get('location') || '';
-    if (
-      response.status === 302 &&
-      (location.includes('/login') || location.includes('checkpoint'))
-    ) {
+    if (response.status === 401 || response.status === 403) {
       throw new FacebookClientError(
-        'Cookies expired — redirected to login',
+        'Authentication failed',
         'auth_expired',
         false,
       );
@@ -71,7 +124,7 @@ export async function fetchGroupPage(
       );
     }
 
-    if (!response.ok && response.status !== 302) {
+    if (!response.ok) {
       throw new FacebookClientError(
         `HTTP ${response.status}: ${response.statusText}`,
         'network',
@@ -79,34 +132,43 @@ export async function fetchGroupPage(
       );
     }
 
-    const html = await response.text();
+    let text = await response.text();
 
-    // Check for login form in HTML body (fallback detection)
-    if (
-      html.includes('id="login_form"') ||
-      html.includes('name="login"') ||
-      (html.includes('/login/') && !html.includes('/groups/'))
-    ) {
-      throw new FacebookClientError(
-        'Cookies expired — login form detected in response',
-        'auth_expired',
-        false,
-      );
+    // Strip Facebook's anti-JSON-hijacking prefix
+    text = text.replace(/^for \(;;\);/, '');
+
+    // Check for GraphQL error responses
+    try {
+      // Try parsing first line for error detection
+      const firstLine = text.split('\n')[0];
+      const firstJson = JSON.parse(firstLine);
+
+      if (firstJson.error) {
+        const errorCode = firstJson.error;
+        const errorDesc =
+          firstJson.errorDescription || firstJson.errorSummary || '';
+
+        // 1357004 = missing fb_dtsg, 1357054 = invalid tokens
+        if (errorCode === 1357004 || errorCode === 1357054) {
+          throw new FacebookClientError(
+            `GraphQL token error ${errorCode}: ${errorDesc}`,
+            'token_expired',
+            false,
+          );
+        }
+
+        throw new FacebookClientError(
+          `GraphQL error ${errorCode}: ${errorDesc}`,
+          'parse',
+          false,
+        );
+      }
+    } catch (e) {
+      if (e instanceof FacebookClientError) throw e;
+      // Not valid JSON on first line — could be a different format, let parser handle
     }
 
-    // Check for checkpoint/challenge page
-    if (
-      html.includes('checkpoint') &&
-      html.includes('verify')
-    ) {
-      throw new FacebookClientError(
-        'Account checkpoint/challenge detected',
-        'banned',
-        false,
-      );
-    }
-
-    return html;
+    return text;
   } catch (error) {
     if (error instanceof FacebookClientError) throw error;
 
@@ -135,6 +197,7 @@ export async function fetchGroupPage(
 export async function fetchWithRetry(
   groupId: string,
   cookies: string,
+  tokens: FacebookGraphQLTokens,
   maxRetries: number = MAX_RETRIES,
 ): Promise<string> {
   let lastError: FacebookClientError | null = null;
@@ -155,7 +218,7 @@ export async function fetchWithRetry(
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
 
-      return await fetchGroupPage(groupId, cookies);
+      return await fetchGroupGraphQL(groupId, cookies, tokens);
     } catch (error) {
       if (!(error instanceof FacebookClientError)) throw error;
 
