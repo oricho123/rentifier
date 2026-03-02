@@ -4,6 +4,8 @@ import {
   GRAPHQL_HEADERS,
   GRAPHQL_POST_COUNT,
   GRAPHQL_QUERY_NAME,
+  SORTING_MUTATION_DOC_ID,
+  SORTING_MUTATION_NAME,
   MAX_RETRIES,
   INITIAL_RETRY_DELAY_MS,
   REQUEST_TIMEOUT_MS,
@@ -50,6 +52,94 @@ function extractCUser(cookies: string): string {
 }
 
 /**
+ * Switch a group's feed sorting to CHRONOLOGICAL via Facebook's internal mutation.
+ * This must be called before the feed query to ensure posts come back in time order.
+ *
+ * SECURITY: cookies are never logged.
+ */
+export async function setSortingChronological(
+  groupId: string,
+  cookies: string,
+  tokens: FacebookGraphQLTokens,
+): Promise<void> {
+  const cUser = extractCUser(cookies);
+  const jazoest = computeJazoest(tokens.fbDtsg);
+
+  const variables = JSON.stringify({
+    input: {
+      actor_id: cUser,
+      client_mutation_id: '1',
+      group_id: groupId,
+      new_sorting_setting: 'CHRONOLOGICAL',
+    },
+  });
+
+  const body = new URLSearchParams({
+    av: cUser,
+    __user: cUser,
+    __a: '1',
+    __comet_req: '15',
+    dpr: '2',
+    fb_api_caller_class: 'RelayModern',
+    fb_api_req_friendly_name: SORTING_MUTATION_NAME,
+    variables,
+    doc_id: SORTING_MUTATION_DOC_ID,
+    fb_dtsg: tokens.fbDtsg,
+    lsd: tokens.lsd,
+    jazoest,
+    server_timestamps: 'true',
+  });
+
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(GRAPHQL_API_URL, {
+      method: 'POST',
+      headers: {
+        ...GRAPHQL_HEADERS,
+        Cookie: cookies,
+        Referer: `https://www.facebook.com/groups/${groupId}`,
+        'x-fb-friendly-name': SORTING_MUTATION_NAME,
+        'x-fb-lsd': tokens.lsd,
+      },
+      body: body.toString(),
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      console.log(
+        JSON.stringify({
+          event: 'fb_sorting_mutation_failed',
+          status: response.status,
+          groupId,
+        }),
+      );
+      // Non-fatal: feed query will still work, just with default sorting
+      return;
+    }
+
+    console.log(
+      JSON.stringify({
+        event: 'fb_sorting_set_chronological',
+        groupId,
+      }),
+    );
+  } catch (error) {
+    // Non-fatal: log and continue with feed query
+    console.log(
+      JSON.stringify({
+        event: 'fb_sorting_mutation_error',
+        error: error instanceof Error ? error.message : String(error),
+        groupId,
+      }),
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
+}
+
+/**
  * Fetch group feed posts via Facebook's internal GraphQL API.
  * Returns raw response text (NDJSON format).
  *
@@ -71,7 +161,7 @@ export async function fetchGroupGraphQL(
     id: groupId,
     renderLocation: 'group',
     scale: 2,
-    sortingSetting: 'TOP_POSTS',
+    sortingSetting: 'CHRONOLOGICAL',
     stream_initial_count: 1,
     useDefaultActor: false,
   });

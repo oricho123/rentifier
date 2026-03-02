@@ -29,3 +29,8 @@ export const GRAPHQL_POST_COUNT = 10;
 /** GraphQL query name used by Facebook's group feed */
 export const GRAPHQL_QUERY_NAME =
   'GroupsCometFeedRegularStoriesPaginationQuery';
+
+/** Mutation to switch group feed sorting to CHRONOLOGICAL */
+export const SORTING_MUTATION_DOC_ID = '9986723004722009';
+export const SORTING_MUTATION_NAME =
+  'GroupsCometFeedSortingSwitcherMenuMutation';
