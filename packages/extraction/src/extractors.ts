@@ -1,5 +1,5 @@
 import { PriceResult, LocationResult, ExtractionResult } from './types';
-import { PRICE_PATTERNS, PERIOD_PATTERNS, BEDROOM_PATTERNS, TAG_KEYWORDS, CITY_NAMES, CITY_NEIGHBORHOODS, STREET_PATTERNS } from './patterns';
+import { PRICE_PATTERNS, PERIOD_PATTERNS, BEDROOM_PATTERNS, TAG_KEYWORDS, CITY_NAMES, CITY_NEIGHBORHOODS, STREET_PATTERNS, SEARCH_POST_PATTERNS } from './patterns';
 
 export function extractPrice(text: string): PriceResult | null {
   for (const { pattern, currency } of PRICE_PATTERNS) {
@@ -112,6 +112,10 @@ export function extractLocation(text: string): LocationResult | null {
   };
 }
 
+export function isSearchPost(text: string): boolean {
+  return SEARCH_POST_PATTERNS.some((pattern) => pattern.test(text));
+}
+
 export function extractAll(title: string, description: string): ExtractionResult {
   const combinedText = `${title} ${description}`;
 
@@ -120,6 +124,7 @@ export function extractAll(title: string, description: string): ExtractionResult
   const street = extractStreet(combinedText);
   const tags = extractTags(combinedText);
   const location = extractLocation(combinedText);
+  const searchPost = isSearchPost(combinedText);
 
   // Overall confidence is the minimum of all sub-confidences
   const confidences: number[] = [];
@@ -137,6 +142,7 @@ export function extractAll(title: string, description: string): ExtractionResult
     street,
     tags,
     location,
+    isSearchPost: searchPost,
     overallConfidence,
   };
 }

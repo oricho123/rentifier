@@ -39,7 +39,15 @@ export const TAG_KEYWORDS: Record<string, string[]> = {
 
 export const STREET_PATTERNS: RegExp[] = [
   /ברחוב\s+([\u0590-\u05FF][^\n,.!?]{1,30})/,
+  /ברח[׳']\s+([\u0590-\u05FF][^\n,.!?]{1,30})/,
   /רחוב\s+([\u0590-\u05FF][^\n,!?]{1,30})/,
+];
+
+/** Patterns indicating a "wanted/searching" post, not a rental listing */
+export const SEARCH_POST_PATTERNS: RegExp[] = [
+  /מחפש(?:ת|ים|ות)?\s+(?:דירה|דירת|חדר|סטודיו|סאבלט)/,
+  /מחפש(?:ת|ים|ות)?\s+(?:שותף|שותפה|מחליף|מחליפה)/,
+  /looking\s+for\s+(?:an?\s+)?(?:apartment|room|flat|studio)/i,
 ];
 
 // Import city normalization data from centralized module

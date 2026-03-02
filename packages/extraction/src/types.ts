@@ -17,5 +17,6 @@ export interface ExtractionResult {
   street: string | null;
   tags: string[];
   location: LocationResult | null;
+  isSearchPost: boolean;
   overallConfidence: number;
 }
