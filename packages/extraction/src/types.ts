@@ -14,6 +14,7 @@ export interface LocationResult {
 export interface ExtractionResult {
   price: PriceResult | null;
   bedrooms: number | null;
+  street: string | null;
   tags: string[];
   location: LocationResult | null;
   overallConfidence: number;

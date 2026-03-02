@@ -294,7 +294,7 @@ export class FacebookConnector implements Connector {
       bedrooms: extraction.bedrooms,
       city: extraction.location?.city ?? null,
       neighborhood: extraction.location?.neighborhood ?? null,
-      street: null,
+      street: extraction.street,
       houseNumber: null,
       tags: extraction.tags,
       url: candidate.rawUrl,
