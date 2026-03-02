@@ -25,8 +25,15 @@ export function getAccounts(): FacebookAccount[] {
 }
 
 /**
- * Read GraphQL tokens from environment variables.
- * These are shared across all accounts (extracted from DevTools once).
+ * Read doc_id from environment variables (required, stable).
+ */
+export function getDocId(): string | null {
+  return process.env.FB_DOC_ID ?? null;
+}
+
+/**
+ * Read GraphQL tokens from environment variables (optional fallback).
+ * fb_dtsg/lsd are normally auto-extracted from the homepage.
  */
 export function getGraphQLTokens(): FacebookGraphQLTokens | null {
   const docId = process.env.FB_DOC_ID;

@@ -6,6 +6,8 @@ import {
   GRAPHQL_QUERY_NAME,
   SORTING_MUTATION_DOC_ID,
   SORTING_MUTATION_NAME,
+  HOMEPAGE_URL,
+  HOMEPAGE_TIMEOUT_MS,
   MAX_RETRIES,
   INITIAL_RETRY_DELAY_MS,
   REQUEST_TIMEOUT_MS,
@@ -49,6 +51,120 @@ export function computeJazoest(fbDtsg: string): string {
 function extractCUser(cookies: string): string {
   const match = cookies.match(/c_user=(\d+)/);
   return match ? match[1] : '';
+}
+
+/**
+ * Extract fb_dtsg and lsd CSRF tokens from Facebook homepage HTML.
+ * Fetches www.facebook.com with cookies and parses tokens from the response.
+ *
+ * SECURITY: cookies are never logged.
+ */
+export async function extractTokensFromHomepage(
+  cookies: string,
+): Promise<{ fbDtsg: string; lsd: string }> {
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), HOMEPAGE_TIMEOUT_MS);
+
+  try {
+    const response = await fetch(HOMEPAGE_URL, {
+      headers: {
+        Cookie: cookies,
+        'User-Agent': GRAPHQL_HEADERS['User-Agent'],
+        Accept:
+          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Upgrade-Insecure-Requests': '1',
+      },
+      signal: controller.signal,
+    });
+
+    if (!response.ok) {
+      throw new FacebookClientError(
+        `Homepage fetch failed: HTTP ${response.status}`,
+        'network',
+        true,
+      );
+    }
+
+    const html = await response.text();
+
+    // Detect auth failures
+    if (html.includes('id="login_form"') || html.includes('id="loginform"')) {
+      throw new FacebookClientError(
+        'Homepage returned login page — cookies expired',
+        'auth_expired',
+        false,
+      );
+    }
+
+    // Only detect real checkpoint pages (URL-based redirect or dedicated page),
+    // not normal pages that mention "checkpoint" in JS code
+    if (
+      html.includes('/checkpoint/block/') &&
+      !html.includes('DTSGInitData')
+    ) {
+      throw new FacebookClientError(
+        'Homepage returned checkpoint — account challenged',
+        'banned',
+        false,
+      );
+    }
+
+    // Extract fb_dtsg (try 3 patterns)
+    const fbDtsg =
+      html.match(/"DTSGInitData".*?"token":"([^"]+)"/s)?.[1] ??
+      html.match(/name="fb_dtsg" value="([^"]+)"/)?.[1] ??
+      html.match(/"dtsg":\{"token":"([^"]+)"/)?.[1];
+
+    if (!fbDtsg) {
+      throw new FacebookClientError(
+        'Could not extract fb_dtsg from homepage',
+        'parse',
+        false,
+      );
+    }
+
+    // Extract lsd (try 2 patterns)
+    const lsd =
+      html.match(/"LSD".*?\[.*?"(\w+)"\]/s)?.[1] ??
+      html.match(/name="lsd" value="([^"]+)"/)?.[1] ??
+      '';
+
+    console.log(
+      JSON.stringify({
+        event: 'fb_token_extraction',
+        hasDtsg: true,
+        hasLsd: !!lsd,
+      }),
+    );
+
+    return { fbDtsg, lsd };
+  } catch (error) {
+    if (error instanceof FacebookClientError) throw error;
+
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new FacebookClientError(
+        `Homepage fetch timed out after ${HOMEPAGE_TIMEOUT_MS}ms`,
+        'timeout',
+        true,
+      );
+    }
+
+    throw new FacebookClientError(
+      `Homepage fetch error: ${error instanceof Error ? error.message : String(error)}`,
+      'network',
+      true,
+    );
+  } finally {
+    clearTimeout(timeoutId);
+  }
 }
 
 /**

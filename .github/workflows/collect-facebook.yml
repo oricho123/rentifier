@@ -34,8 +34,10 @@ jobs:
           FB_ACCOUNT_COUNT: ${{ secrets.FB_ACCOUNT_COUNT }}
           FB_COOKIES_1: ${{ secrets.FB_COOKIES_1 }}
           FB_COOKIES_2: ${{ secrets.FB_COOKIES_2 }}
-          # Facebook GraphQL API tokens (from DevTools)
+          # Facebook GraphQL API tokens
           FB_DOC_ID: ${{ secrets.FB_DOC_ID }}
+          # FB_DTSG and FB_LSD are auto-extracted from homepage on each run.
+          # Set these only as fallback if extraction fails:
           FB_DTSG: ${{ secrets.FB_DTSG }}
           FB_LSD: ${{ secrets.FB_LSD }}
           # Telegram admin alerts for cookie expiry

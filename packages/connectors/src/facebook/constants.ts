@@ -30,6 +30,10 @@ export const GRAPHQL_POST_COUNT = 10;
 export const GRAPHQL_QUERY_NAME =
   'GroupsCometFeedRegularStoriesPaginationQuery';
 
+/** Facebook homepage URL for token extraction */
+export const HOMEPAGE_URL = 'https://www.facebook.com/';
+export const HOMEPAGE_TIMEOUT_MS = 15_000;
+
 /** Mutation to switch group feed sorting to CHRONOLOGICAL */
 export const SORTING_MUTATION_DOC_ID = '9986723004722009';
 export const SORTING_MUTATION_NAME =

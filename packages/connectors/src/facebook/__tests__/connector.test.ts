@@ -6,6 +6,10 @@ import type { ListingCandidate } from '@rentifier/core';
 vi.mock('../client', () => ({
   fetchWithRetry: vi.fn(),
   setSortingChronological: vi.fn().mockResolvedValue(undefined),
+  extractTokensFromHomepage: vi.fn().mockResolvedValue({
+    fbDtsg: 'extracted_dtsg',
+    lsd: 'extracted_lsd',
+  }),
   FacebookClientError: class FacebookClientError extends Error {
     constructor(
       message: string,
@@ -25,6 +29,7 @@ vi.mock('../accounts', () => ({
     account: { id: '1', cookies: 'test_cookie' },
     nextIndex: 1,
   })),
+  getDocId: vi.fn(() => 'test_doc_id'),
   getGraphQLTokens: vi.fn(() => ({
     docId: 'test_doc_id',
     fbDtsg: 'test_dtsg',
@@ -117,8 +122,38 @@ describe('FacebookConnector', () => {
       MONITORED_GROUPS.push(...original);
     });
 
-    it('returns empty when GraphQL tokens are missing', async () => {
+    it('returns empty when doc_id is missing', async () => {
+      const { getDocId } = await import('../accounts');
+      vi.mocked(getDocId).mockReturnValueOnce(null);
+
+      const mockDb = {} as any;
+      const result = await connector.fetchNew(null, mockDb);
+
+      expect(result.candidates).toHaveLength(0);
+    });
+
+    it('falls back to env tokens when extraction fails', async () => {
+      const { extractTokensFromHomepage, fetchWithRetry } = await import('../client');
+      vi.mocked(extractTokensFromHomepage).mockRejectedValueOnce(
+        new Error('Network error'),
+      );
+      vi.mocked(fetchWithRetry).mockResolvedValueOnce(
+        JSON.stringify({ data: { node: { __typename: 'Other' } } }),
+      );
+
+      const mockDb = {} as any;
+      const result = await connector.fetchNew(null, mockDb);
+
+      // Should still succeed using env fallback tokens
+      expect(fetchWithRetry).toHaveBeenCalled();
+    });
+
+    it('returns empty when extraction fails and no env tokens', async () => {
+      const { extractTokensFromHomepage } = await import('../client');
       const { getGraphQLTokens } = await import('../accounts');
+      vi.mocked(extractTokensFromHomepage).mockRejectedValueOnce(
+        new Error('Network error'),
+      );
       vi.mocked(getGraphQLTokens).mockReturnValueOnce(null);
 
       const mockDb = {} as any;
