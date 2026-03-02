@@ -1,7 +1,7 @@
 import type { Connector, FetchResult } from '../interface';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import type { DB } from '@rentifier/db';
-import type { FacebookCursorState, FacebookGraphQLTokens } from './types';
+import type { FacebookConfig, FacebookCursorState, FacebookGraphQLTokens } from './types';
 import { fetchWithRetry, setSortingChronological, extractTokensFromHomepage, FacebookClientError } from './client';
 import { parseGraphQLResponse } from './parser';
 import { getAccounts, getDocId, getGraphQLTokens, selectAccount } from './accounts';
@@ -38,6 +38,8 @@ export class FacebookConnector implements Connector {
   sourceId = 'facebook';
   sourceName = 'Facebook Groups';
 
+  constructor(private config?: FacebookConfig) {}
+
   async fetchNew(cursor: string | null, _db: DB): Promise<FetchResult> {
     const state = parseCursorState(cursor);
 
@@ -48,7 +50,7 @@ export class FacebookConnector implements Connector {
     }
 
     // doc_id check (required, stable)
-    const docId = getDocId();
+    const docId = getDocId(this.config);
     if (!docId) {
       console.log(
         JSON.stringify({
@@ -81,7 +83,7 @@ export class FacebookConnector implements Connector {
     const group = groups[groupIndex];
 
     // Account selection
-    const accounts = getAccounts();
+    const accounts = getAccounts(this.config);
     const selected = selectAccount(accounts, state);
 
     if (!selected) {
@@ -137,7 +139,7 @@ export class FacebookConnector implements Connector {
         );
 
         // Fall back to env var tokens
-        const envTokens = getGraphQLTokens();
+        const envTokens = getGraphQLTokens(this.config);
         if (envTokens) {
           tokens = envTokens;
           console.log(

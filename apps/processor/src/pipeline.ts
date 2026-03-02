@@ -1,7 +1,7 @@
 import type { DB, ListingRaw, ListingRow } from '@rentifier/db';
 import type { Connector } from '@rentifier/connectors';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
-import { MockConnector, Yad2Connector } from '@rentifier/connectors';
+import { MockConnector, Yad2Connector, FacebookConnector } from '@rentifier/connectors';
 import { extractAll } from '@rentifier/extraction';
 
 export interface ProcessingResult {
@@ -32,6 +32,7 @@ function createDefaultRegistry(): ConnectorRegistry {
   const registry = new ConnectorRegistry();
   registry.register('mock', new MockConnector());
   registry.register('yad2', new Yad2Connector());
+  registry.register('facebook', new FacebookConnector());
   return registry;
 }
 

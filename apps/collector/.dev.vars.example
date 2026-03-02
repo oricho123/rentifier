@@ -1,0 +1,11 @@
+# Facebook connector — copy this file to .dev.vars and fill in values
+ENABLE_FACEBOOK_CONNECTOR=true
+FB_ACCOUNT_COUNT=1
+FB_COOKIES_1=your_facebook_cookie_string_here
+FB_DOC_ID=your_doc_id_here
+# Optional — normally auto-extracted from homepage
+# FB_DTSG=
+# FB_LSD=
+
+# YAD2 Connector
+ENABLE_YAD2_CONNECTOR=true
