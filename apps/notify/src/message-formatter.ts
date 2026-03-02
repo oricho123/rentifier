@@ -20,6 +20,10 @@ export class MessageFormatter {
       parts.push(`📍 ${address}`);
     }
 
+    if (listing.description && listing.description !== listing.title) {
+      parts.push(`\n<blockquote expandable>${this.escapeHtml(listing.description)}</blockquote>`);
+    }
+
     parts.push(`\n<a href="${listing.url}">View Listing</a>`);
 
     return parts.join('\n');
