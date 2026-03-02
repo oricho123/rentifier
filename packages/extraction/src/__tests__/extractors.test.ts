@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractPrice, extractBedrooms, extractTags, extractLocation, extractAll } from '../extractors';
+import { extractPrice, extractBedrooms, extractTags, extractLocation, extractStreet, isSearchPost, extractAll } from '../extractors';
 
 describe('extractPrice', () => {
   it('should extract ILS amounts with ש״ח', () => {
@@ -52,6 +52,26 @@ describe('extractPrice', () => {
     });
   });
 
+  it('should extract price with מחיר prefix (no currency symbol)', () => {
+    const result = extractPrice('מחיר - 8,650');
+    expect(result).toEqual({
+      amount: 8650,
+      currency: 'ILS',
+      period: 'month',
+      confidence: 0.7,
+    });
+  });
+
+  it('should extract price with מחיר and colon', () => {
+    const result = extractPrice('מחיר: 5000');
+    expect(result).toEqual({
+      amount: 5000,
+      currency: 'ILS',
+      period: 'month',
+      confidence: 0.7,
+    });
+  });
+
   it('should return null for no price match', () => {
     const result = extractPrice('דירה יפה');
     expect(result).toBeNull();
@@ -72,6 +92,11 @@ describe('extractBedrooms', () => {
   it('should return 0 for studio', () => {
     expect(extractBedrooms('סטודיו')).toBe(0);
     expect(extractBedrooms('studio')).toBe(0);
+  });
+
+  it('should extract rooms with ח׳ abbreviation', () => {
+    expect(extractBedrooms('3 ח׳')).toBe(3);
+    expect(extractBedrooms("4 ח'")).toBe(4);
   });
 
   it('should return null for no match', () => {
@@ -168,9 +193,76 @@ describe('extractLocation', () => {
     });
   });
 
+  it('should infer city from neighborhood (reverse lookup)', () => {
+    const result = extractLocation('דירה ליד כרם התימנים');
+    expect(result).toEqual({
+      city: 'תל אביב',
+      neighborhood: 'כרם התימנים',
+      confidence: 0.85,
+    });
+  });
+
+  it('should infer city from Dizengoff neighborhood', () => {
+    const result = extractLocation('ליד כיכר דיזנגוף');
+    expect(result).toEqual({
+      city: 'תל אביב',
+      neighborhood: 'דיזנגוף',
+      confidence: 0.85,
+    });
+  });
+
+  it('should handle דיזינגוף spelling variant', () => {
+    const result = extractLocation('5 דקות מכיכר דיזינגוף');
+    expect(result).toEqual({
+      city: 'תל אביב',
+      neighborhood: 'דיזנגוף',
+      confidence: 0.85,
+    });
+  });
+
+  it('should infer city from קריית שלום', () => {
+    const result = extractLocation('באזור קריית שלום');
+    expect(result).toEqual({
+      city: 'תל אביב',
+      neighborhood: 'קריית שלום',
+      confidence: 0.85,
+    });
+  });
+
   it('should return null for no match', () => {
     const result = extractLocation('דירה יפה');
     expect(result).toBeNull();
+  });
+});
+
+describe('extractStreet', () => {
+  it('should extract street from ברחוב prefix', () => {
+    expect(extractStreet('ברחוב יעל')).toBe('יעל');
+    expect(extractStreet('ברחוב הכובשים')).toBe('הכובשים');
+  });
+
+  it('should extract street from רחוב prefix', () => {
+    expect(extractStreet('רחוב דיזנגוף')).toBe('דיזנגוף');
+  });
+
+  it('should return null for no street', () => {
+    expect(extractStreet('דירה יפה')).toBeNull();
+  });
+});
+
+describe('isSearchPost', () => {
+  it('should detect Hebrew search posts', () => {
+    expect(isSearchPost('מחפש דירת 2-3 חדרים להשכרה')).toBe(true);
+    expect(isSearchPost('מחפשת דירה בתל אביב')).toBe(true);
+    expect(isSearchPost('מחפש סטודיו')).toBe(true);
+    expect(isSearchPost('מחפש סאבלט')).toBe(true);
+    expect(isSearchPost('מחפשת שותפה')).toBe(true);
+  });
+
+  it('should not flag rental listings', () => {
+    expect(isSearchPost('להשכרה דירת 3 חדרים')).toBe(false);
+    expect(isSearchPost('דירה להשכרה בפלורנטין')).toBe(false);
+    expect(isSearchPost('סאבלט 5 דק מהים')).toBe(false);
   });
 });
 

@@ -2,6 +2,8 @@ export const PRICE_PATTERNS: { pattern: RegExp; currency: 'ILS' | 'USD' | 'EUR' 
   { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*(?:ש״ח|שח|shekel|שקל)/i, currency: 'ILS' },
   { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*₪/, currency: 'ILS' },
   { pattern: /₪\s*(\d+(?:\.\d+)?)/, currency: 'ILS' },
+  // "מחיר" prefix implies ILS (common in Hebrew Facebook posts)
+  { pattern: /מחיר\s*[-–:]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/, currency: 'ILS' },
   { pattern: /\$\s*(\d+(?:\.\d+)?)/, currency: 'USD' },
   { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*\$/, currency: 'USD' },
   { pattern: /€\s*(\d+(?:\.\d+)?)/, currency: 'EUR' },
@@ -16,6 +18,7 @@ export const PERIOD_PATTERNS: { pattern: RegExp; period: 'month' | 'week' | 'day
 
 export const BEDROOM_PATTERNS: { pattern: RegExp; extractor: (match: RegExpMatchArray) => number }[] = [
   { pattern: /(\d+(?:\.5)?)\s*(?:חדרים|חדר)/i, extractor: (m) => parseFloat(m[1]) },
+  { pattern: /(\d+(?:\.5)?)\s*(?:ח[׳'])/i, extractor: (m) => parseFloat(m[1]) },
   { pattern: /(\d+(?:\.5)?)\s*(?:rooms?|br|bed(?:rooms?)?)/i, extractor: (m) => parseFloat(m[1]) },
   { pattern: /(?:סטודיו|studio)/i, extractor: () => 0 },
 ];
@@ -29,7 +32,23 @@ export const TAG_KEYWORDS: Record<string, string[]> = {
   'long-term': ['לטווח ארוך', 'long-term', 'long term', 'ארוך טווח'],
   accessible: ['נגיש', 'נגישה', 'accessible', 'נגישות'],
   'air-conditioning': ['מזגן', 'מזגנים', 'ac', 'a/c', 'air-conditioning', 'air conditioning', 'מיזוג', 'מיזוג אוויר'],
+  'elevator': ['מעלית', 'elevator'],
+  'storage': ['מחסן', 'storage'],
+  'renovated': ['משופצת', 'משופץ', 'שיפוץ', 'renovated'],
 };
+
+export const STREET_PATTERNS: RegExp[] = [
+  /ברחוב\s+([\u0590-\u05FF][^\n,.!?]{1,30})/,
+  /ברח[׳']\s+([\u0590-\u05FF][^\n,.!?]{1,30})/,
+  /רחוב\s+([\u0590-\u05FF][^\n,!?]{1,30})/,
+];
+
+/** Patterns indicating a "wanted/searching" post, not a rental listing */
+export const SEARCH_POST_PATTERNS: RegExp[] = [
+  /מחפש(?:ת|ים|ות)?\s+(?:דירה|דירת|חדר|סטודיו|סאבלט)/,
+  /מחפש(?:ת|ים|ות)?\s+(?:שותף|שותפה|מחליף|מחליפה)/,
+  /looking\s+for\s+(?:an?\s+)?(?:apartment|room|flat|studio)/i,
+];
 
 // Import city normalization data from centralized module
 // All city names now normalize to Hebrew canonical form

@@ -1,7 +1,7 @@
 # State
 
 **Last Updated:** 2026-03-02
-**Current Work:** M4 in progress. Half-room support merged (PR #24). YAD2 listing recency filtering merged (PR #25). Facebook Groups connector rewritten to GraphQL API (PR #26 — pending merge). Next: auto-extract fb_dtsg tokens. System live in production.
+**Current Work:** M4 in progress. Facebook Groups connector with GraphQL API + auto-token extraction (PR #26 — pending merge). Token auto-refresh implemented: fb_dtsg/lsd extracted from homepage on each run, only cookies + doc_id required as secrets. Chronological sorting via mutation. 176 tests, E2E verified.
 
 ---
 
@@ -236,17 +236,21 @@ Filter matching was already implemented in `notification-service.ts` during M3 b
 
 - **Research:** Comprehensive analysis of all Facebook data access methods (Graph API shutdown, CrowdTangle shutdown, mbasic approach)
 - **Consensus plan:** Planner → Architect → Critic ralplan workflow, approved after 1 iteration
-- **Implementation:** 12 new files, 1617 lines added (PR #26)
-  - HTTP client for mbasic.facebook.com with retry + auth detection
-  - Cheerio HTML parser with canary check for selector breakage
+- **Implementation:** GraphQL API connector with auto-token extraction
+  - GraphQL POST client with jazoest CSRF, NDJSON parsing, retry + auth detection
+  - Auto-extract fb_dtsg/lsd from Facebook homepage (3 patterns for dtsg, 2 for lsd)
+  - Chronological sorting via `GroupsCometFeedSortingSwitcherMenuMutation`
   - Multi-account cookie rotation with disabled account tracking
-  - FacebookConnector implementing Connector interface
   - Collection script with admin Telegram notification on cookie expiry
   - GitHub Actions workflow (30-min cron)
   - DB migration seeding facebook source row
-  - 18 unit tests (parser + connector)
-- **Status:** PR #26 open, pending merge + manual testing with real cookies
-- **Total tests:** 169 across 11 test files
+  - 25 unit tests (9 parser + 8 client + 8 connector)
+- **Key discoveries:**
+  - Homepage fetch requires full browser headers (`Sec-Fetch-*`, `Sec-Ch-Ua-*`) or returns 400
+  - Checkpoint detection must check `/checkpoint/block/` AND absence of `DTSGInitData` to avoid false positives
+  - Only `FB_COOKIES_N` + `FB_DOC_ID` required as secrets (dtsg/lsd auto-extracted)
+- **Status:** PR #26 open, E2E verified with real cookies, pending merge
+- **Total tests:** 176 across 12 test files
 
 ---
 

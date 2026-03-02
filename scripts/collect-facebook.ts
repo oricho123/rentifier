@@ -11,10 +11,12 @@
  *   FB_ACCOUNT_COUNT     — Number of Facebook accounts (default: 1)
  *   FB_COOKIES_1..N      — Cookie strings per account
  *   FB_DOC_ID            — GraphQL doc_id for group feed query
- *   FB_DTSG              — Facebook CSRF token (from DevTools)
- *   FB_LSD               — Facebook LSD token (from DevTools)
  *   TELEGRAM_BOT_TOKEN   — Telegram bot token (for admin alerts)
  *   TELEGRAM_ADMIN_CHAT_ID — Admin's Telegram chat ID (for cookie expiry alerts)
+ *
+ * Optional env vars (fallback if auto-extraction fails):
+ *   FB_DTSG              — Facebook CSRF token (auto-extracted from homepage)
+ *   FB_LSD               — Facebook LSD token (auto-extracted from homepage)
  */
 
 import { FacebookConnector, FacebookClientError } from '@rentifier/connectors';

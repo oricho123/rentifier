@@ -1,8 +1,8 @@
 import type { DB, ListingRaw, ListingRow } from '@rentifier/db';
 import type { Connector } from '@rentifier/connectors';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
-import { MockConnector, Yad2Connector } from '@rentifier/connectors';
-import { extractAll } from '@rentifier/extraction';
+import { MockConnector, Yad2Connector, FacebookConnector } from '@rentifier/connectors';
+import { extractAll, isSearchPost } from '@rentifier/extraction';
 
 export interface ProcessingResult {
   processed: number;
@@ -32,6 +32,7 @@ function createDefaultRegistry(): ConnectorRegistry {
   const registry = new ConnectorRegistry();
   registry.register('mock', new MockConnector());
   registry.register('yad2', new Yad2Connector());
+  registry.register('facebook', new FacebookConnector());
   return registry;
 }
 
@@ -67,7 +68,18 @@ export async function processBatch(db: DB, batchSize: number = 50): Promise<Proc
         continue;
       }
 
-      // Step 3: Normalize via connector
+      // Step 3: Skip search/wanted posts
+      if (isSearchPost(`${candidate.rawTitle} ${candidate.rawDescription}`)) {
+        console.log(JSON.stringify({
+          event: 'item_skipped_search_post',
+          sourceId: raw.source_id,
+          sourceItemId: raw.source_item_id,
+        }));
+        await db.markRawListingProcessed(raw.id);
+        continue;
+      }
+
+      // Step 4: Normalize via connector
       const draft: ListingDraft = connector.normalize(candidate);
 
       // Step 5: Extract structured data

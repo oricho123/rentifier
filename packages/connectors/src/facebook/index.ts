@@ -1,10 +1,10 @@
 import type { Connector, FetchResult } from '../interface';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import type { DB } from '@rentifier/db';
-import type { FacebookCursorState } from './types';
-import { fetchWithRetry, setSortingChronological, FacebookClientError } from './client';
+import type { FacebookConfig, FacebookCursorState, FacebookGraphQLTokens } from './types';
+import { fetchWithRetry, setSortingChronological, extractTokensFromHomepage, FacebookClientError } from './client';
 import { parseGraphQLResponse } from './parser';
-import { getAccounts, getGraphQLTokens, selectAccount } from './accounts';
+import { getAccounts, getDocId, getGraphQLTokens, selectAccount } from './accounts';
 import { extractAll } from '@rentifier/extraction';
 import {
   MONITORED_GROUPS,
@@ -38,6 +38,8 @@ export class FacebookConnector implements Connector {
   sourceId = 'facebook';
   sourceName = 'Facebook Groups';
 
+  constructor(private config?: FacebookConfig) {}
+
   async fetchNew(cursor: string | null, _db: DB): Promise<FetchResult> {
     const state = parseCursorState(cursor);
 
@@ -47,14 +49,13 @@ export class FacebookConnector implements Connector {
       return { candidates: [], nextCursor: JSON.stringify(state) };
     }
 
-    // GraphQL tokens check
-    const tokens = getGraphQLTokens();
-    if (!tokens) {
+    // doc_id check (required, stable)
+    const docId = getDocId(this.config);
+    if (!docId) {
       console.log(
         JSON.stringify({
-          event: 'fb_missing_tokens',
-          message:
-            'Missing FB_DOC_ID, FB_DTSG, or FB_LSD env vars — cannot make GraphQL requests',
+          event: 'fb_missing_doc_id',
+          message: 'Missing FB_DOC_ID env var — cannot make GraphQL requests',
         }),
       );
       return { candidates: [], nextCursor: JSON.stringify(state) };
@@ -82,7 +83,7 @@ export class FacebookConnector implements Connector {
     const group = groups[groupIndex];
 
     // Account selection
-    const accounts = getAccounts();
+    const accounts = getAccounts(this.config);
     const selected = selectAccount(accounts, state);
 
     if (!selected) {
@@ -108,6 +109,55 @@ export class FacebookConnector implements Connector {
           accountId: selected.account.id,
         }),
       );
+
+      // Extract fresh tokens from homepage, fall back to env vars
+      let tokens: FacebookGraphQLTokens;
+      try {
+        const { fbDtsg, lsd } = await extractTokensFromHomepage(
+          selected.account.cookies,
+        );
+        tokens = { docId, fbDtsg, lsd };
+      } catch (extractionError) {
+        // Handle auth/ban errors from extraction the same as from GraphQL
+        if (extractionError instanceof FacebookClientError) {
+          if (
+            extractionError.errorType === 'auth_expired' ||
+            extractionError.errorType === 'banned'
+          ) {
+            throw extractionError;
+          }
+        }
+
+        console.log(
+          JSON.stringify({
+            event: 'fb_token_extraction_failed',
+            error:
+              extractionError instanceof Error
+                ? extractionError.message
+                : String(extractionError),
+          }),
+        );
+
+        // Fall back to env var tokens
+        const envTokens = getGraphQLTokens(this.config);
+        if (envTokens) {
+          tokens = envTokens;
+          console.log(
+            JSON.stringify({
+              event: 'fb_using_env_fallback_tokens',
+            }),
+          );
+        } else {
+          console.log(
+            JSON.stringify({
+              event: 'fb_no_tokens_available',
+              message:
+                'Token extraction failed and no FB_DTSG/FB_LSD env vars set',
+            }),
+          );
+          return { candidates: [], nextCursor: JSON.stringify(state) };
+        }
+      }
 
       // Switch sorting to chronological before fetching
       await setSortingChronological(
@@ -214,6 +264,15 @@ export class FacebookConnector implements Connector {
         }),
       );
 
+      // Re-throw non-retryable auth/ban errors so the workflow fails
+      // and triggers admin notifications. These require human action.
+      if (
+        error instanceof FacebookClientError &&
+        (error.errorType === 'auth_expired' || error.errorType === 'banned')
+      ) {
+        throw error;
+      }
+
       return {
         candidates: [],
         nextCursor: JSON.stringify(state),
@@ -235,7 +294,7 @@ export class FacebookConnector implements Connector {
       bedrooms: extraction.bedrooms,
       city: extraction.location?.city ?? null,
       neighborhood: extraction.location?.neighborhood ?? null,
-      street: null,
+      street: extraction.street,
       houseNumber: null,
       tags: extraction.tags,
       url: candidate.rawUrl,

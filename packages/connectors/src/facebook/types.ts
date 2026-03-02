@@ -22,6 +22,14 @@ export interface FacebookGraphQLTokens {
   lsd: string;
 }
 
+/** Config injected by Worker; when omitted, functions fall back to process.env */
+export interface FacebookConfig {
+  cookies: Record<string, string>;
+  docId: string;
+  fbDtsg?: string;
+  lsd?: string;
+}
+
 /** Cursor state persisted in source_state.cursor */
 export interface FacebookCursorState {
   lastFetchedAt: string | null;
