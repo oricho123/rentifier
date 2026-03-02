@@ -15,6 +15,7 @@ export const MONITORED_GROUPS: { groupId: string; name: string }[] = [
   // Add your groups here:
   { groupId: '305724686290054', name: 'דירות להשכרה בתל אביב' },
   { groupId: '981208559966255', name: '[RENTME] דירות להשכרה בתל אביב ללא תיווך' },
+  { groupId: '101875683484689', name: 'דירות מפה לאוזן בתל אביב' },
 ];
 
 export const MAX_CONSECUTIVE_FAILURES = 5;
