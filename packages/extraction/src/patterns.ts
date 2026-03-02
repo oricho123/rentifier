@@ -43,11 +43,13 @@ export const STREET_PATTERNS: RegExp[] = [
   /רחוב\s+([\u0590-\u05FF][^\n,!?]{1,30})/,
 ];
 
-/** Patterns indicating a "wanted/searching" post, not a rental listing */
+/** Patterns indicating a "wanted/searching" post, not a rental listing.
+ * Only match when the keyword appears near the start of the text (first 50 chars)
+ * to avoid false positives from CTAs like "מחפשים דירה אחרת?" at the end of listings. */
 export const SEARCH_POST_PATTERNS: RegExp[] = [
-  /מחפש(?:ת|ים|ות)?\s+(?:דירה|דירת|חדר|סטודיו|סאבלט)/,
-  /מחפש(?:ת|ים|ות)?\s+(?:שותף|שותפה|מחליף|מחליפה)/,
-  /looking\s+for\s+(?:an?\s+)?(?:apartment|room|flat|studio)/i,
+  /^.{0,50}מחפש(?:ת|ים|ות)?\s+(?:דירה|דירת|חדר|סטודיו|סאבלט)/,
+  /^.{0,50}מחפש(?:ת|ים|ות)?\s+(?:שותף|שותפה|מחליף|מחליפה)/,
+  /^.{0,50}looking\s+for\s+(?:an?\s+)?(?:apartment|room|flat|studio)/i,
 ];
 
 // Import city normalization data from centralized module
