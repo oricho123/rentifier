@@ -262,6 +262,15 @@ export class FacebookConnector implements Connector {
         }),
       );
 
+      // Re-throw non-retryable auth/ban errors so the workflow fails
+      // and triggers admin notifications. These require human action.
+      if (
+        error instanceof FacebookClientError &&
+        (error.errorType === 'auth_expired' || error.errorType === 'banned')
+      ) {
+        throw error;
+      }
+
       return {
         candidates: [],
         nextCursor: JSON.stringify(state),
