@@ -3,6 +3,7 @@ import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import type { Yad2Marker, Yad2CursorState } from './types';
 import type { DB } from '@rentifier/db';
 import { fetchWithRetry, Yad2ApiError } from './client';
+import { parseImageDate } from './image-date';
 import { normalizeCity } from '@rentifier/extraction';
 import {
   MAX_CONSECUTIVE_FAILURES,
@@ -77,7 +78,25 @@ export class Yad2Connector implements Connector {
 
       // Filter out already-known orderIds
       const knownSet = new Set(state.knownOrderIds);
-      const newMarkers = markers.filter(m => !knownSet.has(m.orderId));
+      let newMarkers = markers.filter(m => !knownSet.has(m.orderId));
+
+      // Filter out old markers by orderId threshold
+      if (state.minOrderId != null) {
+        const before = newMarkers.length;
+        newMarkers = newMarkers.filter(m => {
+          const numId = typeof m.orderId === 'string' ? parseInt(m.orderId, 10) : m.orderId;
+          return !isNaN(numId) && numId > state.minOrderId!;
+        });
+        const filtered = before - newMarkers.length;
+        if (filtered > 0) {
+          console.log(JSON.stringify({
+            event: 'yad2_recency_filter',
+            city: city.city_name,
+            filteredCount: filtered,
+            minOrderId: state.minOrderId,
+          }));
+        }
+      }
 
       // Map to ListingCandidate
       const candidates: ListingCandidate[] = newMarkers.map(marker =>
@@ -107,6 +126,14 @@ export class Yad2Connector implements Connector {
         }));
       }
 
+      // Update minOrderId baseline from current batch
+      const numericOrderIds = newMarkers
+        .map(m => typeof m.orderId === 'string' ? parseInt(m.orderId, 10) : m.orderId)
+        .filter(id => !isNaN(id));
+      const batchMinOrderId = numericOrderIds.length > 0
+        ? Math.min(...numericOrderIds)
+        : state.minOrderId;
+
       const updatedState: Yad2CursorState = {
         lastFetchedAt: new Date().toISOString(),
         knownOrderIds: updatedKnownIds,
@@ -114,6 +141,7 @@ export class Yad2Connector implements Connector {
         circuitOpenUntil: null,
         lastCityIndex: cityIndex + 1,
         resultCounts: updatedResultCounts,
+        minOrderId: batchMinOrderId,
       };
 
       console.log(JSON.stringify({
@@ -238,7 +266,7 @@ export class Yad2Connector implements Connector {
       rawUrl: marker.token
         ? `https://www.yad2.co.il/realestate/item/${marker.token}`
         : `https://www.yad2.co.il/realestate/rent`,
-      rawPostedAt: null,
+      rawPostedAt: parseImageDate(marker.metaData?.coverImage),
       sourceData: marker as unknown as Record<string, unknown>,
     };
   }

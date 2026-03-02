@@ -481,5 +481,91 @@ describe('Yad2Connector', () => {
 
       consoleLogSpy.mockRestore();
     });
+
+    it('should filter out markers below minOrderId threshold', async () => {
+      const cursor = JSON.stringify({
+        lastFetchedAt: new Date().toISOString(),
+        knownOrderIds: [],
+        consecutiveFailures: 0,
+        circuitOpenUntil: null,
+        lastCityIndex: 0,
+        minOrderId: 55000000,
+      });
+
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([
+          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+        ]),
+      } as any;
+
+      const mockMarkers = [
+        createTestMarker({ orderId: '49000000' }), // old — should be filtered
+        createTestMarker({ orderId: '56000000' }), // new — should pass
+        createTestMarker({ orderId: '57000000' }), // new — should pass
+      ];
+
+      vi.mocked(client.fetchWithRetry).mockResolvedValue({
+        data: { markers: mockMarkers },
+      });
+
+      const result = await connector.fetchNew(cursor, mockDb);
+
+      expect(result.candidates).toHaveLength(2);
+      expect(result.candidates[0].sourceItemId).toBe('56000000');
+      expect(result.candidates[1].sourceItemId).toBe('57000000');
+    });
+
+    it('should accept all markers on first run and set minOrderId', async () => {
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([
+          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+        ]),
+      } as any;
+
+      const mockMarkers = [
+        createTestMarker({ orderId: '55000000' }),
+        createTestMarker({ orderId: '56000000' }),
+      ];
+
+      vi.mocked(client.fetchWithRetry).mockResolvedValue({
+        data: { markers: mockMarkers },
+      });
+
+      const result = await connector.fetchNew(null, mockDb);
+
+      expect(result.candidates).toHaveLength(2);
+      const cursorState = JSON.parse(result.nextCursor!);
+      expect(cursorState.minOrderId).toBe(55000000);
+    });
+
+    it('should return empty when all markers are below threshold', async () => {
+      const cursor = JSON.stringify({
+        lastFetchedAt: new Date().toISOString(),
+        knownOrderIds: [],
+        consecutiveFailures: 0,
+        circuitOpenUntil: null,
+        lastCityIndex: 0,
+        minOrderId: 60000000,
+      });
+
+      const mockDb = {
+        getEnabledCities: vi.fn().mockResolvedValue([
+          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+        ]),
+      } as any;
+
+      const mockMarkers = [
+        createTestMarker({ orderId: '55000000' }),
+        createTestMarker({ orderId: '58000000' }),
+      ];
+
+      vi.mocked(client.fetchWithRetry).mockResolvedValue({
+        data: { markers: mockMarkers },
+      });
+
+      const result = await connector.fetchNew(cursor, mockDb);
+
+      expect(result.candidates).toHaveLength(0);
+    });
   });
 });
