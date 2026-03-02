@@ -13,6 +13,19 @@ import {
   MAX_KNOWN_POST_IDS,
 } from './constants';
 
+const MAX_TITLE_LENGTH = 80;
+
+/**
+ * Extract a short title from a Facebook post's content.
+ * Uses the first non-empty line, truncated to MAX_TITLE_LENGTH chars.
+ */
+function extractTitle(content: string): string {
+  const firstLine = content.split('\n').find((line) => line.trim().length > 0) ?? content;
+  const trimmed = firstLine.trim();
+  if (trimmed.length <= MAX_TITLE_LENGTH) return trimmed;
+  return trimmed.slice(0, MAX_TITLE_LENGTH).trimEnd() + '…';
+}
+
 function createDefaultCursorState(): FacebookCursorState {
   return {
     lastFetchedAt: null,
@@ -184,7 +197,7 @@ export class FacebookConnector implements Connector {
           allCandidates.push({
             source: 'facebook',
             sourceItemId: post.postId,
-            rawTitle: post.content,
+            rawTitle: extractTitle(post.content),
             rawDescription: post.content,
             rawUrl: post.permalink,
             rawPostedAt: post.postedAt,

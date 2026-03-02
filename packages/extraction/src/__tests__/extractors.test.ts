@@ -266,8 +266,13 @@ describe('isSearchPost', () => {
   });
 
   it('should not flag listings with search CTA at the end', () => {
-    const listingWithCta = 'להשכרה דירת 4 חדרים ברחוב בורוכוב\n11,000 ₪\nמחפשים דירה אחרת בתל אביב?';
+    const listingWithCta = 'להשכרה דירת 4 חדרים מרווחת ברחוב בורוכוב | על גן מאיר\nבקומה 2 ללא מעלית, דירה גדולה עם תקרות גבוהות\n11,000 ₪\nמחפשים דירה אחרת בתל אביב?';
     expect(isSearchPost(listingWithCta)).toBe(false);
+  });
+
+  it('should detect search posts with greeting on first line', () => {
+    const searchPost = 'הי,\nמחפש דירת 2-3 חדרים להשכרה בתל אביב';
+    expect(isSearchPost(searchPost)).toBe(true);
   });
 });
 

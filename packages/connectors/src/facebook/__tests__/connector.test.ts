@@ -246,6 +246,45 @@ describe('FacebookConnector', () => {
       // Only the new post should be returned
       expect(result.candidates).toHaveLength(1);
       expect(result.candidates[0].sourceItemId).toBe('100002');
+      // Title should be the first line (short enough to not truncate)
+      expect(result.candidates[0].rawTitle).toBe('סטודיו בירושלים 3500 שח לחודש');
+      // Description should be the full content
+      expect(result.candidates[0].rawDescription).toBe('סטודיו בירושלים 3500 שח לחודש');
+    });
+
+    it('truncates long titles and keeps full description', async () => {
+      const { fetchWithRetry } = await import('../client');
+      const mockFetch = vi.mocked(fetchWithRetry);
+
+      const longFirstLine = 'דירת 3 חדרים להשכרה בתל אביב עם מרפסת שמש גדולה ונוף פתוח לים במיקום מושלם ליד הים';
+      const fullContent = `${longFirstLine}\n\nפרטים נוספים:\n5000 שח לחודש`;
+
+      const line = JSON.stringify({
+        data: {
+          node: {
+            __typename: 'Story',
+            post_id: '200001',
+            permalink_url: 'https://www.facebook.com/groups/111/posts/200001/',
+            actors: [{ name: 'Test' }],
+            comet_sections: {
+              content: { story: { message: { text: fullContent } } },
+              timestamp: { story: { creation_time: 1772471819 } },
+            },
+          },
+        },
+      });
+
+      mockFetch.mockResolvedValueOnce(line);
+
+      const mockDb = {} as any;
+      const result = await connector.fetchNew(null, mockDb);
+
+      expect(result.candidates).toHaveLength(1);
+      // Title should be truncated to 80 chars with ellipsis
+      expect(result.candidates[0].rawTitle.length).toBeLessThanOrEqual(81); // 80 + ellipsis char
+      expect(result.candidates[0].rawTitle).toContain('דירת 3 חדרים להשכרה');
+      // Description should be the full content
+      expect(result.candidates[0].rawDescription).toBe(fullContent);
     });
   });
 });
