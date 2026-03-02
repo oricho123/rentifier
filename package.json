@@ -27,6 +27,8 @@
     "deploy:notify": "pnpm --filter @rentifier/notify exec wrangler deploy",
     "deploy:all": "pnpm deploy:collector && pnpm deploy:processor && pnpm deploy:notify",
     "webhook:setup": "tsx scripts/setup-webhook.ts",
+    "collect:facebook": "tsx --env-file=.env scripts/collect-facebook.ts",
+    "debug:facebook": "tsx --env-file=.env scripts/debug-facebook-graphql.ts",
     "test:yad2": "tsx scripts/test-yad2-api.ts"
   },
   "packageManager": "pnpm@10.6.2",
