@@ -6,6 +6,7 @@
   "dependencies": {
     "@rentifier/core": "workspace:*",
     "@rentifier/db": "workspace:*",
-    "@rentifier/extraction": "workspace:*"
+    "@rentifier/extraction": "workspace:*",
+    "cheerio": "^1.2.0"
   }
 }
