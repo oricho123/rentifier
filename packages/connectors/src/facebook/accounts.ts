@@ -4,6 +4,8 @@ import type {
   FacebookGraphQLTokens,
 } from './types';
 
+declare const process: { env: Record<string, string | undefined> };
+
 /**
  * Read Facebook accounts from environment variables.
  * Expects: FB_ACCOUNT_COUNT, FB_COOKIES_1, FB_COOKIES_2, ...
