@@ -264,6 +264,11 @@ describe('isSearchPost', () => {
     expect(isSearchPost('דירה להשכרה בפלורנטין')).toBe(false);
     expect(isSearchPost('סאבלט 5 דק מהים')).toBe(false);
   });
+
+  it('should not flag listings with search CTA at the end', () => {
+    const listingWithCta = 'להשכרה דירת 4 חדרים ברחוב בורוכוב\n11,000 ₪\nמחפשים דירה אחרת בתל אביב?';
+    expect(isSearchPost(listingWithCta)).toBe(false);
+  });
 });
 
 describe('extractAll', () => {
