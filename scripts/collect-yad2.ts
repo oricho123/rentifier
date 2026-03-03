@@ -2,25 +2,40 @@
  * GitHub Actions scraper for yad2.co.il.
  *
  * Runs outside Cloudflare Workers (GitHub's IP ranges bypass Radware).
- * Uses D1RestClient to access the database via Cloudflare's D1 REST API.
  *
- * Required env vars (set as GitHub Actions secrets):
+ * Modes:
+ *   --local   Use local D1 database (via wrangler getPlatformProxy)
+ *   default   Use remote D1 via REST API (for GitHub Actions)
+ *
+ * Required env vars (remote mode / GitHub Actions secrets):
  *   CF_ACCOUNT_ID      — Cloudflare account ID
  *   CF_API_TOKEN       — Cloudflare API token with D1:Edit permission
  *   CF_D1_DATABASE_ID  — D1 database ID
- *
- * Activate this script by:
- *   1. Adding the secrets above to the GitHub repo
- *   2. Enabling .github/workflows/collect-yad2.yml
- *   3. Removing Yad2Connector from apps/collector/src/registry.ts
- *      (so the Cloudflare Worker stops trying to scrape yad2)
  */
 
 import { Yad2Connector } from '@rentifier/connectors';
 import { createRestDBFromEnv } from '@rentifier/db';
+import type { DB } from '@rentifier/db';
+
+const isLocal = process.argv.includes('--local');
+
+async function getDB(): Promise<{ db: DB; cleanup?: () => Promise<void> }> {
+  if (isLocal) {
+    const { getPlatformProxy } = await import('wrangler');
+    const proxy = await getPlatformProxy({
+      configPath: 'apps/collector/wrangler.json',
+      persist: { path: '.wrangler/v3' },
+    });
+    const { createDB } = await import('@rentifier/db/src/queries');
+    const db = createDB(proxy.env.DB as never);
+    return { db, cleanup: () => proxy.dispose() };
+  }
+  return { db: createRestDBFromEnv() };
+}
 
 async function main() {
-  const db = createRestDBFromEnv();
+  const { db, cleanup } = await getDB();
+  if (isLocal) console.log('Using local D1 database');
 
   // Resolve yad2 source row
   const sources = await db.getEnabledSources();
@@ -77,6 +92,8 @@ async function main() {
   });
 
   console.log(JSON.stringify({ event: 'collect_complete', candidateCount: candidates.length }));
+
+  if (cleanup) await cleanup();
 }
 
 main().catch(err => {
