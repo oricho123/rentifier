@@ -190,19 +190,15 @@ echo "ENABLE_YAD2_CONNECTOR=true" > apps/collector/.dev.vars
 ### 4. Set up the local database
 
 ```bash
-pnpm db:migrate:local     # Create tables, indexes, seed sources
+pnpm db:migrate:local     # Create tables, indexes, seed sources and cities
 ```
 
-Edit `scripts/seed-local.sql` with your Telegram chat ID, then:
-
-```bash
-pnpm db:seed:local        # Add dev user + catch-all filter
-```
-
-**Default monitored cities** (from migration):
+Migrations automatically seed three default monitored cities:
 - תל אביב (Tel Aviv) — Code: 5000, Priority: 100
 - ירושלים (Jerusalem) — Code: 3000, Priority: 90
 - חיפה (Haifa) — Code: 4000, Priority: 80
+
+Users register themselves via the `/start` bot command — no manual seeding needed.
 
 ### 5. Run all workers
 
@@ -296,7 +292,6 @@ pnpm typecheck         # Type-check all workspaces
 | `pnpm db:migrate:remote`    | Apply migrations to production D1                    |
 | `pnpm db:query:local "SQL"` | Run a SQL query against the local DB                 |
 | `pnpm db:reset:local`       | Delete local DB (re-run migrate to recreate)         |
-| `pnpm db:seed:local`        | Seed dev user + filter from `scripts/seed-local.sql` |
 
 ### Deployment
 
