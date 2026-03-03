@@ -21,6 +21,7 @@ export const FEED_SCROLL_COUNT = 5;
 /** Delay between scrolls in ms */
 export const FEED_SCROLL_DELAY_MS = 3000;
 
+
 /** Group URL template with chronological sorting */
 export const GROUP_URL_TEMPLATE =
   'https://www.facebook.com/groups/{groupId}?sorting_setting=CHRONOLOGICAL';
