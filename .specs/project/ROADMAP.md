@@ -111,32 +111,101 @@
 - ✅ Multi-account cookie rotation with disabled account tracking
 - ✅ Collection script with admin Telegram notification on cookie expiry
 - ✅ GitHub Actions workflow (30-min cron, Playwright chromium install)
-- ✅ 189 tests passing across 11 files
 
-**Additional Source Connectors** - PLANNED
+**Extraction Improvements** - ✅ COMPLETE
 
-- Other Israeli rental platforms as identified
+- ✅ Group default cities with configurable `defaultCities` per monitored group (PR #34)
+- ✅ Word boundary checking prevents substring false positives (e.g., "הדר" in "נהדר")
+- ✅ Street regex: Hebrew word-based capture (2-10 chars per word, 1-2 words max)
+- ✅ Two-word street prefix whitelist (בן, נחלת, קרית, אבן, בר, הרב, שדרות)
+- ✅ Missing neighborhood variants (צפון הישן, צפון החדש, מרכז העיר)
+- ✅ Type fix in FacebookNormalizer.matchNeighborhoodInCity (PR #35)
+- ✅ 228 tests passing across 11 files
 
 ---
 
-## Future Considerations
+## M5 - Data Quality & Intelligence
 
-### User Experience
-- Web UI for browsing listings, managing filters, viewing history
-- WhatsApp notification channel
-- Mobile app (React Native)
+**Goal:** Improve listing quality with AI extraction, duplicate detection, and listing classification to reduce noise and increase relevance.
 
-### Data & Intelligence
-- AI-powered relevance scoring and listing summarization
-- Listing price trend analytics
-- Geo-based filtering with map view
-- Duplicate detection across sources
+### Features
 
-### Infrastructure & Automation
-- **Dynamic city discovery** - Auto-discover YAD2 city codes instead of manual mapping
-  - Options: scrape frontend dropdown, reverse-engineer from API, user-provided codes
-  - Benefit: Easier to add new cities, better multi-user support
-  - See: `.specs/features/dynamic-city-discovery/analysis.md`
-- Automated deployment pipeline (CI/CD)
-- Monitoring and alerting (error rates, API health)
-- Rate limiting and quota management
+**AI-Powered Extraction** - PLANNED
+
+- Use Cloudflare Workers AI (or similar) as fallback when rule-based extraction has low confidence
+- Extract price, rooms, location from free-text posts that don't match regex patterns
+- Listing summarization for Telegram notifications
+
+**Duplicate Detection** - PLANNED
+
+- Detect same listing posted across multiple sources (YAD2 + Facebook)
+- Content similarity matching (fuzzy text comparison, same price + location + rooms)
+- Merge duplicates in processor, notify only once
+
+**Brokerage Detection** - PLANNED
+
+- Identify posts from real estate agents vs. private landlords
+- Tag listings as `broker` or `private`
+- Allow users to filter out brokerage listings
+
+**Sublet vs. Rent Classification** - PLANNED
+
+- Distinguish sublet/short-term from long-term rental listings
+- Tag listings as `sublet`, `short-term`, or `long-term`
+- Allow users to filter by rental type
+
+---
+
+## M6 - User Experience
+
+**Goal:** Expand notification channels and add a web interface for browsing and managing listings.
+
+### Features
+
+**Web UI** - PLANNED
+
+- Browse all collected listings with search and filters
+- Manage filters (create, edit, delete) from web interface
+- View notification history
+- Map view with geo-based filtering
+
+**WhatsApp Notification Channel** - PLANNED
+
+- Alternative to Telegram for users who prefer WhatsApp
+- Same filter matching and notification logic
+
+**Listing Price Trends** - PLANNED
+
+- Track price changes over time per area/neighborhood
+- Show average prices in Telegram notifications or web UI
+- Historical price data for market insights
+
+---
+
+## M7 - Infrastructure & Scale
+
+**Goal:** Improve reliability, monitoring, and automation for production scale.
+
+### Features
+
+**Dynamic City Discovery** - PLANNED
+
+- Auto-discover YAD2 city codes instead of manual mapping
+- Options: scrape frontend dropdown, reverse-engineer from API, user-provided codes
+- See: `.specs/features/dynamic-city-discovery/analysis.md`
+
+**Monitoring & Alerting** - PLANNED
+
+- Error rate tracking per connector (auth failures, timeouts, parse errors)
+- API health dashboards
+- Alert on degraded collection (fewer posts than expected)
+
+**Additional Source Connectors** - PLANNED
+
+- Other Israeli rental platforms as identified (Homeless, Yad1, etc.)
+
+**Rate Limiting & Quota Management** - PLANNED
+
+- Per-user notification rate limits
+- Connector request budgets to avoid bans
+- Graceful degradation under load

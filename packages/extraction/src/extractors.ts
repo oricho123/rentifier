@@ -272,5 +272,8 @@ export function extractAll(title: string, description: string): ExtractionResult
     location,
     isSearchPost: searchPost,
     overallConfidence,
+    floor: null,
+    squareMeters: null,
+    entryDate: null,
   };
 }

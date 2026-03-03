@@ -90,8 +90,8 @@ export function createDB(d1: D1Database): DB {
 
     async upsertListing(listing: Omit<ListingRow, 'id' | 'ingested_at'>): Promise<number> {
       const result = await d1.prepare(
-        `INSERT INTO listings (source_id, source_item_id, title, description, price, currency, price_period, bedrooms, city, neighborhood, street, house_number, area_text, url, posted_at, tags_json, relevance_score, floor, square_meters, property_type, latitude, longitude, image_url)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO listings (source_id, source_item_id, title, description, price, currency, price_period, bedrooms, city, neighborhood, street, house_number, area_text, url, posted_at, tags_json, relevance_score, floor, square_meters, property_type, latitude, longitude, image_url, entry_date, ai_extracted)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(source_id, source_item_id) DO UPDATE SET
            title = excluded.title,
            description = excluded.description,
@@ -113,7 +113,9 @@ export function createDB(d1: D1Database): DB {
            property_type = excluded.property_type,
            latitude = excluded.latitude,
            longitude = excluded.longitude,
-           image_url = excluded.image_url
+           image_url = excluded.image_url,
+           entry_date = excluded.entry_date,
+           ai_extracted = excluded.ai_extracted
          RETURNING id`
       ).bind(
         listing.source_id, listing.source_item_id, listing.title, listing.description,
@@ -121,7 +123,8 @@ export function createDB(d1: D1Database): DB {
         listing.city, listing.neighborhood, listing.street, listing.house_number, listing.area_text, listing.url,
         listing.posted_at, listing.tags_json, listing.relevance_score,
         listing.floor, listing.square_meters, listing.property_type,
-        listing.latitude, listing.longitude, listing.image_url
+        listing.latitude, listing.longitude, listing.image_url,
+        listing.entry_date, listing.ai_extracted
       ).first<{ id: number }>();
       return result!.id;
     },

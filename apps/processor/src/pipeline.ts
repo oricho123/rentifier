@@ -2,12 +2,13 @@ import type { DB, ListingRaw, ListingRow } from '@rentifier/db';
 import type { Connector } from '@rentifier/connectors';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import { MockConnector, Yad2Connector, FacebookNormalizer } from '@rentifier/connectors';
-import { extractAll, isSearchPost } from '@rentifier/extraction';
+import { extractAll, isSearchPost, shouldInvokeAI, aiExtract, mergeExtractionResults, type AiProvider, type AiExtractorMetrics, DEFAULT_AI_CONFIG } from '@rentifier/extraction';
 
 export interface ProcessingResult {
   processed: number;
   failed: number;
   errors: ProcessingError[];
+  aiMetrics?: AiExtractorMetrics;
 }
 
 export interface ProcessingError {
@@ -36,7 +37,7 @@ function createDefaultRegistry(): ConnectorRegistry {
   return registry;
 }
 
-export async function processBatch(db: DB, batchSize: number = 50): Promise<ProcessingResult> {
+export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvider): Promise<ProcessingResult> {
   const registry = createDefaultRegistry();
   const unprocessed = await db.getUnprocessedRawListings(batchSize);
 
@@ -48,6 +49,16 @@ export async function processBatch(db: DB, batchSize: number = 50): Promise<Proc
   console.log(JSON.stringify({ event: 'batch_start', batchSize, unprocessedCount: unprocessed.length }));
 
   const result: ProcessingResult = { processed: 0, failed: 0, errors: [] };
+
+  // AI metrics tracking
+  const aiMetrics: AiExtractorMetrics = {
+    called: 0,
+    succeeded: 0,
+    failed: 0,
+    skippedBudget: 0,
+    avgLatencyMs: 0,
+  };
+  let totalLatency = 0;
 
   for (const raw of unprocessed) {
     try {
@@ -82,8 +93,36 @@ export async function processBatch(db: DB, batchSize: number = 50): Promise<Proc
       // Step 4: Normalize via connector
       const draft: ListingDraft = connector.normalize(candidate);
 
-      // Step 5: Extract structured data
-      const extraction = extractAll(draft.title, draft.description);
+      // Step 5: Extract structured data (regex-based)
+      let extraction = extractAll(draft.title, draft.description);
+
+      // Step 5a: AI extraction (optional, gated)
+      let aiWasUsed = false;
+      if (ai && source) {
+        const textLength = `${draft.title} ${draft.description}`.length;
+        const shouldUseAI = shouldInvokeAI(extraction, source.name, textLength);
+
+        if (shouldUseAI) {
+          if (aiMetrics.called < DEFAULT_AI_CONFIG.maxCallsPerBatch) {
+            const aiStartTime = Date.now();
+            const aiResult = await aiExtract(`${draft.title}\n\n${draft.description}`, ai);
+            const aiLatency = Date.now() - aiStartTime;
+
+            aiMetrics.called++;
+            totalLatency += aiLatency;
+
+            if (aiResult) {
+              extraction = mergeExtractionResults(extraction, aiResult);
+              aiMetrics.succeeded++;
+              aiWasUsed = true;
+            } else {
+              aiMetrics.failed++;
+            }
+          } else {
+            aiMetrics.skippedBudget++;
+          }
+        }
+      }
 
       // Step 6: Build listing row for upsert
       const listingRow: Omit<ListingRow, 'id' | 'ingested_at'> = {
@@ -97,19 +136,21 @@ export async function processBatch(db: DB, batchSize: number = 50): Promise<Proc
         bedrooms: extraction.bedrooms ?? draft.bedrooms ?? null,
         city: extraction.location?.city ?? draft.city ?? null,
         neighborhood: extraction.location?.neighborhood ?? draft.neighborhood ?? null,
-        street: draft.street ?? null,
+        street: extraction.street ?? draft.street ?? null,
         house_number: draft.houseNumber ?? null,
         area_text: null,
         url: draft.url,
         posted_at: draft.postedAt?.toISOString() ?? null,
         tags_json: extraction.tags.length > 0 ? JSON.stringify(extraction.tags) : null,
         relevance_score: extraction.overallConfidence > 0 ? extraction.overallConfidence : null,
-        floor: draft.floor ?? null,
-        square_meters: draft.squareMeters ?? null,
+        floor: extraction.floor ?? draft.floor ?? null,
+        square_meters: extraction.squareMeters ?? draft.squareMeters ?? null,
         property_type: draft.propertyType ?? null,
         latitude: draft.latitude ?? null,
         longitude: draft.longitude ?? null,
         image_url: draft.imageUrl ?? null,
+        entry_date: extraction.entryDate ?? null,
+        ai_extracted: aiWasUsed ? 1 : 0,
       };
 
       await db.upsertListing(listingRow);
@@ -131,6 +172,12 @@ export async function processBatch(db: DB, batchSize: number = 50): Promise<Proc
         error: errorMessage,
       });
     }
+  }
+
+  // Calculate average latency
+  if (aiMetrics.called > 0) {
+    aiMetrics.avgLatencyMs = totalLatency / aiMetrics.called;
+    result.aiMetrics = aiMetrics;
   }
 
   console.log(JSON.stringify({ event: 'batch_complete', ...result }));
