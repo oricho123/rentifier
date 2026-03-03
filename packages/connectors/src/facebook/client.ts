@@ -264,8 +264,58 @@ export async function extractPostsFromDOM(
         }
       }
 
+      // Fallback: extract post ID from timestamp link (aria-label with time)
+      // Facebook renders post time as a link to the permalink
+      if (!postId) {
+        var timeLinks = Array.from(node.querySelectorAll('a[href*="/groups/"] span[id]'));
+        for (var t = 0; t < timeLinks.length; t++) {
+          var parentLink = timeLinks[t].closest('a[href]');
+          if (parentLink) {
+            var timeHref = parentLink.getAttribute('href') || '';
+            var timeMatch = timeHref.match(/\\/groups\\/[^/]+\\/posts\\/(\\d+)/);
+            if (timeMatch) {
+              postId = timeMatch[1];
+              permalink = 'https://www.facebook.com/groups/' + groupId + '/posts/' + postId + '/';
+              break;
+            }
+          }
+        }
+      }
+
+      // Fallback: any link containing this group's posts path
+      if (!postId) {
+        var groupPostRegex = new RegExp('/groups/' + groupId + '/posts/(\\\\d+)');
+        for (var l3 = 0; l3 < links.length; l3++) {
+          var href3 = links[l3].getAttribute('href') || '';
+          var groupPostMatch = href3.match(groupPostRegex);
+          if (groupPostMatch) {
+            postId = groupPostMatch[1];
+            permalink = 'https://www.facebook.com/groups/' + groupId + '/posts/' + postId + '/';
+            break;
+          }
+        }
+      }
+
+      // Fallback: look for any link with a large numeric ID (13+ digits = likely post ID)
+      if (!postId) {
+        for (var l4 = 0; l4 < links.length; l4++) {
+          var href4 = links[l4].getAttribute('href') || '';
+          // Skip profile/user links, photo CDN links
+          if (href4.indexOf('/profile') !== -1 || href4.indexOf('scontent') !== -1) continue;
+          var bigIdMatch = href4.match(/(\\d{13,})/);
+          if (bigIdMatch && bigIdMatch[1] !== groupId) {
+            postId = bigIdMatch[1];
+            permalink = 'https://www.facebook.com/groups/' + groupId + '/posts/' + postId + '/';
+            break;
+          }
+        }
+      }
+
       // Fallback: generate hash from content + author for text-only posts
       if (!postId && content) {
+        // These are typically Sponsored/ad posts where Facebook doesn't expose post IDs in DOM
+        console.log(JSON.stringify({ event: 'fb_post_id_fallback', groupId: groupId, authorName: authorName, linkCount: links.length }));
+
         var hash = 0;
         var str = (content || '') + '|' + (authorName || '');
         for (var c = 0; c < str.length; c++) {
