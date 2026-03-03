@@ -108,6 +108,12 @@ describe('extractPrice', () => {
     expect(result?.currency).toBe('ILS');
   });
 
+  it('should extract price with שכירות prefix', () => {
+    const result = extractPrice('שכירות 2980 והחשבונות נמוכים');
+    expect(result?.amount).toBe(2980);
+    expect(result?.currency).toBe('ILS');
+  });
+
   it('should not match ב prefix with non-rental numbers', () => {
     // Single numbers like "ב3" (at 3) shouldn't match — need comma-separated thousands
     const result = extractPrice('קומה ב3 בניין');
@@ -200,6 +206,28 @@ describe('extractTags', () => {
     expect(tags).toContain('air-conditioning');
   });
 
+  it('should not tag elevator when negated (בלי מעלית)', () => {
+    const tags = extractTags('קומה 2 בלי מעלית');
+    expect(tags).not.toContain('elevator');
+  });
+
+  it('should not tag when negated with ללא', () => {
+    const tags = extractTags('ללא חניה');
+    expect(tags).not.toContain('parking');
+  });
+
+  it('should not tag when negated with אין', () => {
+    const tags = extractTags('אין מזגן');
+    expect(tags).not.toContain('air-conditioning');
+  });
+
+  it('should still tag non-negated keywords', () => {
+    const tags = extractTags('בלי מעלית אבל יש מזגן וחניה');
+    expect(tags).not.toContain('elevator');
+    expect(tags).toContain('air-conditioning');
+    expect(tags).toContain('parking');
+  });
+
   it('should return empty array for no tags', () => {
     const tags = extractTags('דירה');
     expect(tags).toEqual([]);
@@ -285,6 +313,15 @@ describe('extractLocation', () => {
       city: 'תל אביב',
       neighborhood: 'קריית שלום',
       confidence: 0.85,
+    });
+  });
+
+  it('should match ת״א (Hebrew gershayim abbreviation)', () => {
+    const result = extractLocation('במרכז ת״א');
+    expect(result).toEqual({
+      city: 'תל אביב',
+      neighborhood: null,
+      confidence: 0.8,
     });
   });
 
@@ -399,6 +436,18 @@ describe('extractAll', () => {
 
     expect(result.price?.amount).toBe(6300);
     expect(result.bedrooms).toBe(2);
+  });
+
+  it('should extract from Facebook post with שכירות price and ת״א', () => {
+    const title = '*חזרה להיות רלוונטית*החדר הכי גדול ושווה במרכז ת״א !';
+    const description = '*חזרה להיות רלוונטית*החדר הכי גדול ושווה במרכז ת״א ! ברחוב אבן גבירול (בין הבימה לכיכר רבין) שכירות 2980 והחשבונות נמוכים יחסית.כניסה- מיידית קומה 2 בלי מעלית';
+    const result = extractAll(title, description);
+
+    expect(result.price?.amount).toBe(2980);
+    expect(result.price?.currency).toBe('ILS');
+    expect(result.location?.city).toBe('תל אביב');
+    expect(result.tags).toContain('immediate');
+    expect(result.tags).not.toContain('elevator'); // "בלי מעלית" = without elevator
   });
 
   it('should extract from Facebook post with מחיר and ₪', () => {

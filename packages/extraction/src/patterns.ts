@@ -2,8 +2,9 @@ export const PRICE_PATTERNS: { pattern: RegExp; currency: 'ILS' | 'USD' | 'EUR' 
   { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*(?:ש״ח|שח|ש[׳']ח|shekel|שקל)/i, currency: 'ILS' },
   { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*₪/, currency: 'ILS' },
   { pattern: /₪\s*(\d+(?:\.\d+)?)/, currency: 'ILS' },
-  // "מחיר" / "שכ'ד" (שכר דירה) prefix implies ILS
+  // "מחיר" / "שכירות" / "שכ'ד" (שכר דירה) prefix implies ILS
   { pattern: /מחיר\s*[-–:]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/, currency: 'ILS' },
+  { pattern: /שכירות\s*[-–:]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/, currency: 'ILS' },
   { pattern: /שכ[״׳'"]?ד\s*[-–:]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/, currency: 'ILS' },
   // "ב" prefix + number in rental range (e.g., "ב7,600", "ב-4,500")
   { pattern: /ב[-–]?(\d{1,3}(?:,\d{3})+)(?!\d)/, currency: 'ILS' },

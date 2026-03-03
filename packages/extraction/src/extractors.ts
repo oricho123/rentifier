@@ -35,17 +35,29 @@ export function extractBedrooms(text: string): number | null {
   return null;
 }
 
+// Hebrew negation prefixes that negate the following keyword
+const NEGATION_PATTERNS = ['בלי ', 'ללא ', 'אין ', 'without '];
+
 export function extractTags(text: string): string[] {
   const found: string[] = [];
   const lowerText = text.toLowerCase();
 
   for (const [tag, keywords] of Object.entries(TAG_KEYWORDS)) {
+    let matched = false;
     for (const keyword of keywords) {
-      if (text.includes(keyword) || lowerText.includes(keyword.toLowerCase())) {
-        found.push(tag);
-        break; // Only add each tag once
+      const idx = text.indexOf(keyword);
+      const idxLower = idx === -1 ? lowerText.indexOf(keyword.toLowerCase()) : idx;
+      if (idxLower !== -1) {
+        // Check for negation before the keyword
+        const prefix = text.slice(Math.max(0, idxLower - 5), idxLower);
+        const negated = NEGATION_PATTERNS.some((neg) => prefix.includes(neg.trim()));
+        if (!negated) {
+          matched = true;
+          break;
+        }
       }
     }
+    if (matched) found.push(tag);
   }
 
   return found;
