@@ -42,9 +42,12 @@ export const TAG_KEYWORDS: Record<string, string[]> = {
 };
 
 export const STREET_PATTERNS: RegExp[] = [
-  /ברחוב\s+([\u0590-\u05FF][^\n,.!?]{1,30})/,
-  /ברח[׳']\s+([\u0590-\u05FF][^\n,.!?]{1,30})/,
-  /רחוב\s+([\u0590-\u05FF][^\n,!?]{1,30})/,
+  // Match "ברחוב X", "ברח' X", "רחוב X"
+  // Capture 1-2 Hebrew words (Israeli streets are 1-2 words: הרצל, בן יהודה, נחלת בנימין)
+  // Each word is 2-10 Hebrew chars (prevents capturing run-together Facebook text)
+  /ברחוב\s+([\u0590-\u05FF]{2,10}(?:\s[\u0590-\u05FF]{2,10})?)/,
+  /ברח[׳'"]\s+([\u0590-\u05FF]{2,10}(?:\s[\u0590-\u05FF]{2,10})?)/,
+  /רחוב\s+([\u0590-\u05FF]{2,10}(?:\s[\u0590-\u05FF]{2,10})?)/,
 ];
 
 /** Patterns indicating a "wanted/searching" post, not a rental listing.

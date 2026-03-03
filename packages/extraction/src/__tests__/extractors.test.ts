@@ -435,6 +435,22 @@ describe('extractStreet', () => {
     expect(extractStreet('רחוב דיזנגוף')).toBe('דיזנגוף');
   });
 
+  it('should extract two-word streets with known prefixes', () => {
+    expect(extractStreet('ברח׳ בן יהודה')).toBe('בן יהודה');
+    expect(extractStreet('ברחוב נחלת בנימין')).toBe('נחלת בנימין');
+    expect(extractStreet('רחוב קרית ספר')).toBe('קרית ספר');
+    expect(extractStreet('ברחוב אבן גבירול')).toBe('אבן גבירול');
+    expect(extractStreet('ברחוב הרב קוק')).toBe('הרב קוק');
+    expect(extractStreet('רחוב בר כוכבא')).toBe('בר כוכבא');
+  });
+
+  it('should drop non-street second word', () => {
+    expect(extractStreet('רחוב אברבנאל בפלורנטין')).toBe('אברבנאל');
+    expect(extractStreet('רחוב דיזנגוף במרכז העיר')).toBe('דיזנגוף');
+    expect(extractStreet('ברחוב אלנבי בתל אביב')).toBe('אלנבי');
+    expect(extractStreet('רחוב שינקין ליד הכרמל')).toBe('שינקין');
+  });
+
   it('should return null for no street', () => {
     expect(extractStreet('דירה יפה')).toBeNull();
   });
