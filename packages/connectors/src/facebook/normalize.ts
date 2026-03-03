@@ -1,7 +1,8 @@
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import type { Connector, FetchResult } from '../interface';
 import type { DB } from '@rentifier/db';
-import { extractAll } from '@rentifier/extraction';
+import { extractAll, matchNeighborhoodInCity } from '@rentifier/extraction';
+import { getMonitoredGroup } from './constants';
 
 const MAX_TITLE_LENGTH = 80;
 
@@ -32,6 +33,31 @@ export class FacebookNormalizer implements Connector {
   normalize(candidate: ListingCandidate): ListingDraft {
     const extraction = extractAll(candidate.rawTitle, candidate.rawDescription);
 
+    // If no city was extracted, fall back to the group's default city
+    let city = extraction.location?.city ?? null;
+    let neighborhood = extraction.location?.neighborhood ?? null;
+
+    if (!city) {
+      const sourceData = candidate.sourceData as Record<string, unknown>;
+      const groupId = sourceData?.groupId as string | undefined;
+
+      if (groupId) {
+        const group = getMonitoredGroup(groupId);
+        if (group && group.defaultCities.length > 0) {
+          city = group.defaultCities[0];
+
+          // Try to extract neighborhood from the text now that we have a city
+          if (!neighborhood) {
+            const combinedText = `${candidate.rawTitle} ${candidate.rawDescription}`;
+            const neighborhoodMatch = matchNeighborhoodInCity(combinedText, city);
+            if (neighborhoodMatch) {
+              neighborhood = neighborhoodMatch.neighborhood;
+            }
+          }
+        }
+      }
+    }
+
     return {
       sourceId: this.sourceId,
       sourceItemId: candidate.sourceItemId,
@@ -41,8 +67,8 @@ export class FacebookNormalizer implements Connector {
       currency: (extraction.price?.currency as 'ILS' | 'USD' | 'EUR') ?? null,
       pricePeriod: extraction.price?.period ?? null,
       bedrooms: extraction.bedrooms,
-      city: extraction.location?.city ?? null,
-      neighborhood: extraction.location?.neighborhood ?? null,
+      city,
+      neighborhood,
       street: extraction.street,
       houseNumber: null,
       tags: extraction.tags,

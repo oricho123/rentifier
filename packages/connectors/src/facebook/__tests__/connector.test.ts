@@ -46,7 +46,15 @@ vi.mock('../constants', async () => {
   const actual = await vi.importActual('../constants');
   return {
     ...actual,
-    MONITORED_GROUPS: [{ groupId: '111', name: 'Test Group' }],
+    MONITORED_GROUPS: [
+      { groupId: '111', name: 'Test Group', defaultCities: ['תל אביב'] },
+    ],
+    getMonitoredGroup: (groupId: string) => {
+      if (groupId === '111') {
+        return { groupId: '111', name: 'Test Group', defaultCities: ['תל אביב'] };
+      }
+      return undefined;
+    },
   };
 });
 
@@ -67,7 +75,7 @@ describe('FacebookConnector', () => {
         rawDescription: 'דירת 3 חדרים בתל אביב, 5000 שח לחודש',
         rawUrl: 'https://www.facebook.com/groups/111/permalink/12345/',
         rawPostedAt: '2026-03-02T10:00:00.000Z',
-        sourceData: { imageUrl: 'https://scontent.fcdn.net/img.jpg' },
+        sourceData: { imageUrl: 'https://scontent.fcdn.net/img.jpg', groupId: '111' },
       };
 
       const draft = connector.normalize(candidate);
@@ -104,6 +112,41 @@ describe('FacebookConnector', () => {
       expect(draft.city).toBeNull();
       expect(draft.postedAt).toBeNull();
       expect(draft.imageUrl).toBeNull();
+    });
+
+    it('applies default city from group when no city extracted', () => {
+      const candidate: ListingCandidate = {
+        source: 'facebook',
+        sourceItemId: '55555',
+        rawTitle: 'דירת 2 חדרים 4000 שח',
+        rawDescription: 'דירת 2 חדרים 4000 שח',
+        rawUrl: 'https://www.facebook.com/groups/111/permalink/55555/',
+        rawPostedAt: '2026-03-02T12:00:00.000Z',
+        sourceData: { groupId: '111' },
+      };
+
+      const draft = connector.normalize(candidate);
+
+      expect(draft.city).toBe('תל אביב');
+      expect(draft.price).toBe(4000);
+      expect(draft.bedrooms).toBe(2);
+    });
+
+    it('extracts neighborhood after applying default city', () => {
+      const candidate: ListingCandidate = {
+        source: 'facebook',
+        sourceItemId: '66666',
+        rawTitle: 'דירה בפלורנטין 5000 שח',
+        rawDescription: 'דירה יפה בפלורנטין',
+        rawUrl: 'https://www.facebook.com/groups/111/permalink/66666/',
+        rawPostedAt: '2026-03-02T13:00:00.000Z',
+        sourceData: { groupId: '111' },
+      };
+
+      const draft = connector.normalize(candidate);
+
+      expect(draft.city).toBe('תל אביב');
+      expect(draft.neighborhood).toBe('פלורנטין');
     });
   });
 
