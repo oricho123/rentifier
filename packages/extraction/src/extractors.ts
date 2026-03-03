@@ -63,11 +63,25 @@ export function extractTags(text: string): string[] {
   return found;
 }
 
+/**
+ * First words of known two-word Hebrew street names.
+ * Only keep the second captured word if the first word is one of these.
+ * e.g., "בן יהודה", "נחלת בנימין", "קרית ספר", "אבן גבירול"
+ */
+const TWO_WORD_STREET_PREFIXES = ['בן', 'נחלת', 'קרית', 'אבן', 'בר', 'הרב', 'שדרות'];
+
 export function extractStreet(text: string): string | null {
   for (const pattern of STREET_PATTERNS) {
     const match = text.match(pattern);
     if (match) {
-      return match[1].trim();
+      const street = match[1].trim();
+      const words = street.split(/\s+/);
+      // Only keep second word if first word is a known two-word street prefix
+      // (e.g., "בן יהודה" → keep both, "אברבנאל בפלורנטין" → keep only first)
+      if (words.length === 2 && !TWO_WORD_STREET_PREFIXES.includes(words[0])) {
+        return words[0];
+      }
+      return street;
     }
   }
   return null;

@@ -51,7 +51,7 @@ export class FacebookNormalizer implements Connector {
             const combinedText = `${candidate.rawTitle} ${candidate.rawDescription}`;
             const neighborhoodMatch = matchNeighborhoodInCity(combinedText, city);
             if (neighborhoodMatch) {
-              neighborhood = neighborhoodMatch.neighborhood;
+              neighborhood = neighborhoodMatch;
             }
           }
         }
