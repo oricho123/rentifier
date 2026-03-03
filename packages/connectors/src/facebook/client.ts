@@ -1,4 +1,4 @@
-import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import type { Browser, BrowserContext, Page } from 'playwright';
 import type { FacebookPost } from './types';
 import { parseCookieString } from './accounts';
 import {
@@ -30,8 +30,10 @@ export class FacebookClientError extends Error {
 
 /**
  * Launch a headless Chromium browser.
+ * Uses dynamic import to avoid bundling Playwright into Cloudflare Workers.
  */
 export async function launchBrowser(): Promise<Browser> {
+  const { chromium } = await import('playwright');
   return chromium.launch({ headless: true });
 }
 
