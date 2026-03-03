@@ -20,6 +20,7 @@
 		}
 	],
 	"ai": {
-		"binding": "AI"
+		"binding": "AI",
+		"gateway": "rentifier-ai-gateway"
 	}
 }
