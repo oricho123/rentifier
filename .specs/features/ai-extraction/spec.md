@@ -61,6 +61,8 @@ Invoke AI extraction when regex `extractAll()` has missing fields that AI could 
 
 Skip AI for YAD2 listings (structured source, regex is sufficient). Note: some listings intentionally omit price — AI must return null for these rather than hallucinate a number.
 
+**Note on call volume:** Because neighborhood and street are missing in 12-15% of listings, AI will trigger for ~85% of Facebook posts. This is intentional — neighborhood and street extraction from free-text without "רחוב" prefix is high-value. The budget cap (R4, default 20 calls/batch) protects against cost overruns. With ~50-100 posts/day and 48 processor batches/day, the budget is sufficient. Monitor AI metrics after deployment and adjust `maxCallsPerBatch` if needed.
+
 ### R2: Structured JSON Output
 AI must return fields matching `ExtractionResult` shape plus new fields (floor, sqm, entry date). Prompt must enforce JSON-only responses. Parse with validation — reject malformed responses gracefully.
 
