@@ -4,6 +4,8 @@ import { parseCookieString } from './accounts';
 import {
   BROWSER_TIMEOUT_MS,
   FEED_WAIT_TIMEOUT_MS,
+  FEED_SCROLL_COUNT,
+  FEED_SCROLL_DELAY_MS,
   GROUP_URL_TEMPLATE,
   MAX_RETRIES,
   INITIAL_RETRY_DELAY_MS,
@@ -127,7 +129,7 @@ export async function navigateToGroup(
     );
   }
 
-  // Scroll to trigger lazy loading
+  // Initial scroll to trigger first lazy load
   await page.evaluate('window.scrollBy(0, 1000)');
   await page.waitForTimeout(2000);
 
@@ -187,12 +189,45 @@ export async function extractPostsFromDOM(
     return [];
   }
 
+  // Scroll-and-extract loop: Facebook uses virtual scroll which recycles
+  // posts that leave the viewport. We extract at each scroll position and
+  // merge results (dedup by postId) to capture more posts.
+  const allPosts = new Map<string, FacebookPost>();
+
+  for (let scroll = 0; scroll <= FEED_SCROLL_COUNT; scroll++) {
+    if (scroll > 0) {
+      await page.evaluate('window.scrollBy(0, 1500)');
+      await page.waitForTimeout(FEED_SCROLL_DELAY_MS);
+      await expandAllSeeMore(page);
+    }
+
+    const batch = await extractVisiblePosts(page, groupId);
+    for (const post of batch) {
+      if (!allPosts.has(post.postId)) {
+        allPosts.set(post.postId, post);
+      }
+    }
+
+    // Stop if we have enough posts
+    if (allPosts.size >= 20) break;
+  }
+
+  return Array.from(allPosts.values());
+}
+
+/**
+ * Extract posts currently visible in the DOM (single pass, no scrolling).
+ */
+async function extractVisiblePosts(
+  page: Page,
+  groupId: string,
+): Promise<FacebookPost[]> {
   // Use string-based evaluate to avoid tsx __name injection
   const extractedPosts = await page.evaluate(`((groupId) => {
     var feed = document.querySelector('[role="feed"]');
     if (!feed) return [];
-    // Skip first child (sorting widget), take up to 20 posts
-    var postElements = Array.from(feed.querySelectorAll(':scope > div')).slice(1, 21);
+    // Skip first child (sorting widget), take all visible posts
+    var postElements = Array.from(feed.querySelectorAll(':scope > div')).slice(1);
     var results = [];
 
     for (var i = 0; i < postElements.length; i++) {

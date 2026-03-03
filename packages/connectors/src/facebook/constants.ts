@@ -16,6 +16,11 @@ export const MAX_KNOWN_POST_IDS = 1000;
 export const BROWSER_TIMEOUT_MS = 30_000;
 export const FEED_WAIT_TIMEOUT_MS = 15_000;
 
+/** Number of scroll iterations to load more posts from the feed */
+export const FEED_SCROLL_COUNT = 5;
+/** Delay between scrolls in ms */
+export const FEED_SCROLL_DELAY_MS = 3000;
+
 /** Group URL template with chronological sorting */
 export const GROUP_URL_TEMPLATE =
   'https://www.facebook.com/groups/{groupId}?sorting_setting=CHRONOLOGICAL';
