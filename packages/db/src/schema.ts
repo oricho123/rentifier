@@ -51,6 +51,7 @@ export interface ListingRow {
   image_url: string | null;
   entry_date: string | null;
   ai_extracted: number;
+  duplicate_of: number | null;
 }
 
 export interface User {

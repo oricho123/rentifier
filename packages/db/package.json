@@ -4,7 +4,8 @@
   "main": "src/index.ts",
   "types": "src/index.ts",
   "dependencies": {
-    "@rentifier/core": "workspace:*"
+    "@rentifier/core": "workspace:*",
+    "@rentifier/extraction": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^4.20240117.0"

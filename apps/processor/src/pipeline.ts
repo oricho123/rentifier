@@ -2,7 +2,7 @@ import type { DB, ListingRaw, ListingRow } from '@rentifier/db';
 import type { Connector } from '@rentifier/connectors';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import { MockConnector, Yad2Connector, FacebookNormalizer } from '@rentifier/connectors';
-import { extractAll, isSearchPost, shouldInvokeAI, aiExtract, mergeExtractionResults, type AiProvider, type AiExtractorMetrics, DEFAULT_AI_CONFIG } from '@rentifier/extraction';
+import { extractAll, isSearchPost, shouldInvokeAI, aiExtract, mergeExtractionResults, DEDUP_THRESHOLD, type AiProvider, type AiExtractorMetrics, DEFAULT_AI_CONFIG } from '@rentifier/extraction';
 
 export interface ProcessingResult {
   processed: number;
@@ -16,6 +16,12 @@ export interface ProcessingError {
   sourceItemId: string;
   error: string;
 }
+
+const SOURCE_PRIORITY: Record<string, number> = {
+  yad2: 100,
+  facebook: 50,
+  mock: 0,
+};
 
 class ConnectorRegistry {
   private connectors = new Map<string, Connector>();
@@ -124,6 +130,46 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
         }
       }
 
+      // Step 5b: Check for cross-source duplicate
+      let duplicateOf: number | null = null;
+      let shouldSwap = false;
+      let swapTargetId: number | null = null;
+
+      const city = extraction.location?.city ?? draft.city ?? null;
+      const bedrooms = extraction.bedrooms ?? draft.bedrooms ?? null;
+      const price = extraction.price?.amount ?? draft.price ?? null;
+
+      if (city && bedrooms != null && price != null) {
+        const match = await db.findDuplicate({
+          city,
+          bedrooms,
+          price,
+          street: extraction.street ?? draft.street ?? null,
+          house_number: draft.houseNumber ?? null,
+          neighborhood: extraction.location?.neighborhood ?? draft.neighborhood ?? null,
+          latitude: draft.latitude ?? null,
+          longitude: draft.longitude ?? null,
+          source_id: raw.source_id,
+          source_item_id: raw.source_item_id,
+        });
+
+        if (match) {
+          const matchSourceObj = await db.getSourceById(match.sourceId);
+          const matchPriority = SOURCE_PRIORITY[matchSourceObj?.name ?? ''] ?? 0;
+          const currentPriority = SOURCE_PRIORITY[source?.name ?? ''] ?? 0;
+
+          if (currentPriority > matchPriority) {
+            // New listing has higher priority — will swap after upsert
+            shouldSwap = true;
+            swapTargetId = match.id;
+            console.log(JSON.stringify({ event: 'duplicate_found', sourceItemId: raw.source_item_id, duplicateOf: match.id, swapped: true }));
+          } else {
+            duplicateOf = match.id;
+            console.log(JSON.stringify({ event: 'duplicate_found', sourceItemId: raw.source_item_id, duplicateOf: match.id, swapped: false }));
+          }
+        }
+      }
+
       // Step 6: Build listing row for upsert
       const listingRow: Omit<ListingRow, 'id' | 'ingested_at'> = {
         source_id: raw.source_id,
@@ -151,9 +197,17 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
         image_url: draft.imageUrl ?? null,
         entry_date: extraction.entryDate ?? null,
         ai_extracted: aiWasUsed ? 1 : 0,
+        duplicate_of: duplicateOf,
       };
 
-      await db.upsertListing(listingRow);
+      const newListingId = await db.upsertListing(listingRow);
+
+      // Handle canonical swap (higher priority source arrived)
+      if (shouldSwap && swapTargetId != null) {
+        await db.swapCanonical(newListingId, swapTargetId);
+        console.log(JSON.stringify({ event: 'duplicate_swapped', newCanonical: newListingId, oldCanonical: swapTargetId }));
+      }
+
       await db.markRawListingProcessed(raw.id);
       result.processed++;
 

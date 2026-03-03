@@ -130,17 +130,22 @@
 
 ### Features
 
-**AI-Powered Extraction** - PLANNED
+**AI-Powered Extraction** - COMPLETE
 
-- Use Cloudflare Workers AI (or similar) as fallback when rule-based extraction has low confidence
-- Extract price, rooms, location from free-text posts that don't match regex patterns
-- Listing summarization for Telegram notifications
+- Cloudflare Workers AI (Llama 3.1 8B) as fallback when regex misses fields
+- Field-gated: only invoked when neighborhood/street/price/city are null
+- Budget-capped: max 20 AI calls per processor batch
+- Weighted confidence scoring (price 0.30, city 0.25, bedrooms 0.20, neighborhood 0.10, street 0.05, tags 0.05)
+- AI Gateway enabled for observability (rentifier-ai-gateway)
+- Status: Deployed to production (PR #36, migration 0012)
 
-**Duplicate Detection** - PLANNED
+**Duplicate Detection** - SPECIFIED
 
-- Detect same listing posted across multiple sources (YAD2 + Facebook)
-- Content similarity matching (fuzzy text comparison, same price + location + rooms)
-- Merge duplicates in processor, notify only once
+- Detect same listing posted across YAD2 + Facebook via field-based matching
+- Match on city + bedrooms + price (±10%) + street/neighborhood/coordinates
+- Source priority: YAD2 preferred as canonical over Facebook
+- Notify worker filters out duplicates via `WHERE duplicate_of IS NULL`
+- Spec: `.specs/features/duplicate-detection/spec.md`
 
 **Brokerage Detection** - PLANNED
 

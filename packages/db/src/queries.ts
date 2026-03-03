@@ -1,5 +1,30 @@
 import type { Source, SourceState, ListingRaw, ListingRow, User, FilterRow, NotificationSent, WorkerState, MonitoredCity } from './schema';
 import type { D1Database } from '@cloudflare/workers-types';
+import { matchScore, DEDUP_THRESHOLD, type DedupFields } from '@rentifier/extraction';
+
+export interface DuplicateCandidate {
+  id: number;
+  sourceId: number;
+  street: string | null;
+  house_number: string | null;
+  neighborhood: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  price: number | null;
+}
+
+export interface FindDuplicateParams {
+  city: string | null;
+  bedrooms: number | null;
+  price: number | null;
+  street: string | null;
+  house_number: string | null;
+  neighborhood: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  source_id: number;
+  source_item_id: string;
+}
 
 export interface DB {
   getEnabledSources(): Promise<Source[]>;
@@ -22,6 +47,8 @@ export interface DB {
   addMonitoredCity(cityName: string, cityCode: number, priority?: number): Promise<number>;
   disableCity(cityCode: number): Promise<void>;
   enableCity(cityCode: number): Promise<void>;
+  findDuplicate(params: FindDuplicateParams): Promise<DuplicateCandidate | null>;
+  swapCanonical(newCanonicalId: number, oldCanonicalId: number): Promise<void>;
 }
 
 export function createDB(d1: D1Database): DB {
@@ -90,8 +117,8 @@ export function createDB(d1: D1Database): DB {
 
     async upsertListing(listing: Omit<ListingRow, 'id' | 'ingested_at'>): Promise<number> {
       const result = await d1.prepare(
-        `INSERT INTO listings (source_id, source_item_id, title, description, price, currency, price_period, bedrooms, city, neighborhood, street, house_number, area_text, url, posted_at, tags_json, relevance_score, floor, square_meters, property_type, latitude, longitude, image_url, entry_date, ai_extracted)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO listings (source_id, source_item_id, title, description, price, currency, price_period, bedrooms, city, neighborhood, street, house_number, area_text, url, posted_at, tags_json, relevance_score, floor, square_meters, property_type, latitude, longitude, image_url, entry_date, ai_extracted, duplicate_of)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(source_id, source_item_id) DO UPDATE SET
            title = excluded.title,
            description = excluded.description,
@@ -115,7 +142,8 @@ export function createDB(d1: D1Database): DB {
            longitude = excluded.longitude,
            image_url = excluded.image_url,
            entry_date = excluded.entry_date,
-           ai_extracted = excluded.ai_extracted
+           ai_extracted = excluded.ai_extracted,
+           duplicate_of = excluded.duplicate_of
          RETURNING id`
       ).bind(
         listing.source_id, listing.source_item_id, listing.title, listing.description,
@@ -124,14 +152,14 @@ export function createDB(d1: D1Database): DB {
         listing.posted_at, listing.tags_json, listing.relevance_score,
         listing.floor, listing.square_meters, listing.property_type,
         listing.latitude, listing.longitude, listing.image_url,
-        listing.entry_date, listing.ai_extracted
+        listing.entry_date, listing.ai_extracted, listing.duplicate_of
       ).first<{ id: number }>();
       return result!.id;
     },
 
     async getNewListingsSince(since: string): Promise<ListingRow[]> {
       const result = await d1.prepare(
-        'SELECT * FROM listings WHERE datetime(ingested_at) > datetime(?) ORDER BY ingested_at DESC'
+        'SELECT * FROM listings WHERE datetime(ingested_at) > datetime(?) AND duplicate_of IS NULL ORDER BY ingested_at DESC'
       ).bind(since).all<ListingRow>();
       return result.results;
     },
@@ -235,6 +263,83 @@ export function createDB(d1: D1Database): DB {
       await d1.prepare(
         'UPDATE monitored_cities SET enabled = 1 WHERE city_code = ?'
       ).bind(cityCode).run();
+    },
+
+    async findDuplicate(params: FindDuplicateParams): Promise<DuplicateCandidate | null> {
+      // Return null if required fields are missing
+      if (params.city == null || params.bedrooms == null || params.price == null) {
+        return null;
+      }
+
+      // Query canonical listings with matching city, bedrooms, and price within ±10%
+      const priceMin = params.price * 0.9;
+      const priceMax = params.price * 1.1;
+
+      const result = await d1.prepare(
+        `SELECT id, source_id as sourceId, street, house_number, neighborhood, latitude, longitude, price
+         FROM listings
+         WHERE city = ?
+           AND bedrooms = ?
+           AND price BETWEEN ? AND ?
+           AND duplicate_of IS NULL
+           AND NOT (source_id = ? AND source_item_id = ?)
+         LIMIT 20`
+      ).bind(params.city, params.bedrooms, priceMin, priceMax, params.source_id, params.source_item_id)
+        .all<DuplicateCandidate>();
+
+      if (result.results.length === 0) {
+        return null;
+      }
+
+      // Build DedupFields for the incoming listing
+      const incomingFields: DedupFields = {
+        street: params.street,
+        house_number: params.house_number,
+        neighborhood: params.neighborhood,
+        latitude: params.latitude,
+        longitude: params.longitude,
+        price: params.price,
+      };
+
+      // Score each candidate and find the first match above threshold
+      for (const candidate of result.results) {
+        const candidateFields: DedupFields = {
+          street: candidate.street,
+          house_number: candidate.house_number,
+          neighborhood: candidate.neighborhood,
+          latitude: candidate.latitude,
+          longitude: candidate.longitude,
+          price: candidate.price,
+        };
+
+        const score = matchScore(incomingFields, candidateFields);
+        if (score >= DEDUP_THRESHOLD) {
+          return {
+            id: candidate.id,
+            sourceId: candidate.sourceId,
+            street: candidate.street,
+            house_number: candidate.house_number,
+            neighborhood: candidate.neighborhood,
+            latitude: candidate.latitude,
+            longitude: candidate.longitude,
+            price: candidate.price,
+          };
+        }
+      }
+
+      return null;
+    },
+
+    async swapCanonical(newCanonicalId: number, oldCanonicalId: number): Promise<void> {
+      // Point the old canonical to the new canonical
+      await d1.prepare(
+        'UPDATE listings SET duplicate_of = ? WHERE id = ?'
+      ).bind(newCanonicalId, oldCanonicalId).run();
+
+      // Point all listings that pointed to the old canonical to the new canonical
+      await d1.prepare(
+        'UPDATE listings SET duplicate_of = ? WHERE duplicate_of = ?'
+      ).bind(newCanonicalId, oldCanonicalId).run();
     },
   };
 }

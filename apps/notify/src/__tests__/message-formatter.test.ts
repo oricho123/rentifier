@@ -31,6 +31,7 @@ function createTestListing(overrides: Partial<ListingRow> = {}): ListingRow {
     image_url: null,
     entry_date: null,
     ai_extracted: 0,
+    duplicate_of: null,
     ...overrides,
   };
 }
