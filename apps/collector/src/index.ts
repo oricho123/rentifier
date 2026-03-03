@@ -4,10 +4,6 @@ import { runCollector } from './collector';
 export interface Env {
   DB: D1Database;
   ENABLE_YAD2_CONNECTOR?: string;
-  ENABLE_FACEBOOK_CONNECTOR?: string;
-  FB_COOKIES_1?: string;
-  FB_COOKIES_2?: string;
-  FB_ACCOUNT_COUNT?: string;
 }
 
 export default {
