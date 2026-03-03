@@ -1,11 +1,18 @@
 # State
 
-**Last Updated:** 2026-03-02
-**Current Work:** M4 in progress. Facebook Groups connector with GraphQL API + auto-token extraction (PR #26 — pending merge). Token auto-refresh implemented: fb_dtsg/lsd extracted from homepage on each run, only cookies + doc_id required as secrets. Chronological sorting via mutation. 176 tests, E2E verified.
+**Last Updated:** 2026-03-03
+**Current Work:** Playwright prototype VALIDATED — 9 posts extracted from 3 live Facebook groups in ~30s. Ready for full connector rewrite. Spec, design (with validated selectors), and tasks at `.specs/features/facebook-playwright/`. Prototype at `scripts/facebook-playwright-prototype.ts`. 191 tests passing. Pending roadmap items: facebook-playwright (implementation), facebook-pagination, ai-extraction, brokerage-detection, sublet-rent-classification.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-020: Playwright migration for Facebook connector (2026-03-03)
+
+**Decision:** Migrate Facebook connector from raw `fetch()` GraphQL API calls to Playwright headless browser. Also evaluated and rejected `moda20/facebook-scraper` Python library.
+**Reason:** Facebook sessions expire every few hours because the platform detects non-browser HTTP clients. Tested `moda20/facebook-scraper` (Python, `requests-html` against `m.facebook.com`) — Facebook 301-redirects all `m.facebook.com/groups/*` to `www.facebook.com` and serves "unsupported browser" interstitial. Tested with raw cookies, Chrome cookie jar, noscript mode, multiple user agents — all return 0 posts. A real browser engine is the only viable approach.
+**Trade-off:** Higher runtime overhead (~10-15s vs ~2s per group), Chromium dependency in CI (~150MB), increased GitHub Actions timeout (5→10 min). Eliminates need for `FB_DOC_ID`, `FB_DTSG`, `FB_LSD` env vars.
+**Impact:** Rewrite of `client.ts` and `parser.ts`. Connector architecture, state management, circuit breaker, account rotation unchanged. Spec at `.specs/features/facebook-playwright/`.
 
 ### AD-019: Facebook connector rewrite to GraphQL API (2026-03-02)
 

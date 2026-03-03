@@ -2,15 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FacebookConnector } from '../index';
 import type { ListingCandidate } from '@rentifier/core';
 
-// Mock the client to avoid real HTTP requests
-vi.mock('../client', () => ({
-  fetchWithRetry: vi.fn(),
-  setSortingChronological: vi.fn().mockResolvedValue(undefined),
-  extractTokensFromHomepage: vi.fn().mockResolvedValue({
-    fbDtsg: 'extracted_dtsg',
-    lsd: 'extracted_lsd',
-  }),
-  FacebookClientError: class FacebookClientError extends Error {
+// Mock the client to avoid real browser launches
+vi.mock('../client', () => {
+  const FacebookClientError = class FacebookClientError extends Error {
     constructor(
       message: string,
       public readonly errorType: string,
@@ -19,22 +13,32 @@ vi.mock('../client', () => ({
       super(message);
       this.name = 'FacebookClientError';
     }
-  },
-}));
+  };
+
+  return {
+    launchBrowser: vi.fn().mockResolvedValue({
+      close: vi.fn().mockResolvedValue(undefined),
+    }),
+    createBrowserContext: vi.fn().mockResolvedValue({
+      context: {},
+      page: {},
+    }),
+    closeBrowser: vi.fn().mockResolvedValue(undefined),
+    fetchGroupWithRetry: vi.fn().mockResolvedValue([]),
+    FacebookClientError,
+  };
+});
 
 // Mock accounts
 vi.mock('../accounts', () => ({
   getAccounts: vi.fn(() => [{ id: '1', cookies: 'test_cookie' }]),
-  selectAccount: vi.fn((_accounts: unknown[], _state: unknown) => ({
+  selectAccount: vi.fn(() => ({
     account: { id: '1', cookies: 'test_cookie' },
     nextIndex: 1,
   })),
-  getDocId: vi.fn(() => 'test_doc_id'),
-  getGraphQLTokens: vi.fn(() => ({
-    docId: 'test_doc_id',
-    fbDtsg: 'test_dtsg',
-    lsd: 'test_lsd',
-  })),
+  parseCookieString: vi.fn(() => [
+    { name: 'c_user', value: '123', domain: '.facebook.com', path: '/' },
+  ]),
 }));
 
 // Mock constants with test groups
@@ -42,9 +46,7 @@ vi.mock('../constants', async () => {
   const actual = await vi.importActual('../constants');
   return {
     ...actual,
-    MONITORED_GROUPS: [
-      { groupId: '111', name: 'Test Group' },
-    ],
+    MONITORED_GROUPS: [{ groupId: '111', name: 'Test Group' }],
   };
 });
 
@@ -107,7 +109,6 @@ describe('FacebookConnector', () => {
 
   describe('fetchNew', () => {
     it('returns empty when no groups configured', async () => {
-      // Override MONITORED_GROUPS to empty
       const { MONITORED_GROUPS } = await import('../constants');
       const original = [...MONITORED_GROUPS];
       MONITORED_GROUPS.length = 0;
@@ -118,48 +119,7 @@ describe('FacebookConnector', () => {
       expect(result.candidates).toHaveLength(0);
       expect(result.nextCursor).not.toBeNull();
 
-      // Restore
       MONITORED_GROUPS.push(...original);
-    });
-
-    it('returns empty when doc_id is missing', async () => {
-      const { getDocId } = await import('../accounts');
-      vi.mocked(getDocId).mockReturnValueOnce(null);
-
-      const mockDb = {} as any;
-      const result = await connector.fetchNew(null, mockDb);
-
-      expect(result.candidates).toHaveLength(0);
-    });
-
-    it('falls back to env tokens when extraction fails', async () => {
-      const { extractTokensFromHomepage, fetchWithRetry } = await import('../client');
-      vi.mocked(extractTokensFromHomepage).mockRejectedValueOnce(
-        new Error('Network error'),
-      );
-      vi.mocked(fetchWithRetry).mockResolvedValueOnce(
-        JSON.stringify({ data: { node: { __typename: 'Other' } } }),
-      );
-
-      const mockDb = {} as any;
-      const result = await connector.fetchNew(null, mockDb);
-
-      // Should still succeed using env fallback tokens
-      expect(fetchWithRetry).toHaveBeenCalled();
-    });
-
-    it('returns empty when extraction fails and no env tokens', async () => {
-      const { extractTokensFromHomepage } = await import('../client');
-      const { getGraphQLTokens } = await import('../accounts');
-      vi.mocked(extractTokensFromHomepage).mockRejectedValueOnce(
-        new Error('Network error'),
-      );
-      vi.mocked(getGraphQLTokens).mockReturnValueOnce(null);
-
-      const mockDb = {} as any;
-      const result = await connector.fetchNew(null, mockDb);
-
-      expect(result.candidates).toHaveLength(0);
     });
 
     it('respects circuit breaker', async () => {
@@ -181,53 +141,38 @@ describe('FacebookConnector', () => {
       expect(result.candidates).toHaveLength(0);
     });
 
-    it('parses GraphQL response and deduplicates', async () => {
-      const { fetchWithRetry } = await import('../client');
-      const mockFetch = vi.mocked(fetchWithRetry);
+    it('returns empty when all accounts disabled', async () => {
+      const { selectAccount } = await import('../accounts');
+      vi.mocked(selectAccount).mockReturnValueOnce(null);
 
-      // Return NDJSON with two Story nodes
-      const line0 = JSON.stringify({
-        data: {
-          node: {
-            __typename: 'GroupsSectionHeaderUnit',
-            group_feed: { edges: [] },
-          },
-        },
-      });
-      const line1 = JSON.stringify({
-        data: {
-          node: {
-            __typename: 'Story',
-            post_id: '100001',
-            permalink_url: 'https://www.facebook.com/groups/111/posts/100001/',
-            actors: [{ name: 'Alice' }],
-            comet_sections: {
-              content: {
-                story: { message: { text: 'דירת 3 חדרים להשכרה בתל אביב 5000 שח' } },
-              },
-              timestamp: { story: { creation_time: 1772471819 } },
-            },
-          },
-        },
-      });
-      const line2 = JSON.stringify({
-        data: {
-          node: {
-            __typename: 'Story',
-            post_id: '100002',
-            permalink_url: 'https://www.facebook.com/groups/111/posts/100002/',
-            actors: [{ name: 'Bob' }],
-            comet_sections: {
-              content: {
-                story: { message: { text: 'סטודיו בירושלים 3500 שח לחודש' } },
-              },
-              timestamp: { story: { creation_time: 1772471700 } },
-            },
-          },
-        },
-      });
+      const mockDb = {} as any;
+      const result = await connector.fetchNew(null, mockDb);
 
-      mockFetch.mockResolvedValueOnce([line0, line1, line2].join('\n'));
+      expect(result.candidates).toHaveLength(0);
+    });
+
+    it('extracts posts and deduplicates', async () => {
+      const { fetchGroupWithRetry } = await import('../client');
+      vi.mocked(fetchGroupWithRetry).mockResolvedValueOnce([
+        {
+          postId: '100001',
+          authorName: 'Alice',
+          content: 'דירת 3 חדרים להשכרה בתל אביב 5000 שח',
+          permalink: 'https://www.facebook.com/groups/111/posts/100001/',
+          postedAt: '2026-03-03T10:00:00.000Z',
+          imageUrl: null,
+          groupId: '111',
+        },
+        {
+          postId: '100002',
+          authorName: 'Bob',
+          content: 'סטודיו בירושלים 3500 שח לחודש',
+          permalink: 'https://www.facebook.com/groups/111/posts/100002/',
+          postedAt: '2026-03-03T10:05:00.000Z',
+          imageUrl: 'https://scontent.fcdn.net/img.jpg',
+          groupId: '111',
+        },
+      ]);
 
       // 100001 is already known
       const cursor = JSON.stringify({
@@ -246,45 +191,61 @@ describe('FacebookConnector', () => {
       // Only the new post should be returned
       expect(result.candidates).toHaveLength(1);
       expect(result.candidates[0].sourceItemId).toBe('100002');
-      // Title should be the first line (short enough to not truncate)
       expect(result.candidates[0].rawTitle).toBe('סטודיו בירושלים 3500 שח לחודש');
-      // Description should be the full content
       expect(result.candidates[0].rawDescription).toBe('סטודיו בירושלים 3500 שח לחודש');
     });
 
     it('truncates long titles and keeps full description', async () => {
-      const { fetchWithRetry } = await import('../client');
-      const mockFetch = vi.mocked(fetchWithRetry);
+      const { fetchGroupWithRetry } = await import('../client');
 
       const longFirstLine = 'דירת 3 חדרים להשכרה בתל אביב עם מרפסת שמש גדולה ונוף פתוח לים במיקום מושלם ליד הים';
       const fullContent = `${longFirstLine}\n\nפרטים נוספים:\n5000 שח לחודש`;
 
-      const line = JSON.stringify({
-        data: {
-          node: {
-            __typename: 'Story',
-            post_id: '200001',
-            permalink_url: 'https://www.facebook.com/groups/111/posts/200001/',
-            actors: [{ name: 'Test' }],
-            comet_sections: {
-              content: { story: { message: { text: fullContent } } },
-              timestamp: { story: { creation_time: 1772471819 } },
-            },
-          },
+      vi.mocked(fetchGroupWithRetry).mockResolvedValueOnce([
+        {
+          postId: '200001',
+          authorName: 'Test',
+          content: fullContent,
+          permalink: 'https://www.facebook.com/groups/111/posts/200001/',
+          postedAt: '2026-03-03T10:00:00.000Z',
+          imageUrl: null,
+          groupId: '111',
         },
-      });
-
-      mockFetch.mockResolvedValueOnce(line);
+      ]);
 
       const mockDb = {} as any;
       const result = await connector.fetchNew(null, mockDb);
 
       expect(result.candidates).toHaveLength(1);
       // Title should be truncated to 80 chars with ellipsis
-      expect(result.candidates[0].rawTitle.length).toBeLessThanOrEqual(81); // 80 + ellipsis char
+      expect(result.candidates[0].rawTitle.length).toBeLessThanOrEqual(81);
       expect(result.candidates[0].rawTitle).toContain('דירת 3 חדרים להשכרה');
       // Description should be the full content
       expect(result.candidates[0].rawDescription).toBe(fullContent);
+    });
+
+    it('launches and closes browser', async () => {
+      const { launchBrowser, closeBrowser, fetchGroupWithRetry } = await import('../client');
+      vi.mocked(fetchGroupWithRetry).mockResolvedValueOnce([]);
+
+      const mockDb = {} as any;
+      await connector.fetchNew(null, mockDb);
+
+      expect(launchBrowser).toHaveBeenCalledOnce();
+      expect(closeBrowser).toHaveBeenCalledOnce();
+    });
+
+    it('closes browser even on error', async () => {
+      const { launchBrowser, closeBrowser, fetchGroupWithRetry, FacebookClientError } = await import('../client');
+      vi.mocked(fetchGroupWithRetry).mockRejectedValueOnce(
+        new FacebookClientError('Auth expired', 'auth_expired', false),
+      );
+
+      const mockDb = {} as any;
+      await expect(connector.fetchNew(null, mockDb)).rejects.toThrow();
+
+      expect(launchBrowser).toHaveBeenCalledOnce();
+      expect(closeBrowser).toHaveBeenCalledOnce();
     });
   });
 });

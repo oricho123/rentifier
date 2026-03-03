@@ -2,7 +2,6 @@ import type {
   FacebookAccount,
   FacebookConfig,
   FacebookCursorState,
-  FacebookGraphQLTokens,
 } from './types';
 
 declare const process: { env: Record<string, string | undefined> };
@@ -34,26 +33,28 @@ export function getAccounts(config?: FacebookConfig): FacebookAccount[] {
 }
 
 /**
- * Read doc_id.
- * When config is provided, return config.docId; otherwise process.env.FB_DOC_ID.
+ * Convert raw cookie string (e.g. "c_user=123; xs=abc") to Playwright Cookie[] format.
  */
-export function getDocId(config?: FacebookConfig): string | null {
-  if (config) return config.docId;
-  return process.env.FB_DOC_ID ?? null;
-}
-
-/**
- * Read GraphQL tokens (optional fallback).
- * fb_dtsg/lsd are normally auto-extracted from the homepage.
- */
-export function getGraphQLTokens(config?: FacebookConfig): FacebookGraphQLTokens | null {
-  const docId = config?.docId ?? process.env.FB_DOC_ID;
-  const fbDtsg = config?.fbDtsg ?? process.env.FB_DTSG;
-  const lsd = config?.lsd ?? process.env.FB_LSD;
-
-  if (!docId || !fbDtsg || !lsd) return null;
-
-  return { docId, fbDtsg, lsd };
+export function parseCookieString(
+  cookieStr: string,
+): { name: string; value: string; domain: string; path: string }[] {
+  return cookieStr
+    .split(';')
+    .map((pair) => pair.trim())
+    .filter(Boolean)
+    .map((pair) => {
+      const eqIndex = pair.indexOf('=');
+      if (eqIndex === -1) return null;
+      const name = pair.slice(0, eqIndex).trim();
+      const value = pair.slice(eqIndex + 1).trim();
+      return {
+        name,
+        value,
+        domain: '.facebook.com',
+        path: '/',
+      };
+    })
+    .filter((c): c is NonNullable<typeof c> => c !== null);
 }
 
 /**

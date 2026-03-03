@@ -1,119 +1,158 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { extractTokensFromHomepage, FacebookClientError } from '../client';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { detectAuthFailure, extractPostsFromDOM, FacebookClientError } from '../client';
+import { parseCookieString } from '../accounts';
 
-describe('extractTokensFromHomepage', () => {
-  const mockFetch = vi.fn();
-
-  beforeEach(() => {
-    vi.stubGlobal('fetch', mockFetch);
+describe('parseCookieString', () => {
+  it('parses basic cookie string', () => {
+    const result = parseCookieString('c_user=123; xs=abc');
+    expect(result).toEqual([
+      { name: 'c_user', value: '123', domain: '.facebook.com', path: '/' },
+      { name: 'xs', value: 'abc', domain: '.facebook.com', path: '/' },
+    ]);
   });
 
-  afterEach(() => {
-    vi.restoreAllMocks();
+  it('handles values with equals signs', () => {
+    const result = parseCookieString('token=abc=def=ghi');
+    expect(result).toHaveLength(1);
+    expect(result[0].name).toBe('token');
+    expect(result[0].value).toBe('abc=def=ghi');
   });
 
-  function mockHomepage(html: string) {
-    mockFetch.mockResolvedValueOnce({
-      ok: true,
-      text: () => Promise.resolve(html),
-    });
+  it('handles extra whitespace', () => {
+    const result = parseCookieString('  c_user = 123 ;  xs = abc  ');
+    expect(result).toHaveLength(2);
+    expect(result[0].name).toBe('c_user');
+    expect(result[0].value).toBe('123');
+  });
+
+  it('returns empty array for empty string', () => {
+    const result = parseCookieString('');
+    expect(result).toHaveLength(0);
+  });
+
+  it('skips entries without equals sign', () => {
+    const result = parseCookieString('c_user=123; invalid; xs=abc');
+    expect(result).toHaveLength(2);
+    expect(result[0].name).toBe('c_user');
+    expect(result[1].name).toBe('xs');
+  });
+});
+
+describe('detectAuthFailure', () => {
+  function mockPage(url: string, hasLoginForm = false) {
+    return {
+      url: () => url,
+      $: vi.fn().mockResolvedValue(hasLoginForm ? {} : null),
+    } as any;
   }
 
-  it('extracts tokens from DTSGInitData pattern', async () => {
-    mockHomepage(
-      '...{"DTSGInitData":[],"token":"abc123_dtsg"}...' +
-        '..."LSD",[],{"token":"lsd_token_1"},"lsd_val_1"]...',
-    );
-
-    const result = await extractTokensFromHomepage('c_user=123; xs=abc');
-
-    expect(result.fbDtsg).toBe('abc123_dtsg');
-    expect(result.lsd).toBe('lsd_val_1');
+  it('detects login page redirect', async () => {
+    const page = mockPage('https://www.facebook.com/login/?next=...');
+    const result = await detectAuthFailure(page);
+    expect(result).toBe('auth_expired');
   });
 
-  it('extracts tokens from form input pattern', async () => {
-    mockHomepage(
-      '<input type="hidden" name="fb_dtsg" value="form_dtsg_value" />' +
-        '<input type="hidden" name="lsd" value="form_lsd_value" />',
-    );
-
-    const result = await extractTokensFromHomepage('c_user=123; xs=abc');
-
-    expect(result.fbDtsg).toBe('form_dtsg_value');
-    expect(result.lsd).toBe('form_lsd_value');
+  it('detects login.php redirect', async () => {
+    const page = mockPage('https://www.facebook.com/login.php?login_attempt=1');
+    const result = await detectAuthFailure(page);
+    expect(result).toBe('auth_expired');
   });
 
-  it('extracts tokens from dtsg.token pattern', async () => {
-    mockHomepage(
-      '..."dtsg":{"token":"nested_dtsg_tok"}...' +
-        '<input type="hidden" name="lsd" value="nested_lsd" />',
-    );
-
-    const result = await extractTokensFromHomepage('c_user=123; xs=abc');
-
-    expect(result.fbDtsg).toBe('nested_dtsg_tok');
-    expect(result.lsd).toBe('nested_lsd');
+  it('detects checkpoint redirect', async () => {
+    const page = mockPage('https://www.facebook.com/checkpoint/block/?id=123');
+    const result = await detectAuthFailure(page);
+    expect(result).toBe('banned');
   });
 
-  it('returns empty lsd when lsd not found', async () => {
-    mockHomepage('...{"DTSGInitData":[],"token":"dtsg_only"}...');
-
-    const result = await extractTokensFromHomepage('c_user=123; xs=abc');
-
-    expect(result.fbDtsg).toBe('dtsg_only');
-    expect(result.lsd).toBe('');
+  it('detects login form in page content', async () => {
+    const page = mockPage('https://www.facebook.com/', true);
+    const result = await detectAuthFailure(page);
+    expect(result).toBe('auth_expired');
   });
 
-  it('throws auth_expired on login page', async () => {
-    mockHomepage('<form id="login_form"><input name="email" /></form>');
+  it('returns null for normal page', async () => {
+    const page = mockPage('https://www.facebook.com/groups/123');
+    const result = await detectAuthFailure(page);
+    expect(result).toBeNull();
+  });
+});
 
-    try {
-      await extractTokensFromHomepage('c_user=123; xs=abc');
-      expect.fail('Should have thrown');
-    } catch (e) {
-      expect(e).toBeInstanceOf(FacebookClientError);
-      expect((e as FacebookClientError).errorType).toBe('auth_expired');
-    }
+describe('extractPostsFromDOM', () => {
+  function mockPageWithPosts(posts: any[]) {
+    return {
+      $: vi.fn().mockResolvedValue({}), // feed exists
+      evaluate: vi.fn().mockResolvedValue(posts),
+    } as any;
+  }
+
+  function mockPageWithoutFeed() {
+    return {
+      $: vi.fn().mockResolvedValue(null),
+      url: vi.fn().mockReturnValue('https://www.facebook.com/groups/123'),
+    } as any;
+  }
+
+  it('returns posts from page.evaluate result', async () => {
+    const mockPosts = [
+      {
+        postId: '100001',
+        authorName: 'Alice',
+        content: 'דירת 3 חדרים להשכרה בתל אביב',
+        permalink: 'https://www.facebook.com/groups/123/posts/100001/',
+        postedAt: '2026-03-03T10:00:00.000Z',
+        imageUrl: 'https://scontent.fcdn.net/img.jpg',
+        groupId: '123',
+      },
+      {
+        postId: '100002',
+        authorName: 'Bob',
+        content: 'סטודיו בירושלים 3500 שח לחודש',
+        permalink: 'https://www.facebook.com/groups/123/posts/100002/',
+        postedAt: '2026-03-03T10:05:00.000Z',
+        imageUrl: null,
+        groupId: '123',
+      },
+    ];
+
+    const page = mockPageWithPosts(mockPosts);
+    const result = await extractPostsFromDOM(page, '123');
+
+    expect(result).toHaveLength(2);
+    expect(result[0].postId).toBe('100001');
+    expect(result[0].authorName).toBe('Alice');
+    expect(result[0].content).toContain('3 חדרים');
+    expect(result[1].postId).toBe('100002');
+    expect(result[1].authorName).toBe('Bob');
   });
 
-  it('throws banned on checkpoint page', async () => {
-    mockHomepage(
-      '<div>Your account has been locked.</div><a href="/checkpoint/block/">Verify</a>',
-    );
-
-    try {
-      await extractTokensFromHomepage('c_user=123; xs=abc');
-      expect.fail('Should have thrown');
-    } catch (e) {
-      expect(e).toBeInstanceOf(FacebookClientError);
-      expect((e as FacebookClientError).errorType).toBe('banned');
-    }
+  it('returns empty array when feed is not found', async () => {
+    const page = mockPageWithoutFeed();
+    const result = await extractPostsFromDOM(page, '123');
+    expect(result).toHaveLength(0);
   });
 
-  it('throws parse error when no patterns match', async () => {
-    mockHomepage('<html><body>Some page with no tokens</body></html>');
+  it('returns empty array when evaluate returns non-array', async () => {
+    const page = {
+      $: vi.fn().mockResolvedValue({}),
+      evaluate: vi.fn().mockResolvedValue(null),
+    } as any;
 
-    try {
-      await extractTokensFromHomepage('c_user=123; xs=abc');
-      expect.fail('Should have thrown');
-    } catch (e) {
-      expect(e).toBeInstanceOf(FacebookClientError);
-      expect((e as FacebookClientError).errorType).toBe('parse');
-    }
+    const result = await extractPostsFromDOM(page, '123');
+    expect(result).toHaveLength(0);
+  });
+});
+
+describe('FacebookClientError', () => {
+  it('sets properties correctly', () => {
+    const error = new FacebookClientError('test error', 'auth_expired', false);
+    expect(error.message).toBe('test error');
+    expect(error.errorType).toBe('auth_expired');
+    expect(error.retryable).toBe(false);
+    expect(error.name).toBe('FacebookClientError');
   });
 
-  it('throws network error on HTTP failure', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-    });
-
-    try {
-      await extractTokensFromHomepage('c_user=123; xs=abc');
-      expect.fail('Should have thrown');
-    } catch (e) {
-      expect(e).toBeInstanceOf(FacebookClientError);
-      expect((e as FacebookClientError).errorType).toBe('network');
-    }
+  it('is an instance of Error', () => {
+    const error = new FacebookClientError('test', 'network', true);
+    expect(error).toBeInstanceOf(Error);
   });
 });

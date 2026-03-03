@@ -76,6 +76,55 @@ describe('extractPrice', () => {
     const result = extractPrice('דירה יפה');
     expect(result).toBeNull();
   });
+
+  // Facebook Hebrew patterns
+  it('should extract price with ב prefix (ב7,600)', () => {
+    const result = extractPrice('ב7,600!!דירה ענקית');
+    expect(result?.amount).toBe(7600);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it('should extract price with ב- prefix (ב-4,500)', () => {
+    const result = extractPrice('להשכרה ב-4,500 לחודש');
+    expect(result?.amount).toBe(4500);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it("should extract price with שכ'ד prefix", () => {
+    const result = extractPrice("שכ'ד: 6300 ש'ח");
+    expect(result?.amount).toBe(6300);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it("should extract price with ש'ח currency", () => {
+    const result = extractPrice("6300 ש'ח");
+    expect(result?.amount).toBe(6300);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it('should extract price with ש"ח (ASCII double-quote)', () => {
+    const result = extractPrice('9,500 ש"ח');
+    expect(result?.amount).toBe(9500);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it('should extract price with שכ״ד prefix', () => {
+    const result = extractPrice('שכ״ד 8,500');
+    expect(result?.amount).toBe(8500);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it('should extract price with שכירות prefix', () => {
+    const result = extractPrice('שכירות 2980 והחשבונות נמוכים');
+    expect(result?.amount).toBe(2980);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it('should not match ב prefix with non-rental numbers', () => {
+    // Single numbers like "ב3" (at 3) shouldn't match — need comma-separated thousands
+    const result = extractPrice('קומה ב3 בניין');
+    expect(result).toBeNull();
+  });
 });
 
 describe('extractBedrooms', () => {
@@ -97,6 +146,28 @@ describe('extractBedrooms', () => {
   it('should extract rooms with ח׳ abbreviation', () => {
     expect(extractBedrooms('3 ח׳')).toBe(3);
     expect(extractBedrooms("4 ח'")).toBe(4);
+  });
+
+  // Facebook Hebrew abbreviations
+  it('should extract rooms with חד abbreviation (no space)', () => {
+    expect(extractBedrooms('2חד')).toBe(2);
+  });
+
+  it("should extract rooms with חד׳ abbreviation", () => {
+    expect(extractBedrooms('4 חד׳ עם מרפסת')).toBe(4);
+  });
+
+  it('should extract rooms from דירת prefix', () => {
+    expect(extractBedrooms('דירת 3 חדרים ענקית')).toBe(3);
+  });
+
+  it('should extract rooms with half rooms and חד', () => {
+    expect(extractBedrooms('3.5 חד')).toBe(3.5);
+  });
+
+  it('should extract rooms from concatenated text (2חדקודן)', () => {
+    // "2חד" followed by other text without space
+    expect(extractBedrooms('2חדקודן בכניסה')).toBe(2);
   });
 
   it('should return null for no match', () => {
@@ -139,6 +210,28 @@ describe('extractTags', () => {
   it('should extract air-conditioning tag', () => {
     const tags = extractTags('עם מזגן');
     expect(tags).toContain('air-conditioning');
+  });
+
+  it('should not tag elevator when negated (בלי מעלית)', () => {
+    const tags = extractTags('קומה 2 בלי מעלית');
+    expect(tags).not.toContain('elevator');
+  });
+
+  it('should not tag when negated with ללא', () => {
+    const tags = extractTags('ללא חניה');
+    expect(tags).not.toContain('parking');
+  });
+
+  it('should not tag when negated with אין', () => {
+    const tags = extractTags('אין מזגן');
+    expect(tags).not.toContain('air-conditioning');
+  });
+
+  it('should still tag non-negated keywords', () => {
+    const tags = extractTags('בלי מעלית אבל יש מזגן וחניה');
+    expect(tags).not.toContain('elevator');
+    expect(tags).toContain('air-conditioning');
+    expect(tags).toContain('parking');
   });
 
   it('should return empty array for no tags', () => {
@@ -226,6 +319,15 @@ describe('extractLocation', () => {
       city: 'תל אביב',
       neighborhood: 'קריית שלום',
       confidence: 0.85,
+    });
+  });
+
+  it('should match ת״א (Hebrew gershayim abbreviation)', () => {
+    const result = extractLocation('במרכז ת״א');
+    expect(result).toEqual({
+      city: 'תל אביב',
+      neighborhood: null,
+      confidence: 0.8,
     });
   });
 
@@ -320,5 +422,47 @@ describe('extractAll', () => {
     const result = extractAll(title, description);
 
     expect(result.overallConfidence).toBe(0.7);
+  });
+
+  // Real-world Facebook posts
+  it('should extract from Facebook post with ב prefix price', () => {
+    const title = 'ל-2 שותפים או משפחה !!  דירת 3 חדרים ענקית שמורה ומוארת !!';
+    const description = 'ל-2 שותפים או משפחה !!  דירת 3 חדרים ענקית שמורה ומוארת !!  + 2 מרפסות סגורות מרווחות !! בקרבת כיכר רבין פרישמן וצייטלין !!  ב7,600!!';
+    const result = extractAll(title, description);
+
+    expect(result.price?.amount).toBe(7600);
+    expect(result.bedrooms).toBe(3);
+    expect(result.tags).toContain('balcony');
+  });
+
+  it("should extract from Facebook post with שכ'ד price", () => {
+    const title = '*** להשכרה, 2חד - מרכז העיר ***';
+    const description = "*** להשכרה, 2חד - מרכז העיר ***אזור - מרכז / לב העיררחוב קרית ספר2חדקודן בכניסהקרקע65 מ'רשכ'ד: 6300 ש'ח";
+    const result = extractAll(title, description);
+
+    expect(result.price?.amount).toBe(6300);
+    expect(result.bedrooms).toBe(2);
+  });
+
+  it('should extract from Facebook post with שכירות price and ת״א', () => {
+    const title = '*חזרה להיות רלוונטית*החדר הכי גדול ושווה במרכז ת״א !';
+    const description = '*חזרה להיות רלוונטית*החדר הכי גדול ושווה במרכז ת״א ! ברחוב אבן גבירול (בין הבימה לכיכר רבין) שכירות 2980 והחשבונות נמוכים יחסית.כניסה- מיידית קומה 2 בלי מעלית';
+    const result = extractAll(title, description);
+
+    expect(result.price?.amount).toBe(2980);
+    expect(result.price?.currency).toBe('ILS');
+    expect(result.location?.city).toBe('תל אביב');
+    expect(result.tags).toContain('immediate');
+    expect(result.tags).not.toContain('elevator'); // "בלי מעלית" = without elevator
+  });
+
+  it('should extract from Facebook post with מחיר and ₪', () => {
+    const title = 'להשכרה בפריים לוקיישון בלב ת"א ברחוב דיזינגוף';
+    const description = 'להשכרה בפריים לוקיישון בלב ת"א ברחוב דיזינגוף ליד הסנטר דירת סטודיו כ-25 מטר עם גלרית שינה משופצת מחיר 3000 ₪';
+    const result = extractAll(title, description);
+
+    expect(result.price?.amount).toBe(3000);
+    expect(result.bedrooms).toBe(0); // סטודיו
+    expect(result.tags).toContain('renovated');
   });
 });

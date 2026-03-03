@@ -36,6 +36,7 @@ export const CITY_VARIANTS: Record<string, string> = {
   'תל-אביב': 'תל אביב',
   'תל אביב יפו': 'תל אביב',
   'ת"א': 'תל אביב',
+  'ת״א': 'תל אביב',
   'tel aviv': 'תל אביב',
   'tel-aviv': 'תל אביב',
   'tlv': 'תל אביב',

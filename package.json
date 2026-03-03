@@ -29,6 +29,7 @@
     "webhook:setup": "tsx scripts/setup-webhook.ts",
     "ngrok:notify": "ngrok http 8789",
     "collect:facebook": "tsx --env-file=.env scripts/collect-facebook.ts",
+    "collect:facebook:local": "tsx --env-file=.env scripts/collect-facebook.ts --local",
     "debug:facebook": "tsx --env-file=.env scripts/debug-facebook-graphql.ts",
     "test:yad2": "tsx scripts/test-yad2-api.ts"
   },
@@ -48,6 +49,7 @@
     "concurrently": "^9.2.1",
     "dotenv": "^17.3.1",
     "eslint": "^8.57.0",
+    "playwright": "^1.58.2",
     "prettier": "^3.2.0",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",

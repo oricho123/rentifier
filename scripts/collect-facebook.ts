@@ -1,26 +1,46 @@
 /**
  * GitHub Actions scraper for Facebook Groups.
  *
- * Fetches posts via Facebook's internal GraphQL API using cookie-based auth.
- * Uses D1RestClient to access the database via Cloudflare's D1 REST API.
+ * Uses Playwright headless browser to scrape posts from Facebook group feeds.
  *
- * Required env vars (set as GitHub Actions secrets):
+ * Modes:
+ *   --local   Use local D1 database (via wrangler getPlatformProxy)
+ *   default   Use remote D1 via REST API (for GitHub Actions)
+ *
+ * Required env vars (remote mode / GitHub Actions secrets):
  *   CF_ACCOUNT_ID        — Cloudflare account ID
  *   CF_API_TOKEN         — Cloudflare API token with D1:Edit permission
  *   CF_D1_DATABASE_ID    — D1 database ID
+ *
+ * Required env vars (both modes):
  *   FB_ACCOUNT_COUNT     — Number of Facebook accounts (default: 1)
  *   FB_COOKIES_1..N      — Cookie strings per account
- *   FB_DOC_ID            — GraphQL doc_id for group feed query
- *   TELEGRAM_BOT_TOKEN   — Telegram bot token (for admin alerts)
- *   TELEGRAM_ADMIN_CHAT_ID — Admin's Telegram chat ID (for cookie expiry alerts)
- *
- * Optional env vars (fallback if auto-extraction fails):
- *   FB_DTSG              — Facebook CSRF token (auto-extracted from homepage)
- *   FB_LSD               — Facebook LSD token (auto-extracted from homepage)
+ *   TELEGRAM_BOT_TOKEN   — Telegram bot token (for admin alerts, optional)
+ *   TELEGRAM_ADMIN_CHAT_ID — Admin's Telegram chat ID (optional)
  */
 
-import { FacebookConnector, FacebookClientError } from '@rentifier/connectors';
+import { FacebookConnector } from '@rentifier/connectors/src/facebook';
+import { FacebookClientError } from '@rentifier/connectors/src/facebook/client';
 import { createRestDBFromEnv } from '@rentifier/db';
+import type { DB } from '@rentifier/db';
+
+const isLocal = process.argv.includes('--local');
+
+async function getDB(): Promise<{ db: DB; cleanup?: () => Promise<void> }> {
+  if (isLocal) {
+    // Use wrangler's getPlatformProxy to get local D1 binding
+    const { getPlatformProxy } = await import('wrangler');
+    const proxy = await getPlatformProxy({
+      configPath: 'apps/collector/wrangler.json',
+      persist: { path: '.wrangler/v3' },
+    });
+    // Import createDB dynamically to avoid ESM resolution issues with D1Database types
+    const { createDB } = await import('@rentifier/db/src/queries');
+    const db = createDB(proxy.env.DB as never);
+    return { db, cleanup: () => proxy.dispose() };
+  }
+  return { db: createRestDBFromEnv() };
+}
 
 /**
  * Send a Telegram notification to the admin about cookie expiry.
@@ -86,7 +106,8 @@ async function notifyAdminCookieExpiry(
 }
 
 async function main() {
-  const db = createRestDBFromEnv();
+  const { db, cleanup } = await getDB();
+  if (isLocal) console.log('Using local D1 database');
 
   // Resolve facebook source row
   const sources = await db.getEnabledSources();
@@ -192,6 +213,8 @@ async function main() {
       candidateCount: candidates.length,
     }),
   );
+
+  if (cleanup) await cleanup();
 }
 
 main().catch((err) => {
