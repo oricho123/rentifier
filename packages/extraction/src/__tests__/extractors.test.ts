@@ -102,6 +102,12 @@ describe('extractPrice', () => {
     expect(result?.currency).toBe('ILS');
   });
 
+  it('should extract price with ש"ח (ASCII double-quote)', () => {
+    const result = extractPrice('9,500 ש"ח');
+    expect(result?.amount).toBe(9500);
+    expect(result?.currency).toBe('ILS');
+  });
+
   it('should extract price with שכ״ד prefix', () => {
     const result = extractPrice('שכ״ד 8,500');
     expect(result?.amount).toBe(8500);

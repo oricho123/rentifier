@@ -1,5 +1,5 @@
 export const PRICE_PATTERNS: { pattern: RegExp; currency: 'ILS' | 'USD' | 'EUR' }[] = [
-  { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*(?:ש״ח|שח|ש[׳']ח|shekel|שקל)/i, currency: 'ILS' },
+  { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*(?:שח|ש[״׳'"""]ח|shekel|שקל)/i, currency: 'ILS' },
   { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*₪/, currency: 'ILS' },
   { pattern: /₪\s*(\d+(?:\.\d+)?)/, currency: 'ILS' },
   // "מחיר" / "שכירות" / "שכ'ד" (שכר דירה) prefix implies ILS
