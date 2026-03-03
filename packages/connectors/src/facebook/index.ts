@@ -10,26 +10,14 @@ import {
   FacebookClientError,
 } from './client';
 import { getAccounts, selectAccount } from './accounts';
-import { extractAll } from '@rentifier/extraction';
+import { extractTitle } from './normalize';
+import { FacebookNormalizer } from './normalize';
 import {
   MONITORED_GROUPS,
   MAX_CONSECUTIVE_FAILURES,
   CIRCUIT_OPEN_DURATION_MS,
   MAX_KNOWN_POST_IDS,
 } from './constants';
-
-const MAX_TITLE_LENGTH = 80;
-
-/**
- * Extract a short title from a Facebook post's content.
- * Uses the first non-empty line, truncated to MAX_TITLE_LENGTH chars.
- */
-function extractTitle(content: string): string {
-  const firstLine = content.split('\n').find((line) => line.trim().length > 0) ?? content;
-  const trimmed = firstLine.trim();
-  if (trimmed.length <= MAX_TITLE_LENGTH) return trimmed;
-  return trimmed.slice(0, MAX_TITLE_LENGTH).trimEnd() + '…';
-}
 
 function createDefaultCursorState(): FacebookCursorState {
   return {
@@ -228,34 +216,9 @@ export class FacebookConnector implements Connector {
     }
   }
 
-  normalize(candidate: ListingCandidate): ListingDraft {
-    const extraction = extractAll(candidate.rawTitle, candidate.rawDescription);
+  private normalizer = new FacebookNormalizer();
 
-    return {
-      sourceId: this.sourceId,
-      sourceItemId: candidate.sourceItemId,
-      title: candidate.rawTitle,
-      description: candidate.rawDescription,
-      price: extraction.price?.amount ?? null,
-      currency: (extraction.price?.currency as 'ILS' | 'USD' | 'EUR') ?? null,
-      pricePeriod: extraction.price?.period ?? null,
-      bedrooms: extraction.bedrooms,
-      city: extraction.location?.city ?? null,
-      neighborhood: extraction.location?.neighborhood ?? null,
-      street: extraction.street,
-      houseNumber: null,
-      tags: extraction.tags,
-      url: candidate.rawUrl,
-      postedAt: candidate.rawPostedAt ? new Date(candidate.rawPostedAt) : null,
-      floor: null,
-      squareMeters: null,
-      propertyType: null,
-      latitude: null,
-      longitude: null,
-      imageUrl:
-        (candidate.sourceData as Record<string, unknown>)?.imageUrl as
-          | string
-          | null ?? null,
-    };
+  normalize(candidate: ListingCandidate): ListingDraft {
+    return this.normalizer.normalize(candidate);
   }
 }
