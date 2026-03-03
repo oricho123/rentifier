@@ -139,13 +139,15 @@
 - AI Gateway enabled for observability (rentifier-ai-gateway)
 - Status: Deployed to production (PR #36, migration 0012)
 
-**Duplicate Detection** - SPECIFIED
+**Duplicate Detection** - COMPLETE
 
-- Detect same listing posted across YAD2 + Facebook via field-based matching
-- Match on city + bedrooms + price (±10%) + street/neighborhood/coordinates
-- Source priority: YAD2 preferred as canonical over Facebook
-- Notify worker filters out duplicates via `WHERE duplicate_of IS NULL`
-- Spec: `.specs/features/duplicate-detection/spec.md`
+- Cross-source and cross-group dedup via field-based matching (PR #38)
+- Match on city + bedrooms + price (±10%) + scoring (street, neighborhood, coordinates)
+- Source priority: Facebook preferred as canonical over YAD2
+- Notify worker filters duplicates via `WHERE duplicate_of IS NULL`
+- Migration 0013: `duplicate_of` column + partial dedup index
+- 35 new tests (29 unit + 6 integration), 302 total
+- Spec/design/tasks: `.specs/features/duplicate-detection/`
 
 **Brokerage Detection** - PLANNED
 

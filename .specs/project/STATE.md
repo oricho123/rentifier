@@ -1,7 +1,7 @@
 # State
 
 **Last Updated:** 2026-03-03
-**Current Work:** M5 in progress. AI extraction DEPLOYED (PR #36, migration 0012, AI Gateway enabled). Duplicate detection SPECIFIED (`.specs/features/duplicate-detection/spec.md`) — field-based cross-source matching, source priority (YAD2 > Facebook), `duplicate_of` column. 267 tests, 0 typecheck errors. Next: design + tasks for duplicate-detection, then brokerage-detection and sublet-classification.
+**Current Work:** M5 in progress. AI extraction DEPLOYED (PR #36, migration 0012, AI Gateway `rentifier-ai-gateway`). Duplicate detection IMPLEMENTED (PR #38, 2 commits) — field-based cross-source matching (city + bedrooms + price ±10% + street/neighborhood/coordinates scoring), source priority Facebook > YAD2, `duplicate_of` column (migration 0013), notify worker filters via `WHERE duplicate_of IS NULL`. Also handles same-apartment across different Facebook groups. Comprehensive README rewrite merged (PR #37). Cron schedules offset to reduce GH Actions throttling. 302 tests, 0 typecheck errors. Pending: merge PR #38, deploy migration 0013 + processor. Next: brokerage-detection (spec done), sublet-classification (spec done).
 
 ---
 
