@@ -43,6 +43,8 @@ describe('NotificationService - Image Integration', () => {
     latitude: null,
     longitude: null,
     image_url: null,
+    entry_date: null,
+    ai_extracted: 0,
     ...overrides,
   });
 

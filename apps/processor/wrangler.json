@@ -18,5 +18,8 @@
 			"database_id": "554a9f64-3cfb-4e27-b83c-0f92907c8794",
 			"migrations_dir": "../../packages/db/migrations"
 		}
-	]
+	],
+	"ai": {
+		"binding": "AI"
+	}
 }

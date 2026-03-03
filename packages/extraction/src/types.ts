@@ -19,4 +19,7 @@ export interface ExtractionResult {
   location: LocationResult | null;
   isSearchPost: boolean;
   overallConfidence: number;
+  floor: number | null;
+  squareMeters: number | null;
+  entryDate: string | null;
 }

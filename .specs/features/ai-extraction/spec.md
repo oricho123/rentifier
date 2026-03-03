@@ -2,100 +2,95 @@
 
 ## Problem
 
-Regex-based extraction is brittle for Hebrew Facebook posts:
-- Price formats vary wildly (`מחיר 8650`, `8,650 ש"ח`, `8650₪`, just `8650` with no label)
-- Bedrooms use many abbreviations (`3 ח'`, `3 חד'`, `3.5 חדרים`, `שלושה חדרים`)
-- City/neighborhood often implied by context, not stated explicitly
-- Street names have many formats (`ברח' יעל`, `רח יעל`, `ברחוב יעל`)
-- Non-rental posts (fitness classes, ads) get processed as listings
-- Phone numbers, entry dates, floor numbers not extracted
+The regex-based extraction pipeline misses data from listings that don't follow expected patterns. Facebook posts are especially problematic — free-text with no structure, Hebrew slang, run-together text (no newlines), and mixed languages. When extraction fails, listings get `null` fields for price, bedrooms, city, or neighborhood, making them unmatchable against user filters and invisible to users.
 
-## Solution: Cloudflare Workers AI
+### Evidence (from production DB, 2,181 listings)
 
-Use Cloudflare's built-in AI binding (`@cf/meta/llama-3.1-8b-instruct` or similar) to extract structured data from post text. The free tier includes 10,000 neurons/day — sufficient for our volume.
+**Field coverage:**
+- Missing price: 29 (1.3%) — some intentionally hidden by seller (no price listed)
+- Missing city: 30 (1.4%) — most get city from group defaults
+- Missing neighborhood: 269 (12.3%) — biggest gap
+- Missing street: 328 (15%) — requires explicit "רחוב/ברחוב" prefix
+- Missing bedrooms: 39 (1.8%)
 
-## Approach: Hybrid regex + AI
+**Confidence distribution is broken:**
+- 98% of listings get `relevance_score = 0.7` (price matched without explicit period)
+- Only 17 listings get `null` (no price AND no location found)
+- The 0.8/0.85/0.9 scores are rare because `overallConfidence = min(price, location)` and price almost always returns 0.7
+- A `< 0.5` threshold would only trigger for 17 listings — useless as a gate
 
-1. **Regex first** (cheap, fast) — extract what we can with existing patterns
-2. **AI second** (only when regex misses fields) — send to LLM for structured extraction
-3. **AI as relevance filter** — classify post as rental/not-rental before processing
+**Street extraction was broken** (fixed in PR #35 but production data still has old extractions):
+- "בודנהיימר המבוקש דירת 4 חדרים" — captured garbage past street name
+- "מלכי ישראל3חד'100 מ'רקו…" — run-together Facebook text captured as street
 
-### AI extraction prompt (structured output)
+**Other gaps:**
+- Non-rental posts (ads, community announcements) still get processed
+- No extraction for: floor number, square meters, entry date
+- Some listings intentionally omit price — AI should NOT hallucinate one
 
-```
-Given this Hebrew Facebook post from a rental group, extract:
-- is_rental: boolean (is this a rental listing?)
-- price: number | null
-- currency: ILS/USD/EUR | null
-- bedrooms: number | null
-- city: string | null
-- neighborhood: string | null
-- street: string | null
-- floor: number | null
-- square_meters: number | null
-- entry_date: string | null
-- phone: string | null
-- tags: string[] (parking, balcony, pets, furnished, elevator, etc.)
-
-Post: {text}
-
-Respond as JSON only.
-```
-
-## Architecture
+### Current Pipeline (processor `pipeline.ts`)
 
 ```
-PostText
-  → regexExtract()          // existing, free
-  → if (missing fields || low confidence)
-      → aiExtract(env.AI)   // Cloudflare Workers AI binding
-  → mergeResults()          // prefer AI when regex is null/low-confidence
-  → ListingDraft
+ListingRaw → parse JSON → isSearchPost? → connector.normalize() → extractAll() → upsert
 ```
 
-## Implementation Plan
+Extraction runs after normalization. The processor merges regex results with connector draft fields (extraction takes priority when non-null). `overallConfidence` is stored as `relevance_score`.
 
-### 1. Add AI binding to processor worker
-- `wrangler.toml`: add `[ai]` binding
-- `Env` interface: add `AI: Ai`
+## Scope
 
-### 2. Create `packages/extraction/src/ai-extractor.ts`
-- `aiExtract(text: string, ai: Ai): Promise<AiExtractionResult>`
-- Structured prompt with JSON schema
-- Timeout + fallback to regex-only
+**In scope:**
+- AI fallback extraction for: price, bedrooms, city, neighborhood, street, tags
+- New field extraction: floor, square meters, entry date
+- Rental vs. non-rental classification (replaces/augments regex `isSearchPost`)
+- Confidence-gated invocation — only call AI when regex misses critical fields
 
-### 3. Update processor pipeline
-- After regex extraction, check for missing critical fields (price, bedrooms, city)
-- If missing, call AI extractor
-- Merge results: AI fills gaps, regex values take precedence when confident
+**Out of scope:**
+- AI-generated listing summaries (defer to M6)
+- Image analysis / OCR on listing photos
+- Replacing regex extraction — AI is a fallback, not a replacement
+- Phone number extraction (privacy concerns)
 
-### 4. Add relevance filtering
-- AI classifies posts as rental/not-rental
-- Non-rental posts skipped before normalization
-- Saves processing time and reduces noise
+## Requirements
 
-## Cloudflare Workers AI Free Tier
+### R1: Field-Gated AI Fallback
+Invoke AI extraction when regex `extractAll()` has missing fields that AI could fill. Gate conditions (any triggers AI):
+- Neighborhood is null (12% of listings — biggest gap)
+- Street is null (15% of listings)
+- Price is null AND listing text is long enough to likely contain one (>50 chars)
+- City is null (after group default fallback)
 
-- 10,000 neurons/day (free)
-- Models: `@cf/meta/llama-3.1-8b-instruct`, `@cf/mistral/mistral-7b-instruct-v0.2`
-- No API keys needed — native Worker binding
-- Latency: ~200-500ms per call
+Skip AI for YAD2 listings (structured source, regex is sufficient). Note: some listings intentionally omit price — AI must return null for these rather than hallucinate a number.
 
-## Estimated Volume
+**Note on call volume:** Because neighborhood and street are missing in 12-15% of listings, AI will trigger for ~85% of Facebook posts. This is intentional — neighborhood and street extraction from free-text without "רחוב" prefix is high-value. The budget cap (R4, default 20 calls/batch) protects against cost overruns. With ~50-100 posts/day and 48 processor batches/day, the budget is sufficient. Monitor AI metrics after deployment and adjust `maxCallsPerBatch` if needed.
 
-- ~50-100 posts/day across all groups
-- AI only called when regex misses fields (~60-70% of Facebook posts)
-- Well within free tier limits
+### R2: Structured JSON Output
+AI must return fields matching `ExtractionResult` shape plus new fields (floor, sqm, entry date). Prompt must enforce JSON-only responses. Parse with validation — reject malformed responses gracefully.
 
-## Risks
+### R3: Field Merging Priority
+1. Regex-extracted fields with confidence > 0 (highest priority)
+2. AI-extracted fields (fill gaps)
+3. Connector draft fields (lowest priority — from normalize())
 
-- AI hallucination (mitigated by regex-first approach + validation)
-- Latency increase in processor (mitigated by only calling AI when needed)
-- Model quality for Hebrew (test with real posts before deploying)
+AI-filled fields get a fixed confidence modifier (e.g., 0.6) to distinguish from regex matches.
+
+### R4: Cost Control
+- Cloudflare Workers AI free tier: 10,000 neurons/day
+- Budget: max AI calls per processor batch (configurable, default 20)
+- Track AI call count in processor metrics
+- Graceful degradation: if AI fails or budget exhausted, fall back to regex-only
+
+### R5: Latency Budget
+AI adds ~200-500ms per call. Processor batch (50 listings) currently runs in ~2s. With AI on ~60% of Facebook posts (~30 calls), worst case adds ~15s. Parallelize AI calls within batch to keep total under 10s.
+
+### R6: Non-Rental Classification
+AI classifies posts as rental/not-rental. Non-rental posts get flagged to skip notification matching. This augments the existing regex `isSearchPost()` which only catches "searching for apartment" posts but misses ads, community posts, etc.
 
 ## Success Criteria
 
-- Price extraction rate: >90% (currently ~50% for Facebook)
-- City extraction rate: >95% (currently ~30% for Facebook)
-- Non-rental filtering: >95% accuracy
-- No regression on YAD2 extraction (structured data, doesn't use AI)
+- Neighborhood extraction rate: >50% (current: 88% — target closing the 12% gap)
+- Street extraction rate: >50% (current: 85% — but many old entries have garbage, target clean extraction)
+- Non-rental filtering accuracy: >90%
+- No regression on YAD2 extraction (structured data, no AI calls)
+- AI calls stay within free tier limits (~50-100 posts/day)
+- Processor batch time stays under 15s
+- Zero hallucinated prices on intentionally priceless listings

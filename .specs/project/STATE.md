@@ -1,7 +1,7 @@
 # State
 
 **Last Updated:** 2026-03-03
-**Current Work:** Playwright migration + extraction improvements COMPLETE (PR #32, 7 commits). Facebook connector uses headless Chromium with "See more" expansion, improved Hebrew extraction (price/bedroom/city/tag patterns), and robust post ID fallbacks. 210 tests passing. Known limitation: sponsored posts get `txt_` hash IDs. Pending roadmap items: facebook-pagination, ai-extraction, brokerage-detection, sublet-rent-classification.
+**Current Work:** Group default cities + street extraction improvements COMPLETE (PRs #34, #35). Word boundary checking prevents substring false positives (e.g., "הדר" in "נהדר"). Street regex uses Hebrew word-based capture with two-word street prefix whitelist. 228 tests passing. Pending roadmap items: facebook-pagination, ai-extraction, brokerage-detection, sublet-rent-classification.
 
 ---
 
@@ -257,8 +257,10 @@ Filter matching was already implemented in `notification-service.ts` during M3 b
   - Post ID: 4 fallback strategies (timestamp links, group-specific URLs, broad numeric IDs, content hash)
 - **Architecture:** `FacebookNormalizer` extracted to prevent Playwright bundling in Workers; connector runs only from GitHub Actions
 - **Known limitation:** Sponsored/ad posts get `txt_` hash IDs — Facebook hides post IDs from DOM for sponsored content
-- **Status:** PR #32 (7 commits), E2E verified locally (11-13 posts from 3 groups), pending merge
-- **Total tests:** 210 across 11 test files
+- **Status:** PRs #32, #33, #34, #35 merged to main
+- **Group default cities** (PR #34): Configurable `defaultCities` per monitored group, word boundary checking for city/neighborhood matching
+- **Street extraction fix** (PR #35): Hebrew word-based capture (2-10 chars), two-word street prefix whitelist (`בן`, `נחלת`, `קרית`, `אבן`, `בר`, `הרב`, `שדרות`), missing neighborhood variants added
+- **Total tests:** 228 across 11 test files
 
 ---
 

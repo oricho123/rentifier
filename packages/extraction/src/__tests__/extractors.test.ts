@@ -516,16 +516,17 @@ describe('extractAll', () => {
     expect(result.bedrooms).toBe(3);
     expect(result.tags).toEqual([]);
     expect(result.location).toBeNull();
-    expect(result.overallConfidence).toBe(0);
+    expect(result.overallConfidence).toBe(0.25);
   });
 
-  it('should calculate minimum confidence', () => {
+  it('should calculate weighted field coverage confidence', () => {
     const title = '2 חדרים בירושלים';
     const description = '4000 ש״ח'; // No explicit period, confidence 0.7
 
     const result = extractAll(title, description);
 
-    expect(result.overallConfidence).toBe(0.7);
+    // price(0.30×0.7) + city(0.25×0.8) + bedrooms(0.20) + notSearchPost(0.05) = 0.66
+    expect(result.overallConfidence).toBe(0.66);
   });
 
   // Real-world Facebook posts

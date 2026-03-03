@@ -49,6 +49,8 @@ export interface ListingRow {
   latitude: number | null;
   longitude: number | null;
   image_url: string | null;
+  entry_date: string | null;
+  ai_extracted: number;
 }
 
 export interface User {
