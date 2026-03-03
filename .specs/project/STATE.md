@@ -1,7 +1,7 @@
 # State
 
 **Last Updated:** 2026-03-03
-**Current Work:** Group default cities + street extraction improvements COMPLETE (PRs #34, #35). Word boundary checking prevents substring false positives (e.g., "הדר" in "נהדר"). Street regex uses Hebrew word-based capture with two-word street prefix whitelist. 228 tests passing. Pending roadmap items: facebook-pagination, ai-extraction, brokerage-detection, sublet-rent-classification.
+**Current Work:** M5 in progress. AI extraction DEPLOYED (PR #36, migration 0012, AI Gateway enabled). Duplicate detection SPECIFIED (`.specs/features/duplicate-detection/spec.md`) — field-based cross-source matching, source priority (YAD2 > Facebook), `duplicate_of` column. 267 tests, 0 typecheck errors. Next: design + tasks for duplicate-detection, then brokerage-detection and sublet-classification.
 
 ---
 
