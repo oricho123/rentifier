@@ -7,6 +7,6 @@
     "@rentifier/core": "workspace:*",
     "@rentifier/db": "workspace:*",
     "@rentifier/extraction": "workspace:*",
-    "cheerio": "^1.2.0"
+    "playwright": "^1.50.0"
   }
 }

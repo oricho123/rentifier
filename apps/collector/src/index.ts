@@ -8,9 +8,6 @@ export interface Env {
   FB_COOKIES_1?: string;
   FB_COOKIES_2?: string;
   FB_ACCOUNT_COUNT?: string;
-  FB_DOC_ID?: string;
-  FB_DTSG?: string;
-  FB_LSD?: string;
 }
 
 export default {

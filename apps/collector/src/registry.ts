@@ -25,12 +25,7 @@ function buildFacebookConfig(env: Env): FacebookConfig {
     const val = (env as unknown as Record<string, string | undefined>)[`FB_COOKIES_${i}`];
     if (val) cookies[String(i)] = val;
   }
-  return {
-    cookies,
-    docId: env.FB_DOC_ID || '',
-    fbDtsg: env.FB_DTSG,
-    lsd: env.FB_LSD,
-  };
+  return { cookies };
 }
 
 export function createDefaultRegistry(env: Env): ConnectorRegistry {

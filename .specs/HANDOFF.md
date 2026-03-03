@@ -1,80 +1,48 @@
-# Handoff — Facebook Groups Connector (M4)
+# Handoff
 
-**Date:** 2026-03-02
-**Branch:** `feat/facebook-connector`
-**Status:** GraphQL connector with auto-token extraction implemented and E2E verified. Ready for merge.
+**Date:** 2026-03-03
+**Feature:** Facebook Playwright Migration
+**Task:** Prototype validated, ready for full implementation
 
----
+## Completed ✓
 
-## What Happened
+- Playwright prototype validated against live Facebook DOM (9 posts from 3 groups in ~30s)
+- Validated DOM selectors:
+  - Content: `[data-ad-rendering-role="story_message"]` (100% hit rate)
+  - Author: `[data-ad-rendering-role="profile_name"] h2` (100%, strip " · Follow" suffix)
+  - Post ID: `pcb.{postId}` from photo link hrefs (78% — text-only posts lack photo links)
+  - Images: `img[src*="scontent"]` skip width < 100 (67% — expected for text-only posts)
+- Confirmed: timestamps NOT in feed DOM — use `new Date().toISOString()` as fetch time
+- Confirmed: tsx `page.evaluate()` must use string-based form (not callbacks) to avoid `__name` injection
+- Updated `.specs/features/facebook-playwright/design.md` with validated selectors and extraction rates
+- Playwright added as dependency (`packages/connectors` + root workspace devDep)
+- Prototype script at `scripts/facebook-playwright-prototype.ts`
 
-### Approach 1: mbasic.facebook.com + HTTP (failed)
+## In Progress
 
-- Full implementation: HTTP client, Cheerio parser, account rotation, tests
-- **Result:** Facebook returns "unsupported browser" interstitial for ALL User-Agents
+- Nothing active
 
-### Approach 2: GraphQL API — initial attempt (failed)
+## Pending
 
-- Extracted `doc_id`, request format, response structure from Chrome DevTools
-- **Result:** Error 1357054 — missing `jazoest` CSRF checksum
+- Full Playwright connector implementation (Phase 1-5 in `.specs/features/facebook-playwright/tasks.md`):
+  - Phase 1: `selectors.ts`, `parseCookieString()` in accounts.ts
+  - Phase 2: Browser lifecycle, DOM extraction in rewritten `client.ts`
+  - Phase 3: Update `FacebookConnector`, clean types/constants, rewrite tests
+  - Phase 4: Update GitHub Actions workflow (add Playwright install step)
+  - Phase 5: Update docs
+- Pending specs from roadmap: facebook-pagination, ai-extraction, brokerage-detection, sublet-rent-classification
 
-### Approach 3: GraphQL API + jazoest (working)
+## Blockers
 
-- `jazoest = "2" + sum(charCodeAt(i) for each char in fb_dtsg)`
-- **Response format:** NDJSON (newline-delimited JSON) via Relay incremental delivery
-- Successfully fetched real posts from a live group
+- None
 
-### Token Auto-Extraction (implemented)
+## Context
 
-- `fb_dtsg` and `lsd` are now auto-extracted from Facebook homepage HTML on each run
-- Only `FB_COOKIES_N` and `FB_DOC_ID` are required as GitHub Secrets
-- `FB_DTSG` and `FB_LSD` env vars kept as optional fallback
-- Chronological sorting via `GroupsCometFeedSortingSwitcherMenuMutation` before feed query
-
----
-
-## Current State
-
-### Implemented (on branch)
-
-| File | What |
-|------|------|
-| `constants.ts` | GraphQL URLs, headers, sorting mutation, homepage constants |
-| `types.ts` | `FacebookGraphQLTokens`, post types |
-| `client.ts` | GraphQL POST, token extraction from homepage, sorting mutation, retry |
-| `parser.ts` | NDJSON parser with safe nested access |
-| `accounts.ts` | `getDocId()` + `getGraphQLTokens()` (fallback) |
-| `index.ts` | Connector with auto-extraction → env fallback flow |
-| `client.test.ts` | 8 tests for token extraction (patterns, auth, checkpoint, errors) |
-| `parser.test.ts` | 9 tests for GraphQL JSON parsing |
-| `connector.test.ts` | 8 tests including token extraction fallback |
-| `collect-facebook.yml` | FB_DTSG/FB_LSD marked as optional fallback |
-| `collect-facebook.ts` | Updated env var docs, admin notifications |
-
-**Verification:** 176 tests pass, 0 TypeScript errors, E2E token extraction confirmed.
-
-### Key Implementation Details
-
-- **Homepage fetch requires full browser headers:** `Sec-Fetch-Dest: document`, `Sec-Ch-Ua-*` — without these Facebook returns HTTP 400
-- **Checkpoint false positive fix:** Normal pages contain "checkpoint" in JS code. Detection checks for `/checkpoint/block/` AND absence of `DTSGInitData`
-- **Token extraction patterns:** 3 patterns for fb_dtsg (DTSGInitData, form input, dtsg.token), 2 for lsd (LSD array, form input)
-
----
-
-## Required Secrets
-
-| Secret | Required | Stability |
-|--------|----------|-----------|
-| `FB_COOKIES_N` | Yes | Weeks–months (browser session) |
-| `FB_DOC_ID` | Yes | Weeks–months (Facebook deploys) |
-| `FB_DTSG` | No (auto-extracted) | Fallback only |
-| `FB_LSD` | No (auto-extracted) | Fallback only |
-
----
-
-## Quick Resume
-
-```bash
-git checkout feat/facebook-connector
-cat .specs/HANDOFF.md
-```
+- Branch: main
+- Uncommitted files:
+  - `.specs/features/facebook-playwright/` (spec, design, tasks)
+  - `scripts/facebook-playwright-prototype.ts` (validated prototype)
+  - `packages/connectors/package.json` (playwright dependency)
+  - `requirements.txt`, `scripts/collect-facebook-python.ts`, `scripts/facebook-scraper-wrapper.py` (Python scraper experiment — can be deleted)
+- Key insight: Facebook blocks all raw HTTP clients; only real browser engines work
+- Design doc has full architecture, selectors, error handling, and migration path

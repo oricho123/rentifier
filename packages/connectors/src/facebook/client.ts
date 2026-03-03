@@ -1,16 +1,12 @@
-import type { FacebookGraphQLTokens } from './types';
+import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import type { FacebookPost } from './types';
+import { parseCookieString } from './accounts';
 import {
-  GRAPHQL_API_URL,
-  GRAPHQL_HEADERS,
-  GRAPHQL_POST_COUNT,
-  GRAPHQL_QUERY_NAME,
-  SORTING_MUTATION_DOC_ID,
-  SORTING_MUTATION_NAME,
-  HOMEPAGE_URL,
-  HOMEPAGE_TIMEOUT_MS,
+  BROWSER_TIMEOUT_MS,
+  FEED_WAIT_TIMEOUT_MS,
+  GROUP_URL_TEMPLATE,
   MAX_RETRIES,
   INITIAL_RETRY_DELAY_MS,
-  REQUEST_TIMEOUT_MS,
 } from './constants';
 
 export type FacebookErrorType =
@@ -19,8 +15,7 @@ export type FacebookErrorType =
   | 'rate_limited'
   | 'banned'
   | 'parse'
-  | 'timeout'
-  | 'token_expired';
+  | 'timeout';
 
 export class FacebookClientError extends Error {
   constructor(
@@ -34,378 +29,267 @@ export class FacebookClientError extends Error {
 }
 
 /**
- * Compute jazoest checksum from fb_dtsg.
- * Required by Facebook's CSRF validation.
+ * Launch a headless Chromium browser.
  */
-export function computeJazoest(fbDtsg: string): string {
-  let sum = 0;
-  for (let i = 0; i < fbDtsg.length; i++) {
-    sum += fbDtsg.charCodeAt(i);
-  }
-  return '2' + sum;
+export async function launchBrowser(): Promise<Browser> {
+  return chromium.launch({ headless: true });
 }
 
 /**
- * Extract c_user ID from cookie string.
- */
-function extractCUser(cookies: string): string {
-  const match = cookies.match(/c_user=(\d+)/);
-  return match ? match[1] : '';
-}
-
-/**
- * Extract fb_dtsg and lsd CSRF tokens from Facebook homepage HTML.
- * Fetches www.facebook.com with cookies and parses tokens from the response.
- *
+ * Create a browser context with injected cookies.
  * SECURITY: cookies are never logged.
  */
-export async function extractTokensFromHomepage(
+export async function createBrowserContext(
+  browser: Browser,
   cookies: string,
-): Promise<{ fbDtsg: string; lsd: string }> {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), HOMEPAGE_TIMEOUT_MS);
+): Promise<{ context: BrowserContext; page: Page }> {
+  const context = await browser.newContext({
+    viewport: { width: 1280, height: 900 },
+    userAgent:
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    locale: 'en-US',
+  });
 
+  await context.addCookies(parseCookieString(cookies));
+  const page = await context.newPage();
+  return { context, page };
+}
+
+/**
+ * Close the browser safely.
+ */
+export async function closeBrowser(browser: Browser): Promise<void> {
   try {
-    const response = await fetch(HOMEPAGE_URL, {
-      headers: {
-        Cookie: cookies,
-        'User-Agent': GRAPHQL_HEADERS['User-Agent'],
-        Accept:
-          'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-        'Accept-Language': 'en-US,en;q=0.9',
-        'Sec-Fetch-Dest': 'document',
-        'Sec-Fetch-Mode': 'navigate',
-        'Sec-Fetch-Site': 'none',
-        'Sec-Fetch-User': '?1',
-        'Sec-Ch-Ua': '"Chromium";v="131", "Not_A Brand";v="24"',
-        'Sec-Ch-Ua-Mobile': '?0',
-        'Sec-Ch-Ua-Platform': '"Windows"',
-        'Upgrade-Insecure-Requests': '1',
-      },
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      throw new FacebookClientError(
-        `Homepage fetch failed: HTTP ${response.status}`,
-        'network',
-        true,
-      );
-    }
-
-    const html = await response.text();
-
-    // Detect auth failures
-    if (html.includes('id="login_form"') || html.includes('id="loginform"')) {
-      throw new FacebookClientError(
-        'Homepage returned login page — cookies expired',
-        'auth_expired',
-        false,
-      );
-    }
-
-    // Only detect real checkpoint pages (URL-based redirect or dedicated page),
-    // not normal pages that mention "checkpoint" in JS code
-    if (
-      html.includes('/checkpoint/block/') &&
-      !html.includes('DTSGInitData')
-    ) {
-      throw new FacebookClientError(
-        'Homepage returned checkpoint — account challenged',
-        'banned',
-        false,
-      );
-    }
-
-    // Extract fb_dtsg (try 3 patterns)
-    const fbDtsg =
-      html.match(/"DTSGInitData".*?"token":"([^"]+)"/s)?.[1] ??
-      html.match(/name="fb_dtsg" value="([^"]+)"/)?.[1] ??
-      html.match(/"dtsg":\{"token":"([^"]+)"/)?.[1];
-
-    if (!fbDtsg) {
-      throw new FacebookClientError(
-        'Could not extract fb_dtsg from homepage',
-        'parse',
-        false,
-      );
-    }
-
-    // Extract lsd (try 2 patterns)
-    const lsd =
-      html.match(/"LSD".*?\[.*?"(\w+)"\]/s)?.[1] ??
-      html.match(/name="lsd" value="([^"]+)"/)?.[1] ??
-      '';
-
-    console.log(
-      JSON.stringify({
-        event: 'fb_token_extraction',
-        hasDtsg: true,
-        hasLsd: !!lsd,
-      }),
-    );
-
-    return { fbDtsg, lsd };
-  } catch (error) {
-    if (error instanceof FacebookClientError) throw error;
-
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new FacebookClientError(
-        `Homepage fetch timed out after ${HOMEPAGE_TIMEOUT_MS}ms`,
-        'timeout',
-        true,
-      );
-    }
-
-    throw new FacebookClientError(
-      `Homepage fetch error: ${error instanceof Error ? error.message : String(error)}`,
-      'network',
-      true,
-    );
-  } finally {
-    clearTimeout(timeoutId);
+    await browser.close();
+  } catch {
+    // Ignore close errors
   }
 }
 
 /**
- * Switch a group's feed sorting to CHRONOLOGICAL via Facebook's internal mutation.
- * This must be called before the feed query to ensure posts come back in time order.
- *
- * SECURITY: cookies are never logged.
+ * Detect auth failures by checking page URL and content.
  */
-export async function setSortingChronological(
+export async function detectAuthFailure(
+  page: Page,
+): Promise<FacebookErrorType | null> {
+  const url = page.url();
+
+  if (url.includes('/login') || url.includes('login.php')) {
+    return 'auth_expired';
+  }
+
+  if (url.includes('/checkpoint/')) {
+    return 'banned';
+  }
+
+  const hasLoginForm = await page.$('#login_form, #loginform');
+  if (hasLoginForm) {
+    return 'auth_expired';
+  }
+
+  return null;
+}
+
+/**
+ * Navigate to a Facebook group page with chronological sorting.
+ */
+export async function navigateToGroup(
+  page: Page,
   groupId: string,
-  cookies: string,
-  tokens: FacebookGraphQLTokens,
 ): Promise<void> {
-  const cUser = extractCUser(cookies);
-  const jazoest = computeJazoest(tokens.fbDtsg);
+  const url = GROUP_URL_TEMPLATE.replace('{groupId}', groupId);
 
-  const variables = JSON.stringify({
-    input: {
-      actor_id: cUser,
-      client_mutation_id: '1',
-      group_id: groupId,
-      new_sorting_setting: 'CHRONOLOGICAL',
-    },
+  await page.goto(url, {
+    waitUntil: 'domcontentloaded',
+    timeout: BROWSER_TIMEOUT_MS,
   });
 
-  const body = new URLSearchParams({
-    av: cUser,
-    __user: cUser,
-    __a: '1',
-    __comet_req: '15',
-    dpr: '2',
-    fb_api_caller_class: 'RelayModern',
-    fb_api_req_friendly_name: SORTING_MUTATION_NAME,
-    variables,
-    doc_id: SORTING_MUTATION_DOC_ID,
-    fb_dtsg: tokens.fbDtsg,
-    lsd: tokens.lsd,
-    jazoest,
-    server_timestamps: 'true',
-  });
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(GRAPHQL_API_URL, {
-      method: 'POST',
-      headers: {
-        ...GRAPHQL_HEADERS,
-        Cookie: cookies,
-        Referer: `https://www.facebook.com/groups/${groupId}`,
-        'x-fb-friendly-name': SORTING_MUTATION_NAME,
-        'x-fb-lsd': tokens.lsd,
-      },
-      body: body.toString(),
-      signal: controller.signal,
-    });
-
-    if (!response.ok) {
-      console.log(
-        JSON.stringify({
-          event: 'fb_sorting_mutation_failed',
-          status: response.status,
-          groupId,
-        }),
-      );
-      // Non-fatal: feed query will still work, just with default sorting
-      return;
-    }
-
-    console.log(
-      JSON.stringify({
-        event: 'fb_sorting_set_chronological',
-        groupId,
-      }),
-    );
-  } catch (error) {
-    // Non-fatal: log and continue with feed query
-    console.log(
-      JSON.stringify({
-        event: 'fb_sorting_mutation_error',
-        error: error instanceof Error ? error.message : String(error),
-        groupId,
-      }),
-    );
-  } finally {
-    clearTimeout(timeoutId);
-  }
-}
-
-/**
- * Fetch group feed posts via Facebook's internal GraphQL API.
- * Returns raw response text (NDJSON format).
- *
- * SECURITY: cookies are never logged.
- */
-export async function fetchGroupGraphQL(
-  groupId: string,
-  cookies: string,
-  tokens: FacebookGraphQLTokens,
-): Promise<string> {
-  const cUser = extractCUser(cookies);
-  const jazoest = computeJazoest(tokens.fbDtsg);
-
-  const variables = JSON.stringify({
-    count: GRAPHQL_POST_COUNT,
-    feedLocation: 'GROUP',
-    feedType: 'DISCUSSION',
-    feedbackSource: 0,
-    id: groupId,
-    renderLocation: 'group',
-    scale: 2,
-    sortingSetting: 'CHRONOLOGICAL',
-    stream_initial_count: 1,
-    useDefaultActor: false,
-  });
-
-  const body = new URLSearchParams({
-    av: cUser,
-    __user: cUser,
-    __a: '1',
-    __comet_req: '15',
-    dpr: '2',
-    fb_api_caller_class: 'RelayModern',
-    fb_api_req_friendly_name: GRAPHQL_QUERY_NAME,
-    variables,
-    doc_id: tokens.docId,
-    fb_dtsg: tokens.fbDtsg,
-    lsd: tokens.lsd,
-    jazoest,
-  });
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
-
-  try {
-    const response = await fetch(GRAPHQL_API_URL, {
-      method: 'POST',
-      headers: {
-        ...GRAPHQL_HEADERS,
-        Cookie: cookies,
-        Referer: `https://www.facebook.com/groups/${groupId}`,
-        'x-fb-friendly-name': GRAPHQL_QUERY_NAME,
-        'x-fb-lsd': tokens.lsd,
-      },
-      body: body.toString(),
-      signal: controller.signal,
-    });
-
-    if (response.status === 401 || response.status === 403) {
-      throw new FacebookClientError(
-        'Authentication failed',
-        'auth_expired',
-        false,
-      );
-    }
-
-    if (response.status === 429) {
-      throw new FacebookClientError(
-        'Rate limited by Facebook',
-        'rate_limited',
-        true,
-      );
-    }
-
-    if (!response.ok) {
-      throw new FacebookClientError(
-        `HTTP ${response.status}: ${response.statusText}`,
-        'network',
-        response.status >= 500,
-      );
-    }
-
-    let text = await response.text();
-
-    // Strip Facebook's anti-JSON-hijacking prefix
-    text = text.replace(/^for \(;;\);/, '');
-
-    // Check for GraphQL error responses
-    try {
-      // Try parsing first line for error detection
-      const firstLine = text.split('\n')[0];
-      const firstJson = JSON.parse(firstLine);
-
-      if (firstJson.error) {
-        const errorCode = firstJson.error;
-        const errorDesc =
-          firstJson.errorDescription || firstJson.errorSummary || '';
-
-        // 1357004 = missing fb_dtsg, 1357054 = invalid tokens
-        if (errorCode === 1357004 || errorCode === 1357054) {
-          throw new FacebookClientError(
-            `GraphQL token error ${errorCode}: ${errorDesc}`,
-            'token_expired',
-            false,
-          );
-        }
-
-        throw new FacebookClientError(
-          `GraphQL error ${errorCode}: ${errorDesc}`,
-          'parse',
-          false,
-        );
-      }
-    } catch (e) {
-      if (e instanceof FacebookClientError) throw e;
-      // Not valid JSON on first line — could be a different format, let parser handle
-    }
-
-    return text;
-  } catch (error) {
-    if (error instanceof FacebookClientError) throw error;
-
-    if (error instanceof DOMException && error.name === 'AbortError') {
-      throw new FacebookClientError(
-        `Request timed out after ${REQUEST_TIMEOUT_MS}ms`,
-        'timeout',
-        true,
-      );
-    }
-
+  // Check for auth failure after navigation
+  const authError = await detectAuthFailure(page);
+  if (authError) {
     throw new FacebookClientError(
-      `Network error: ${error instanceof Error ? error.message : String(error)}`,
-      'network',
+      `Auth failure after navigating to group ${groupId}: ${authError}`,
+      authError,
+      false,
+    );
+  }
+
+  // Wait for feed to render
+  try {
+    await page.waitForSelector('[role="feed"]', {
+      timeout: FEED_WAIT_TIMEOUT_MS,
+    });
+  } catch {
+    throw new FacebookClientError(
+      `Feed did not render within ${FEED_WAIT_TIMEOUT_MS}ms for group ${groupId}`,
+      'timeout',
       true,
     );
-  } finally {
-    clearTimeout(timeoutId);
   }
+
+  // Scroll to trigger lazy loading
+  await page.evaluate('window.scrollBy(0, 1000)');
+  await page.waitForTimeout(2000);
 }
 
 /**
- * Fetch with retry and exponential backoff.
- * SECURITY: groupId is logged, but cookies are NEVER logged.
+ * Extract posts from the rendered DOM of a Facebook group page.
+ *
+ * Uses string-based page.evaluate() to avoid tsx __name injection issue.
+ * Selectors validated against live Facebook DOM (2026-03-03).
  */
-export async function fetchWithRetry(
+export async function extractPostsFromDOM(
+  page: Page,
   groupId: string,
-  cookies: string,
-  tokens: FacebookGraphQLTokens,
+): Promise<FacebookPost[]> {
+  const feedExists = await page.$('[role="feed"]');
+  if (!feedExists) {
+    console.log(
+      JSON.stringify({
+        event: 'fb_no_feed',
+        groupId,
+        url: page.url(),
+      }),
+    );
+    return [];
+  }
+
+  // Use string-based evaluate to avoid tsx __name injection
+  const extractedPosts = await page.evaluate(`((groupId) => {
+    var feed = document.querySelector('[role="feed"]');
+    if (!feed) return [];
+    // Skip first child (sorting widget), take up to 20 posts
+    var postElements = Array.from(feed.querySelectorAll(':scope > div')).slice(1, 21);
+    var results = [];
+
+    for (var i = 0; i < postElements.length; i++) {
+      var node = postElements[i];
+
+      // --- Post text (validated: data-ad-rendering-role="story_message") ---
+      var content = null;
+      var storyMsg = node.querySelector('[data-ad-rendering-role="story_message"]');
+      if (storyMsg && storyMsg.textContent && storyMsg.textContent.trim().length > 10) {
+        content = storyMsg.textContent.trim();
+      }
+      // Fallback to data-ad-preview="message"
+      if (!content) {
+        var adPreview = node.querySelector('[data-ad-preview="message"], [data-ad-comet-preview="message"]');
+        if (adPreview && adPreview.textContent && adPreview.textContent.trim().length > 10) {
+          content = adPreview.textContent.trim();
+        }
+      }
+
+      // --- Author (validated: data-ad-rendering-role="profile_name" > h2) ---
+      var authorName = null;
+      var profileEl = node.querySelector('[data-ad-rendering-role="profile_name"] h2');
+      if (profileEl && profileEl.textContent) {
+        authorName = profileEl.textContent.trim()
+          .replace(/\\s*·\\s*Follow$/, '')
+          .replace(/\\s*·\\s*עקוב$/, '');
+      }
+      // Fallback
+      if (!authorName) {
+        var h3a = node.querySelector('h3 a[role="link"], h4 a[role="link"]');
+        if (h3a && h3a.textContent) authorName = h3a.textContent.trim();
+      }
+
+      // --- Post ID (validated: pcb.{postId} in photo link hrefs) ---
+      var postId = null;
+      var permalink = null;
+      var links = Array.from(node.querySelectorAll('a[href]'));
+      for (var l = 0; l < links.length; l++) {
+        var href = links[l].getAttribute('href') || '';
+        var pcbMatch = href.match(/pcb\\.(\\d+)/);
+        if (pcbMatch) {
+          postId = pcbMatch[1];
+          permalink = 'https://www.facebook.com/groups/' + groupId + '/posts/' + postId + '/';
+          break;
+        }
+        var postMatch = href.match(/\\/posts\\/(\\d+)/);
+        if (postMatch) {
+          postId = postMatch[1];
+          permalink = 'https://www.facebook.com/groups/' + groupId + '/posts/' + postId + '/';
+          break;
+        }
+        var plMatch = href.match(/\\/permalink\\/(\\d+)/);
+        if (plMatch) {
+          postId = plMatch[1];
+          permalink = 'https://www.facebook.com/groups/' + groupId + '/posts/' + postId + '/';
+          break;
+        }
+      }
+      // Fallback: try story_fbid links
+      if (!postId) {
+        for (var l2 = 0; l2 < links.length; l2++) {
+          var href2 = links[l2].getAttribute('href') || '';
+          var sfbidMatch = href2.match(/story_fbid=(\\d+)/);
+          if (sfbidMatch) {
+            postId = sfbidMatch[1];
+            permalink = 'https://www.facebook.com/groups/' + groupId + '/posts/' + postId + '/';
+            break;
+          }
+        }
+      }
+
+      // Fallback: generate hash from content + author for text-only posts
+      if (!postId && content) {
+        var hash = 0;
+        var str = (content || '') + '|' + (authorName || '');
+        for (var c = 0; c < str.length; c++) {
+          var ch = str.charCodeAt(c);
+          hash = ((hash << 5) - hash) + ch;
+          hash = hash & hash; // Convert to 32bit integer
+        }
+        postId = 'txt_' + Math.abs(hash).toString(36);
+        permalink = 'https://www.facebook.com/groups/' + groupId + '/';
+      }
+
+      // --- Timestamp ---
+      // Facebook does NOT render timestamps in the feed DOM.
+      // Use fetch time as proxy — cron runs every 30 min.
+      var timestamp = new Date().toISOString();
+
+      // --- Image (validated: img[src*="scontent"], skip small/icons) ---
+      var imageUrl = null;
+      var imgs = Array.from(node.querySelectorAll('img[src*="scontent"], img[src*="fbcdn"]'));
+      for (var m = 0; m < imgs.length; m++) {
+        var src = imgs[m].getAttribute('src') || '';
+        var width = imgs[m].getAttribute('width');
+        if (width && parseInt(width) < 100) continue;
+        if (src && src.indexOf('emoji') === -1 && src.indexOf('rsrc.php') === -1) {
+          imageUrl = src;
+          break;
+        }
+      }
+
+      if (content && postId) {
+        results.push({
+          postId: postId,
+          authorName: authorName || 'Unknown',
+          content: content,
+          permalink: permalink || ('https://www.facebook.com/groups/' + groupId + '/'),
+          postedAt: timestamp,
+          imageUrl: imageUrl,
+          groupId: groupId,
+        });
+      }
+    }
+    return results;
+  })("${groupId}")`);
+
+  if (!Array.isArray(extractedPosts)) return [];
+  return extractedPosts as FacebookPost[];
+}
+
+/**
+ * Fetch posts from a group with retry and exponential backoff.
+ * SECURITY: cookies are never logged.
+ */
+export async function fetchGroupWithRetry(
+  page: Page,
+  groupId: string,
   maxRetries: number = MAX_RETRIES,
-): Promise<string> {
+): Promise<FacebookPost[]> {
   let lastError: FacebookClientError | null = null;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -424,25 +308,33 @@ export async function fetchWithRetry(
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
 
-      return await fetchGroupGraphQL(groupId, cookies, tokens);
+      await navigateToGroup(page, groupId);
+      return await extractPostsFromDOM(page, groupId);
     } catch (error) {
-      if (!(error instanceof FacebookClientError)) throw error;
-
-      lastError = error;
+      if (!(error instanceof FacebookClientError)) {
+        // Wrap unexpected errors
+        lastError = new FacebookClientError(
+          error instanceof Error ? error.message : String(error),
+          'network',
+          true,
+        );
+      } else {
+        lastError = error;
+      }
 
       console.log(
         JSON.stringify({
           event: 'fb_fetch_error',
           attempt: attempt + 1,
           maxRetries,
-          errorType: error.errorType,
-          retryable: error.retryable,
-          message: error.message,
+          errorType: lastError.errorType,
+          retryable: lastError.retryable,
+          message: lastError.message,
           groupId,
         }),
       );
 
-      if (!error.retryable) throw error;
+      if (!lastError.retryable) throw lastError;
     }
   }
 

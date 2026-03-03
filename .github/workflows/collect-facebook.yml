@@ -8,7 +8,7 @@ on:
 jobs:
   collect:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 10
 
     steps:
       - uses: actions/checkout@v4
@@ -23,6 +23,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
       - name: Run Facebook collector
         run: pnpm exec tsx scripts/collect-facebook.ts
         env:
@@ -34,12 +37,6 @@ jobs:
           FB_ACCOUNT_COUNT: ${{ secrets.FB_ACCOUNT_COUNT }}
           FB_COOKIES_1: ${{ secrets.FB_COOKIES_1 }}
           FB_COOKIES_2: ${{ secrets.FB_COOKIES_2 }}
-          # Facebook GraphQL API tokens
-          FB_DOC_ID: ${{ secrets.FB_DOC_ID }}
-          # FB_DTSG and FB_LSD are auto-extracted from homepage on each run.
-          # Set these only as fallback if extraction fails:
-          FB_DTSG: ${{ secrets.FB_DTSG }}
-          FB_LSD: ${{ secrets.FB_LSD }}
           # Telegram admin alerts for cookie expiry
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}
