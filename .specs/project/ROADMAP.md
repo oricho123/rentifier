@@ -99,20 +99,19 @@
 
 ### Features
 
-**Facebook Connector** - ✅ IMPLEMENTED (PR #26 — pending merge)
+**Facebook Connector** - ✅ COMPLETE
 
 - ✅ Research: Graph API shut down (April 2024), mbasic blocked, GraphQL API works
-- ✅ GraphQL client (`POST /api/graphql/`) with jazoest CSRF checksum
-- ✅ NDJSON parser for Relay incremental delivery response format
+- ✅ Initial GraphQL implementation (PR #26-#31, merged)
+- ✅ **Playwright migration** (PR #32) — replaced GraphQL fetch() with headless browser
+  - Sessions survive weeks instead of hours (no more manual token refresh)
+  - Eliminated FB_DOC_ID, FB_DTSG, FB_LSD env vars
+  - DOM selectors validated against live Facebook (data-ad-rendering-role attributes)
+  - 10 posts extracted from 3 groups in ~30s E2E
 - ✅ Multi-account cookie rotation with disabled account tracking
-- ✅ FacebookConnector implementing Connector interface
 - ✅ Collection script with admin Telegram notification on cookie expiry
-- ✅ GitHub Actions workflow (30-min cron)
-- ✅ DB migration seeding facebook source row
-- ✅ 15 unit tests (parser + connector), 166 total
-- ✅ Manual testing: 3 posts fetched from live group via GraphQL
-- ⬜ Auto-extract fb_dtsg/lsd tokens (see facebook-token-refresh spec)
-- ⬜ Merge PR #26 to main
+- ✅ GitHub Actions workflow (30-min cron, Playwright chromium install)
+- ✅ 189 tests passing across 11 files
 
 **Additional Source Connectors** - PLANNED
 

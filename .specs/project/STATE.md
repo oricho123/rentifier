@@ -1,7 +1,7 @@
 # State
 
 **Last Updated:** 2026-03-03
-**Current Work:** Playwright prototype VALIDATED — 9 posts extracted from 3 live Facebook groups in ~30s. Ready for full connector rewrite. Spec, design (with validated selectors), and tasks at `.specs/features/facebook-playwright/`. Prototype at `scripts/facebook-playwright-prototype.ts`. 191 tests passing. Pending roadmap items: facebook-playwright (implementation), facebook-pagination, ai-extraction, brokerage-detection, sublet-rent-classification.
+**Current Work:** Playwright migration + extraction improvements COMPLETE (PR #32, 7 commits). Facebook connector uses headless Chromium with "See more" expansion, improved Hebrew extraction (price/bedroom/city/tag patterns), and robust post ID fallbacks. 210 tests passing. Known limitation: sponsored posts get `txt_` hash IDs. Pending roadmap items: facebook-pagination, ai-extraction, brokerage-detection, sublet-rent-classification.
 
 ---
 
@@ -239,25 +239,26 @@ Filter matching was already implemented in `notification-service.ts` during M3 b
 - Image URL date extraction for `rawPostedAt`
 - 9 new tests, 151 total
 
-### M4 - Facebook Groups Connector (2026-03-02)
+### M4 - Facebook Groups Connector (2026-03-02 → 2026-03-03)
 
-- **Research:** Comprehensive analysis of all Facebook data access methods (Graph API shutdown, CrowdTangle shutdown, mbasic approach)
-- **Consensus plan:** Planner → Architect → Critic ralplan workflow, approved after 1 iteration
-- **Implementation:** GraphQL API connector with auto-token extraction
-  - GraphQL POST client with jazoest CSRF, NDJSON parsing, retry + auth detection
-  - Auto-extract fb_dtsg/lsd from Facebook homepage (3 patterns for dtsg, 2 for lsd)
-  - Chronological sorting via `GroupsCometFeedSortingSwitcherMenuMutation`
+- **Phase 1 (GraphQL, superseded):** Built GraphQL API connector — worked initially but sessions expired every few hours
+- **Phase 2 (Playwright, current):** Migrated to headless Chromium browser for stable long-lived sessions
+  - Playwright headless scraper: DOM extraction from rendered feed pages
+  - "See more" expansion: clicks truncated post buttons before extraction
   - Multi-account cookie rotation with disabled account tracking
-  - Collection script with admin Telegram notification on cookie expiry
-  - GitHub Actions workflow (30-min cron)
-  - DB migration seeding facebook source row
-  - 25 unit tests (9 parser + 8 client + 8 connector)
-- **Key discoveries:**
-  - Homepage fetch requires full browser headers (`Sec-Fetch-*`, `Sec-Ch-Ua-*`) or returns 400
-  - Checkpoint detection must check `/checkpoint/block/` AND absence of `DTSGInitData` to avoid false positives
-  - Only `FB_COOKIES_N` + `FB_DOC_ID` required as secrets (dtsg/lsd auto-extracted)
-- **Status:** PR #26 open, E2E verified with real cookies, pending merge
-- **Total tests:** 176 across 12 test files
+  - Collection script with `--local` flag for local D1 testing
+  - Admin Telegram notification on cookie expiry
+  - GitHub Actions workflow (30-min cron, Chromium install step)
+- **Extraction improvements:**
+  - Hebrew price patterns: `שכירות`, `שכ'ד`, `ב` prefix (e.g., `ב7,600`)
+  - City variant: `ת״א` (Hebrew gershayim)
+  - Bedroom abbreviation: `חד'`
+  - Negation-aware tags: "בלי מעלית" doesn't match elevator tag
+  - Post ID: 4 fallback strategies (timestamp links, group-specific URLs, broad numeric IDs, content hash)
+- **Architecture:** `FacebookNormalizer` extracted to prevent Playwright bundling in Workers; connector runs only from GitHub Actions
+- **Known limitation:** Sponsored/ad posts get `txt_` hash IDs — Facebook hides post IDs from DOM for sponsored content
+- **Status:** PR #32 (7 commits), E2E verified locally (11-13 posts from 3 groups), pending merge
+- **Total tests:** 210 across 11 test files
 
 ---
 
