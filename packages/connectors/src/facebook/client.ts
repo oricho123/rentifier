@@ -130,6 +130,39 @@ export async function navigateToGroup(
   // Scroll to trigger lazy loading
   await page.evaluate('window.scrollBy(0, 1000)');
   await page.waitForTimeout(2000);
+
+  // Expand all "See more" links to get full post text
+  await expandAllSeeMore(page);
+}
+
+/**
+ * Click all "See more" / "עוד" buttons in the feed to expand truncated posts.
+ * Facebook uses role="button" divs with locale-dependent text.
+ */
+async function expandAllSeeMore(page: Page): Promise<void> {
+  const count = (await page.evaluate(`(() => {
+    var feed = document.querySelector('[role="feed"]');
+    if (!feed) return 0;
+    var count = 0;
+    // Facebook wraps "See more" in a div[role="button"] inside the post text container
+    var buttons = feed.querySelectorAll('[data-ad-rendering-role="story_message"] [role="button"], [data-ad-preview="message"] [role="button"], [data-ad-comet-preview="message"] [role="button"]');
+    for (var i = 0; i < buttons.length; i++) {
+      var text = (buttons[i].textContent || '').trim();
+      if (text === 'See more' || text === 'See More' || text === 'עוד' || text === 'הצג עוד' || text === 'ראה עוד') {
+        buttons[i].click();
+        count++;
+      }
+    }
+    return count;
+  })()`)) as number;
+
+  if (count > 0) {
+    // Wait for content to render after expanding
+    await page.waitForTimeout(1000);
+    console.log(
+      JSON.stringify({ event: 'fb_see_more_expanded', count }),
+    );
+  }
 }
 
 /**

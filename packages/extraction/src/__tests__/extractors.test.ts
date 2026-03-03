@@ -76,6 +76,43 @@ describe('extractPrice', () => {
     const result = extractPrice('דירה יפה');
     expect(result).toBeNull();
   });
+
+  // Facebook Hebrew patterns
+  it('should extract price with ב prefix (ב7,600)', () => {
+    const result = extractPrice('ב7,600!!דירה ענקית');
+    expect(result?.amount).toBe(7600);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it('should extract price with ב- prefix (ב-4,500)', () => {
+    const result = extractPrice('להשכרה ב-4,500 לחודש');
+    expect(result?.amount).toBe(4500);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it("should extract price with שכ'ד prefix", () => {
+    const result = extractPrice("שכ'ד: 6300 ש'ח");
+    expect(result?.amount).toBe(6300);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it("should extract price with ש'ח currency", () => {
+    const result = extractPrice("6300 ש'ח");
+    expect(result?.amount).toBe(6300);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it('should extract price with שכ״ד prefix', () => {
+    const result = extractPrice('שכ״ד 8,500');
+    expect(result?.amount).toBe(8500);
+    expect(result?.currency).toBe('ILS');
+  });
+
+  it('should not match ב prefix with non-rental numbers', () => {
+    // Single numbers like "ב3" (at 3) shouldn't match — need comma-separated thousands
+    const result = extractPrice('קומה ב3 בניין');
+    expect(result).toBeNull();
+  });
 });
 
 describe('extractBedrooms', () => {
@@ -97,6 +134,28 @@ describe('extractBedrooms', () => {
   it('should extract rooms with ח׳ abbreviation', () => {
     expect(extractBedrooms('3 ח׳')).toBe(3);
     expect(extractBedrooms("4 ח'")).toBe(4);
+  });
+
+  // Facebook Hebrew abbreviations
+  it('should extract rooms with חד abbreviation (no space)', () => {
+    expect(extractBedrooms('2חד')).toBe(2);
+  });
+
+  it("should extract rooms with חד׳ abbreviation", () => {
+    expect(extractBedrooms('4 חד׳ עם מרפסת')).toBe(4);
+  });
+
+  it('should extract rooms from דירת prefix', () => {
+    expect(extractBedrooms('דירת 3 חדרים ענקית')).toBe(3);
+  });
+
+  it('should extract rooms with half rooms and חד', () => {
+    expect(extractBedrooms('3.5 חד')).toBe(3.5);
+  });
+
+  it('should extract rooms from concatenated text (2חדקודן)', () => {
+    // "2חד" followed by other text without space
+    expect(extractBedrooms('2חדקודן בכניסה')).toBe(2);
   });
 
   it('should return null for no match', () => {
@@ -320,5 +379,35 @@ describe('extractAll', () => {
     const result = extractAll(title, description);
 
     expect(result.overallConfidence).toBe(0.7);
+  });
+
+  // Real-world Facebook posts
+  it('should extract from Facebook post with ב prefix price', () => {
+    const title = 'ל-2 שותפים או משפחה !!  דירת 3 חדרים ענקית שמורה ומוארת !!';
+    const description = 'ל-2 שותפים או משפחה !!  דירת 3 חדרים ענקית שמורה ומוארת !!  + 2 מרפסות סגורות מרווחות !! בקרבת כיכר רבין פרישמן וצייטלין !!  ב7,600!!';
+    const result = extractAll(title, description);
+
+    expect(result.price?.amount).toBe(7600);
+    expect(result.bedrooms).toBe(3);
+    expect(result.tags).toContain('balcony');
+  });
+
+  it("should extract from Facebook post with שכ'ד price", () => {
+    const title = '*** להשכרה, 2חד - מרכז העיר ***';
+    const description = "*** להשכרה, 2חד - מרכז העיר ***אזור - מרכז / לב העיררחוב קרית ספר2חדקודן בכניסהקרקע65 מ'רשכ'ד: 6300 ש'ח";
+    const result = extractAll(title, description);
+
+    expect(result.price?.amount).toBe(6300);
+    expect(result.bedrooms).toBe(2);
+  });
+
+  it('should extract from Facebook post with מחיר and ₪', () => {
+    const title = 'להשכרה בפריים לוקיישון בלב ת"א ברחוב דיזינגוף';
+    const description = 'להשכרה בפריים לוקיישון בלב ת"א ברחוב דיזינגוף ליד הסנטר דירת סטודיו כ-25 מטר עם גלרית שינה משופצת מחיר 3000 ₪';
+    const result = extractAll(title, description);
+
+    expect(result.price?.amount).toBe(3000);
+    expect(result.bedrooms).toBe(0); // סטודיו
+    expect(result.tags).toContain('renovated');
   });
 });

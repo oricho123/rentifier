@@ -1,9 +1,12 @@
 export const PRICE_PATTERNS: { pattern: RegExp; currency: 'ILS' | 'USD' | 'EUR' }[] = [
-  { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*(?:ש״ח|שח|shekel|שקל)/i, currency: 'ILS' },
+  { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*(?:ש״ח|שח|ש[׳']ח|shekel|שקל)/i, currency: 'ILS' },
   { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*₪/, currency: 'ILS' },
   { pattern: /₪\s*(\d+(?:\.\d+)?)/, currency: 'ILS' },
-  // "מחיר" prefix implies ILS (common in Hebrew Facebook posts)
+  // "מחיר" / "שכ'ד" (שכר דירה) prefix implies ILS
   { pattern: /מחיר\s*[-–:]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/, currency: 'ILS' },
+  { pattern: /שכ[״׳'"]?ד\s*[-–:]?\s*(\d+(?:,\d{3})*(?:\.\d+)?)/, currency: 'ILS' },
+  // "ב" prefix + number in rental range (e.g., "ב7,600", "ב-4,500")
+  { pattern: /ב[-–]?(\d{1,3}(?:,\d{3})+)(?!\d)/, currency: 'ILS' },
   { pattern: /\$\s*(\d+(?:\.\d+)?)/, currency: 'USD' },
   { pattern: /(\d{1,3}(?:,?\d{3})*(?:\.\d+)?)\s*\$/, currency: 'USD' },
   { pattern: /€\s*(\d+(?:\.\d+)?)/, currency: 'EUR' },
@@ -18,7 +21,7 @@ export const PERIOD_PATTERNS: { pattern: RegExp; period: 'month' | 'week' | 'day
 
 export const BEDROOM_PATTERNS: { pattern: RegExp; extractor: (match: RegExpMatchArray) => number }[] = [
   { pattern: /(\d+(?:\.5)?)\s*(?:חדרים|חדר)/i, extractor: (m) => parseFloat(m[1]) },
-  { pattern: /(\d+(?:\.5)?)\s*(?:ח[׳'])/i, extractor: (m) => parseFloat(m[1]) },
+  { pattern: /(\d+(?:\.5)?)\s*(?:ח[׳']|חד[׳']?)/i, extractor: (m) => parseFloat(m[1]) },
   { pattern: /(\d+(?:\.5)?)\s*(?:rooms?|br|bed(?:rooms?)?)/i, extractor: (m) => parseFloat(m[1]) },
   { pattern: /(?:סטודיו|studio)/i, extractor: () => 0 },
 ];
