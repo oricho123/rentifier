@@ -484,73 +484,18 @@ describe('duplicate detection', () => {
 
     const rawListing: ListingRaw = {
       id: 1,
-      source_id: 2, // Facebook source
-      source_item_id: 'fb_dup',
-      url: 'https://facebook.com/groups/123/posts/dup',
-      raw_json: JSON.stringify({
-        source: 'facebook',
-        sourceItemId: 'fb_dup',
-        rawTitle: 'דירה 3 חדרים',
-        rawDescription: 'דירה בתל אביב פלורנטין רחוב דיזנגוף 10, 5000 שקלים לחודש',
-        rawUrl: 'https://facebook.com/groups/123/posts/dup',
-        rawPostedAt: '2026-03-01T10:00:00Z',
-        sourceData: { groupId: '123' },
-      }),
-      fetched_at: '2026-03-01',
-      processed_at: null,
-    };
-
-    (mockDb.getUnprocessedRawListings as any).mockResolvedValue([rawListing]);
-    (mockDb.getSourceById as any).mockImplementation((id: number) => {
-      return id === 1 ? yad2Source : fbSource;
-    });
-    (mockDb.findDuplicate as any).mockResolvedValue({
-      id: 100,
-      sourceId: 1, // Yad2 source (higher priority)
-      street: 'דיזנגוף',
-      house_number: '10',
-      neighborhood: 'פלורנטין',
-      latitude: null,
-      longitude: null,
-      price: 5000,
-    });
-
-    await processBatch(mockDb as DB, 10);
-
-    expect(mockDb.findDuplicate).toHaveBeenCalledWith({
-      city: 'תל אביב',
-      bedrooms: 3,
-      price: 5000,
-      street: 'דיזנגוף',
-      house_number: null,
-      neighborhood: 'פלורנטין',
-      latitude: null,
-      longitude: null,
-      source_id: 2,
-      source_item_id: 'fb_dup',
-    });
-    expect(upsertedListings[0].duplicate_of).toBe(100);
-    expect(mockDb.swapCanonical).not.toHaveBeenCalled();
-  });
-
-  it('should swap canonical when findDuplicate returns a match with lower priority source', async () => {
-    const yad2Source: Source = { id: 1, name: 'yad2', enabled: true, created_at: '2026-01-01' };
-    const fbSource: Source = { id: 2, name: 'facebook', enabled: true, created_at: '2026-01-01' };
-
-    const rawListing: ListingRaw = {
-      id: 2,
-      source_id: 1, // Yad2 source (higher priority)
-      source_item_id: 'yad2_123',
-      url: 'https://yad2.co.il/item/123',
+      source_id: 1, // YAD2 source (lower priority)
+      source_item_id: 'yad2_dup',
+      url: 'https://yad2.co.il/item/dup',
       raw_json: JSON.stringify({
         source: 'yad2',
-        sourceItemId: 'yad2_123',
+        sourceItemId: 'yad2_dup',
         rawTitle: 'דירה בתל אביב',
         rawDescription: 'דירה יפה',
-        rawUrl: 'https://yad2.co.il/item/123',
+        rawUrl: 'https://yad2.co.il/item/dup',
         rawPostedAt: null,
         sourceData: {
-          orderId: '123',
+          orderId: 'dup',
           token: 'test-token',
           price: 5000,
           address: {
@@ -573,8 +518,63 @@ describe('duplicate detection', () => {
       return id === 1 ? yad2Source : fbSource;
     });
     (mockDb.findDuplicate as any).mockResolvedValue({
+      id: 100,
+      sourceId: 2, // Facebook source (higher priority)
+      street: 'דיזנגוף',
+      house_number: '10',
+      neighborhood: 'פלורנטין',
+      latitude: null,
+      longitude: null,
+      price: 5000,
+    });
+
+    await processBatch(mockDb as DB, 10);
+
+    expect(mockDb.findDuplicate).toHaveBeenCalledWith({
+      city: 'תל אביב',
+      bedrooms: 3,
+      price: 5000,
+      street: 'דיזנגוף',
+      house_number: '10',
+      neighborhood: 'פלורנטין',
+      latitude: null,
+      longitude: null,
+      source_id: 1,
+      source_item_id: 'yad2_dup',
+    });
+    expect(upsertedListings[0].duplicate_of).toBe(100);
+    expect(mockDb.swapCanonical).not.toHaveBeenCalled();
+  });
+
+  it('should swap canonical when findDuplicate returns a match with lower priority source', async () => {
+    const yad2Source: Source = { id: 1, name: 'yad2', enabled: true, created_at: '2026-01-01' };
+    const fbSource: Source = { id: 2, name: 'facebook', enabled: true, created_at: '2026-01-01' };
+
+    const rawListing: ListingRaw = {
+      id: 2,
+      source_id: 2, // Facebook source (higher priority)
+      source_item_id: 'fb_123',
+      url: 'https://facebook.com/groups/123/posts/123',
+      raw_json: JSON.stringify({
+        source: 'facebook',
+        sourceItemId: 'fb_123',
+        rawTitle: 'דירה 3 חדרים',
+        rawDescription: 'דירה בתל אביב פלורנטין רחוב דיזנגוף 10, 5000 שקלים לחודש',
+        rawUrl: 'https://facebook.com/groups/123/posts/123',
+        rawPostedAt: '2026-03-01T10:00:00Z',
+        sourceData: { groupId: '123' },
+      }),
+      fetched_at: '2026-03-01',
+      processed_at: null,
+    };
+
+    (mockDb.getUnprocessedRawListings as any).mockResolvedValue([rawListing]);
+    (mockDb.getSourceById as any).mockImplementation((id: number) => {
+      return id === 1 ? yad2Source : fbSource;
+    });
+    (mockDb.findDuplicate as any).mockResolvedValue({
       id: 200,
-      sourceId: 2, // Facebook source (lower priority)
+      sourceId: 1, // YAD2 source (lower priority)
       street: 'דיזנגוף',
       house_number: '10',
       neighborhood: 'פלורנטין',

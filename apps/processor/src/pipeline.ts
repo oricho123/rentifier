@@ -18,8 +18,8 @@ export interface ProcessingError {
 }
 
 const SOURCE_PRIORITY: Record<string, number> = {
-  yad2: 100,
-  facebook: 50,
+  facebook: 100,
+  yad2: 50,
   mock: 0,
 };
 

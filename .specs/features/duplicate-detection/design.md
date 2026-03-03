@@ -159,8 +159,8 @@ async swapCanonical(newCanonicalId: number, oldCanonicalId: number): Promise<voi
 **Source priority constant:**
 ```typescript
 const SOURCE_PRIORITY: Record<string, number> = {
-  yad2: 100,
-  facebook: 50,
+  facebook: 100,
+  yad2: 50,
   mock: 0,
 };
 ```
