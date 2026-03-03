@@ -254,15 +254,18 @@ export function extractAll(title: string, description: string): ExtractionResult
   const location = extractLocation(combinedText);
   const searchPost = isSearchPost(combinedText);
 
-  // Overall confidence is the minimum of all sub-confidences
-  const confidences: number[] = [];
-  if (price) confidences.push(price.confidence);
-  if (location) confidences.push(location.confidence);
-  // bedrooms and tags don't have confidence scores — they're binary
-
-  const overallConfidence = confidences.length > 0
-    ? Math.min(...confidences)
-    : 0;
+  // Weighted field coverage confidence
+  // Each field contributes based on its importance for filter matching
+  let overallConfidence = 0;
+  if (price) overallConfidence += 0.30 * price.confidence;           // 0.21 or 0.27
+  if (location) overallConfidence += 0.25 * location.confidence;     // 0.20, 0.21, or 0.225
+  if (bedrooms !== null) overallConfidence += 0.20;
+  if (location?.neighborhood) overallConfidence += 0.10;
+  if (street) overallConfidence += 0.05;
+  if (tags.length > 0) overallConfidence += 0.05;
+  if (!searchPost) overallConfidence += 0.05;
+  // Round to 2 decimal places to avoid floating point noise
+  overallConfidence = Math.round(overallConfidence * 100) / 100;
 
   return {
     price,

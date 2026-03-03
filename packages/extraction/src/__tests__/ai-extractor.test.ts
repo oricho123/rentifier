@@ -542,7 +542,8 @@ describe('mergeExtractionResults', () => {
     };
 
     const result = mergeExtractionResults(regex, ai);
-    expect(result.overallConfidence).toBe(0.6); // Min of 0.6 (AI price) and 0.6 (AI location)
+    // price(0.30×0.6) + city(0.25×0.6) + notSearchPost(0.05) = 0.38
+    expect(result.overallConfidence).toBe(0.38);
   });
 });
 

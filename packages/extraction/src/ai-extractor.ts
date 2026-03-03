@@ -256,15 +256,16 @@ export function mergeExtractionResults(
   // isSearchPost: regex true takes priority; AI isRental=false also sets it true
   const isSearchPost = regex.isSearchPost || !ai.isRental;
 
-  // Recalculate overallConfidence
-  const confidences: number[] = [];
-  if (price) {
-    confidences.push(price.confidence);
-  }
-  if (location) {
-    confidences.push(location.confidence);
-  }
-  const overallConfidence = confidences.length > 0 ? Math.min(...confidences) : 0;
+  // Weighted field coverage confidence (same formula as extractAll)
+  let overallConfidence = 0;
+  if (price) overallConfidence += 0.30 * price.confidence;
+  if (location) overallConfidence += 0.25 * location.confidence;
+  if (bedrooms !== null) overallConfidence += 0.20;
+  if (location?.neighborhood) overallConfidence += 0.10;
+  if (street) overallConfidence += 0.05;
+  if (tags.length > 0) overallConfidence += 0.05;
+  if (!isSearchPost) overallConfidence += 0.05;
+  overallConfidence = Math.round(overallConfidence * 100) / 100;
 
   return {
     price,
