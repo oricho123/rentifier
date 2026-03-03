@@ -1,8 +1,24 @@
 /** Monitored Facebook groups — static config for now */
-export const MONITORED_GROUPS: { groupId: string; name: string }[] = [
-  { groupId: '305724686290054', name: 'דירות להשכרה בתל אביב' },
-  { groupId: '981208559966255', name: '[RENTME] דירות להשכרה בתל אביב ללא תיווך' },
-  { groupId: '101875683484689', name: 'דירות מפה לאוזן בתל אביב' },
+export const MONITORED_GROUPS: {
+  groupId: string;
+  name: string;
+  defaultCities: string[];
+}[] = [
+  {
+    groupId: '305724686290054',
+    name: 'דירות להשכרה בתל אביב',
+    defaultCities: ['תל אביב'],
+  },
+  {
+    groupId: '981208559966255',
+    name: '[RENTME] דירות להשכרה בתל אביב ללא תיווך',
+    defaultCities: ['תל אביב'],
+  },
+  {
+    groupId: '101875683484689',
+    name: 'דירות מפה לאוזן בתל אביב',
+    defaultCities: ['תל אביב'],
+  },
 ];
 
 export const MAX_CONSECUTIVE_FAILURES = 5;
@@ -25,3 +41,12 @@ export const FEED_SCROLL_DELAY_MS = 3000;
 /** Group URL template with chronological sorting */
 export const GROUP_URL_TEMPLATE =
   'https://www.facebook.com/groups/{groupId}?sorting_setting=CHRONOLOGICAL';
+
+/**
+ * Get monitored group configuration by group ID
+ * @param groupId - Facebook group ID
+ * @returns Group config if found, undefined otherwise
+ */
+export function getMonitoredGroup(groupId: string) {
+  return MONITORED_GROUPS.find((g) => g.groupId === groupId);
+}

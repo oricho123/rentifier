@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractPrice, extractBedrooms, extractTags, extractLocation, extractStreet, isSearchPost, extractAll } from '../extractors';
+import { extractPrice, extractBedrooms, extractTags, extractLocation, extractStreet, isSearchPost, extractAll, matchNeighborhoodInCity } from '../extractors';
 
 describe('extractPrice', () => {
   it('should extract ILS amounts with ש״ח', () => {
@@ -335,6 +335,94 @@ describe('extractLocation', () => {
     const result = extractLocation('דירה יפה');
     expect(result).toBeNull();
   });
+
+  // Word boundary tests
+  it('should NOT match הדר when text contains נהדר (wonderful)', () => {
+    const result = extractLocation('דירה נהדרת במרכז');
+    expect(result).toBeNull();
+  });
+
+  it('should match הדר neighborhood with preposition ב (בהדר)', () => {
+    const result = extractLocation('דירה בהדר');
+    expect(result).toEqual({
+      city: 'חיפה',
+      neighborhood: 'הדר',
+      confidence: 0.85,
+    });
+  });
+
+  it('should NOT match הדר when preceded by non-preposition Hebrew letter', () => {
+    const result = extractLocation('דירה טהדרה');
+    expect(result).toBeNull();
+  });
+
+  it('should match הדר with space boundary', () => {
+    const result = extractLocation('דירה ב הדר');
+    expect(result).toEqual({
+      city: 'חיפה',
+      neighborhood: 'הדר',
+      confidence: 0.85,
+    });
+  });
+
+  it('should match התקווה neighborhood from "שכונת התקווה"', () => {
+    const result = extractLocation('דירה בשכונת התקווה');
+    expect(result).toEqual({
+      city: 'תל אביב',
+      neighborhood: 'התקווה',
+      confidence: 0.85,
+    });
+  });
+
+  it('should match התקווה with preposition ב', () => {
+    const result = extractLocation('דירה בהתקווה');
+    expect(result).toEqual({
+      city: 'תל אביב',
+      neighborhood: 'התקווה',
+      confidence: 0.85,
+    });
+  });
+
+  it('should match התקווה standalone', () => {
+    const result = extractLocation('דירה התקווה');
+    expect(result).toEqual({
+      city: 'תל אביב',
+      neighborhood: 'התקווה',
+      confidence: 0.85,
+    });
+  });
+});
+
+describe('matchNeighborhoodInCity', () => {
+  it('should match neighborhood when city is correct', () => {
+    const result = matchNeighborhoodInCity('דירה בפלורנטין', 'תל אביב');
+    expect(result).toBe('פלורנטין');
+  });
+
+  it('should return null when neighborhood not in specified city', () => {
+    const result = matchNeighborhoodInCity('דירה בפלורנטין', 'חיפה');
+    expect(result).toBeNull();
+  });
+
+  it('should return null when no neighborhood found', () => {
+    const result = matchNeighborhoodInCity('דירה יפה', 'תל אביב');
+    expect(result).toBeNull();
+  });
+
+  it('should return null for unknown city', () => {
+    const result = matchNeighborhoodInCity('דירה בפלורנטין', 'עיר לא קיימת');
+    expect(result).toBeNull();
+  });
+
+  it('should use word boundaries (not match partial words)', () => {
+    const result = matchNeighborhoodInCity('דירה נהדרת', 'חיפה');
+    expect(result).toBeNull(); // Should NOT match הדר
+  });
+
+  it('should match with Hebrew prepositions', () => {
+    const result = matchNeighborhoodInCity('דירה בהדר', 'חיפה');
+    expect(result).toBe('הדר');
+  });
 });
 
 describe('extractStreet', () => {
@@ -345,6 +433,22 @@ describe('extractStreet', () => {
 
   it('should extract street from רחוב prefix', () => {
     expect(extractStreet('רחוב דיזנגוף')).toBe('דיזנגוף');
+  });
+
+  it('should extract two-word streets with known prefixes', () => {
+    expect(extractStreet('ברח׳ בן יהודה')).toBe('בן יהודה');
+    expect(extractStreet('ברחוב נחלת בנימין')).toBe('נחלת בנימין');
+    expect(extractStreet('רחוב קרית ספר')).toBe('קרית ספר');
+    expect(extractStreet('ברחוב אבן גבירול')).toBe('אבן גבירול');
+    expect(extractStreet('ברחוב הרב קוק')).toBe('הרב קוק');
+    expect(extractStreet('רחוב בר כוכבא')).toBe('בר כוכבא');
+  });
+
+  it('should drop non-street second word', () => {
+    expect(extractStreet('רחוב אברבנאל בפלורנטין')).toBe('אברבנאל');
+    expect(extractStreet('רחוב דיזנגוף במרכז העיר')).toBe('דיזנגוף');
+    expect(extractStreet('ברחוב אלנבי בתל אביב')).toBe('אלנבי');
+    expect(extractStreet('רחוב שינקין ליד הכרמל')).toBe('שינקין');
   });
 
   it('should return null for no street', () => {
