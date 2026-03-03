@@ -4,34 +4,42 @@
   "type": "module",
   "scripts": {
     "build": "pnpm -r build",
+    "typecheck": "pnpm -r exec tsc --noEmit",
     "lint": "eslint . --ext .ts",
     "format": "prettier --write '**/*.{ts,json,yaml,md}'",
     "format:check": "prettier --check '**/*.{ts,json,yaml,md}'",
-    "typecheck": "pnpm -r exec tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+
+    "dev": "concurrently -n collector,processor,notify -c blue,green,yellow \"pnpm dev:collector\" \"pnpm dev:processor\" \"pnpm dev:notify\"",
     "dev:collector": "pnpm --filter @rentifier/collector exec wrangler dev --test-scheduled --port 8787 --persist-to ../../.wrangler --inspector-port 9229",
     "dev:processor": "pnpm --filter @rentifier/processor exec wrangler dev --test-scheduled --port 8788 --persist-to ../../.wrangler --inspector-port 9230",
     "dev:notify": "pnpm --filter @rentifier/notify exec wrangler dev --test-scheduled --port 8789 --persist-to ../../.wrangler --inspector-port 9231",
-    "dev": "concurrently -n collector,processor,notify -c blue,green,yellow \"pnpm dev:collector\" \"pnpm dev:processor\" \"pnpm dev:notify\"",
+
+    "trigger:all": "pnpm trigger:collector && pnpm trigger:processor && pnpm trigger:notify",
     "trigger:collector": "curl -s http://localhost:8787/__scheduled",
     "trigger:processor": "curl -s http://localhost:8788/__scheduled",
     "trigger:notify": "curl -s http://localhost:8789/__scheduled",
-    "trigger:all": "pnpm trigger:collector && pnpm trigger:processor && pnpm trigger:notify",
+
+    "collect:all": "tsx --env-file=.env scripts/collect-yad2.ts && tsx --env-file=.env scripts/collect-facebook.ts",
+    "collect:all:local": "tsx --env-file=.env scripts/collect-yad2.ts --local && tsx --env-file=.env scripts/collect-facebook.ts --local",
+    "collect:yad2": "tsx --env-file=.env scripts/collect-yad2.ts",
+    "collect:yad2:local": "tsx --env-file=.env scripts/collect-yad2.ts --local",
+    "collect:facebook": "tsx --env-file=.env scripts/collect-facebook.ts",
+    "collect:facebook:local": "tsx --env-file=.env scripts/collect-facebook.ts --local",
+
     "db:migrate:local": "wrangler d1 migrations apply rentifier --local --config wrangler.migrations.json --persist-to .wrangler",
     "db:migrate:remote": "wrangler d1 migrations apply rentifier --remote --config wrangler.migrations.json",
     "db:query:local": "wrangler d1 execute rentifier --local --config wrangler.migrations.json --persist-to .wrangler --command",
     "db:reset:local": "rm -rf .wrangler && echo 'Local DB reset. Run pnpm db:migrate:local to recreate.'",
+
+    "deploy:all": "pnpm deploy:collector && pnpm deploy:processor && pnpm deploy:notify",
     "deploy:collector": "pnpm --filter @rentifier/collector exec wrangler deploy",
     "deploy:processor": "pnpm --filter @rentifier/processor exec wrangler deploy",
     "deploy:notify": "pnpm --filter @rentifier/notify exec wrangler deploy",
-    "deploy:all": "pnpm deploy:collector && pnpm deploy:processor && pnpm deploy:notify",
+
     "webhook:setup": "tsx scripts/setup-webhook.ts",
-    "ngrok:notify": "ngrok http 8789",
-    "collect:facebook": "tsx --env-file=.env scripts/collect-facebook.ts",
-    "collect:facebook:local": "tsx --env-file=.env scripts/collect-facebook.ts --local",
-    "debug:facebook": "tsx --env-file=.env scripts/debug-facebook-graphql.ts",
-    "test:yad2": "tsx scripts/test-yad2-api.ts"
+    "ngrok:notify": "ngrok http 8789"
   },
   "packageManager": "pnpm@10.6.2",
   "engines": {

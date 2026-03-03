@@ -82,6 +82,7 @@ describe('extractPostsFromDOM', () => {
     return {
       $: vi.fn().mockResolvedValue({}), // feed exists
       evaluate: vi.fn().mockResolvedValue(posts),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined),
     } as any;
   }
 
@@ -135,6 +136,7 @@ describe('extractPostsFromDOM', () => {
     const page = {
       $: vi.fn().mockResolvedValue({}),
       evaluate: vi.fn().mockResolvedValue(null),
+      waitForTimeout: vi.fn().mockResolvedValue(undefined),
     } as any;
 
     const result = await extractPostsFromDOM(page, '123');
