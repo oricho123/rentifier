@@ -29,6 +29,7 @@
     "webhook:setup": "tsx scripts/setup-webhook.ts",
     "ngrok:notify": "ngrok http 8789",
     "collect:facebook": "tsx --env-file=.env scripts/collect-facebook.ts",
+    "collect:facebook:local": "tsx --env-file=.env scripts/collect-facebook.ts --local",
     "debug:facebook": "tsx --env-file=.env scripts/debug-facebook-graphql.ts",
     "test:yad2": "tsx scripts/test-yad2-api.ts"
   },
