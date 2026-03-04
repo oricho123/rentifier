@@ -19,8 +19,10 @@
 			"migrations_dir": "../../packages/db/migrations"
 		}
 	],
+	"vars": {
+		"AI_GATEWAY_ID": "rentifier-ai-gateway"
+	},
 	"ai": {
-		"binding": "AI",
-		"gateway": "rentifier-ai-gateway"
+		"binding": "AI"
 	}
 }

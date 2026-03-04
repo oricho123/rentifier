@@ -23,10 +23,28 @@ describe('shouldInvokeAI', () => {
       entryDate: null,
     };
 
-    expect(shouldInvokeAI(extraction, 'yad2', 100)).toBe(false);
+    expect(shouldInvokeAI(extraction, 'yad2', 200)).toBe(false);
   });
 
-  it('should return true when neighborhood is null for facebook source', () => {
+  it('should return false when text is too short (< 100 chars)', () => {
+    const extraction: ExtractionResult = {
+      price: null,
+      bedrooms: null,
+      street: null,
+      tags: [],
+      location: null,
+      isSearchPost: false,
+      overallConfidence: 0,
+      floor: null,
+      squareMeters: null,
+      entryDate: null,
+    };
+
+    expect(shouldInvokeAI(extraction, 'facebook', 50)).toBe(false);
+    expect(shouldInvokeAI(extraction, 'facebook', 99)).toBe(false);
+  });
+
+  it('should return false when only neighborhood is null (single missing field)', () => {
     const extraction: ExtractionResult = {
       price: { amount: 5000, currency: 'ILS', period: 'month', confidence: 0.9 },
       bedrooms: 3,
@@ -40,10 +58,10 @@ describe('shouldInvokeAI', () => {
       entryDate: null,
     };
 
-    expect(shouldInvokeAI(extraction, 'facebook', 100)).toBe(true);
+    expect(shouldInvokeAI(extraction, 'facebook', 200)).toBe(false);
   });
 
-  it('should return true when street is null for facebook source', () => {
+  it('should return false when only street is null (single missing field)', () => {
     const extraction: ExtractionResult = {
       price: { amount: 5000, currency: 'ILS', period: 'month', confidence: 0.9 },
       bedrooms: 3,
@@ -57,10 +75,27 @@ describe('shouldInvokeAI', () => {
       entryDate: null,
     };
 
-    expect(shouldInvokeAI(extraction, 'facebook', 100)).toBe(true);
+    expect(shouldInvokeAI(extraction, 'facebook', 200)).toBe(false);
   });
 
-  it('should return true when price is null AND textLength > 50', () => {
+  it('should return true when both neighborhood and street are null (2 missing fields)', () => {
+    const extraction: ExtractionResult = {
+      price: { amount: 5000, currency: 'ILS', period: 'month', confidence: 0.9 },
+      bedrooms: 3,
+      street: null,
+      tags: [],
+      location: { city: 'תל אביב', neighborhood: null, confidence: 0.8 },
+      isSearchPost: false,
+      overallConfidence: 0.8,
+      floor: null,
+      squareMeters: null,
+      entryDate: null,
+    };
+
+    expect(shouldInvokeAI(extraction, 'facebook', 200)).toBe(true);
+  });
+
+  it('should return true when price is null (high-value extraction)', () => {
     const extraction: ExtractionResult = {
       price: null,
       bedrooms: 3,
@@ -74,24 +109,7 @@ describe('shouldInvokeAI', () => {
       entryDate: null,
     };
 
-    expect(shouldInvokeAI(extraction, 'facebook', 100)).toBe(true);
-  });
-
-  it('should return false when price is null AND textLength <= 50', () => {
-    const extraction: ExtractionResult = {
-      price: null,
-      bedrooms: 3,
-      street: 'דיזנגוף',
-      tags: [],
-      location: { city: 'תל אביב', neighborhood: 'פלורנטין', confidence: 0.9 },
-      isSearchPost: false,
-      overallConfidence: 0,
-      floor: null,
-      squareMeters: null,
-      entryDate: null,
-    };
-
-    expect(shouldInvokeAI(extraction, 'facebook', 50)).toBe(false);
+    expect(shouldInvokeAI(extraction, 'facebook', 200)).toBe(true);
   });
 
   it('should return true when location is completely null', () => {
@@ -108,7 +126,7 @@ describe('shouldInvokeAI', () => {
       entryDate: null,
     };
 
-    expect(shouldInvokeAI(extraction, 'facebook', 100)).toBe(true);
+    expect(shouldInvokeAI(extraction, 'facebook', 200)).toBe(true);
   });
 
   it('should return false when all fields are present', () => {
@@ -125,7 +143,7 @@ describe('shouldInvokeAI', () => {
       entryDate: null,
     };
 
-    expect(shouldInvokeAI(extraction, 'facebook', 100)).toBe(false);
+    expect(shouldInvokeAI(extraction, 'facebook', 200)).toBe(false);
   });
 });
 
@@ -570,16 +588,18 @@ describe('aiExtract', () => {
 
     const result = await aiExtract('דירת 3 חדרים בפלורנטין', mockAi);
 
-    expect(result).not.toBeNull();
-    expect(result?.isRental).toBe(true);
-    expect(result?.price?.amount).toBe(5000);
-    expect(result?.bedrooms).toBe(3);
-    expect(result?.city).toBe('תל אביב');
-    expect(result?.neighborhood).toBe('פלורנטין');
-    expect(result?.street).toBe('דיזנגוף');
-    expect(result?.floor).toBe(2);
-    expect(result?.squareMeters).toBe(75);
-    expect(result?.tags).toEqual(['parking', 'balcony']);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.isRental).toBe(true);
+    expect(result.data.price?.amount).toBe(5000);
+    expect(result.data.bedrooms).toBe(3);
+    expect(result.data.city).toBe('תל אביב');
+    expect(result.data.neighborhood).toBe('פלורנטין');
+    expect(result.data.street).toBe('דיזנגוף');
+    expect(result.data.floor).toBe(2);
+    expect(result.data.squareMeters).toBe(75);
+    expect(result.data.tags).toEqual(['parking', 'balcony']);
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
   });
 
   it('should handle JSON wrapped in markdown code blocks', async () => {
@@ -604,11 +624,12 @@ describe('aiExtract', () => {
 
     const result = await aiExtract('דירת 3 חדרים', mockAi);
 
-    expect(result).not.toBeNull();
-    expect(result?.price?.amount).toBe(5000);
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.price?.amount).toBe(5000);
   });
 
-  it('should return null for malformed JSON', async () => {
+  it('should return json_parse failure for malformed JSON', async () => {
     const mockAi: AiProvider = {
       run: vi.fn().mockResolvedValue({
         response: 'This is not valid JSON',
@@ -616,16 +637,21 @@ describe('aiExtract', () => {
     };
 
     const result = await aiExtract('דירת 3 חדרים', mockAi);
-    expect(result).toBeNull();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('json_parse');
+    expect(result.latencyMs).toBeGreaterThanOrEqual(0);
   });
 
-  it('should return null when response is missing', async () => {
+  it('should return empty_response failure when response is missing', async () => {
     const mockAi: AiProvider = {
       run: vi.fn().mockResolvedValue({}),
     };
 
     const result = await aiExtract('דירת 3 חדרים', mockAi);
-    expect(result).toBeNull();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('empty_response');
   });
 
   it('should handle missing fields by setting them to null', async () => {
@@ -650,13 +676,14 @@ describe('aiExtract', () => {
 
     const result = await aiExtract('דירה בתל אביב', mockAi);
 
-    expect(result).not.toBeNull();
-    expect(result?.price).toBeNull();
-    expect(result?.bedrooms).toBeNull();
-    expect(result?.city).toBe('תל אביב');
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.price).toBeNull();
+    expect(result.data.bedrooms).toBeNull();
+    expect(result.data.city).toBe('תל אביב');
   });
 
-  it('should return null when isRental is false', async () => {
+  it('should return non_rental failure when isRental is false', async () => {
     const mockAi: AiProvider = {
       run: vi.fn().mockResolvedValue({
         response: JSON.stringify({
@@ -677,7 +704,9 @@ describe('aiExtract', () => {
     };
 
     const result = await aiExtract('מחפש דירה', mockAi);
-    expect(result).toBeNull();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('non_rental');
   });
 
   it('should normalize city name via normalizeCity', async () => {
@@ -702,11 +731,12 @@ describe('aiExtract', () => {
 
     const result = await aiExtract('apartment in tel aviv', mockAi);
 
-    expect(result).not.toBeNull();
-    expect(result?.city).toBe('תל אביב'); // Normalized to Hebrew
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.city).toBe('תל אביב'); // Normalized to Hebrew
   });
 
-  it('should return null on timeout', async () => {
+  it('should return timeout failure on timeout', async () => {
     const mockAi: AiProvider = {
       run: vi.fn().mockImplementation(() => new Promise((resolve) => {
         setTimeout(() => resolve({ response: '{}' }), 10000); // 10 seconds
@@ -714,16 +744,18 @@ describe('aiExtract', () => {
     };
 
     const result = await aiExtract('דירת 3 חדרים', mockAi, { timeoutMs: 100 });
-    expect(result).toBeNull();
+    expect(result.ok).toBe(false);
+    if (result.ok) return;
+    expect(result.reason).toBe('timeout');
   });
 
-  it('should return null on error/exception', async () => {
+  it('should return failure on error/exception', async () => {
     const mockAi: AiProvider = {
       run: vi.fn().mockRejectedValue(new Error('AI service error')),
     };
 
     const result = await aiExtract('דירת 3 חדרים', mockAi);
-    expect(result).toBeNull();
+    expect(result.ok).toBe(false);
   });
 
   it('should use custom config when provided', async () => {
@@ -754,6 +786,7 @@ describe('aiExtract', () => {
     expect(mockAi.run).toHaveBeenCalledWith(
       '@cf/meta/llama-3.3-70b-instruct',
       expect.any(Object),
+      undefined,
     );
   });
 });

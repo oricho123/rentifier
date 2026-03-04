@@ -2,7 +2,7 @@ import type { DB, ListingRaw, ListingRow } from '@rentifier/db';
 import type { Connector } from '@rentifier/connectors';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import { MockConnector, Yad2Connector, FacebookNormalizer } from '@rentifier/connectors';
-import { extractAll, isSearchPost, shouldInvokeAI, aiExtract, mergeExtractionResults, DEDUP_THRESHOLD, type AiProvider, type AiExtractorMetrics, DEFAULT_AI_CONFIG } from '@rentifier/extraction';
+import { extractAll, isSearchPost, shouldInvokeAI, aiExtract, mergeExtractionResults, DEDUP_THRESHOLD, type AiProvider, type AiExtractorMetrics, type AiExtractDetailedResult, type AiExtractorConfig, DEFAULT_AI_CONFIG } from '@rentifier/extraction';
 
 export interface ProcessingResult {
   processed: number;
@@ -43,7 +43,7 @@ function createDefaultRegistry(): ConnectorRegistry {
   return registry;
 }
 
-export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvider): Promise<ProcessingResult> {
+export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvider, aiConfig?: Partial<AiExtractorConfig>): Promise<ProcessingResult> {
   const registry = createDefaultRegistry();
   const unprocessed = await db.getUnprocessedRawListings(batchSize);
 
@@ -109,23 +109,47 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
         const shouldUseAI = shouldInvokeAI(extraction, source.name, textLength);
 
         if (shouldUseAI) {
-          if (aiMetrics.called < DEFAULT_AI_CONFIG.maxCallsPerBatch) {
-            const aiStartTime = Date.now();
-            const aiResult = await aiExtract(`${draft.title}\n\n${draft.description}`, ai);
-            const aiLatency = Date.now() - aiStartTime;
+          const maxCalls = aiConfig?.maxCallsPerBatch ?? DEFAULT_AI_CONFIG.maxCallsPerBatch;
+          if (aiMetrics.called < maxCalls) {
+            const aiResult = await aiExtract(`${draft.title}\n\n${draft.description}`, ai, aiConfig);
 
             aiMetrics.called++;
-            totalLatency += aiLatency;
+            totalLatency += aiResult.latencyMs;
 
-            if (aiResult) {
-              extraction = mergeExtractionResults(extraction, aiResult);
+            if (aiResult.ok) {
+              extraction = mergeExtractionResults(extraction, aiResult.data);
               aiMetrics.succeeded++;
               aiWasUsed = true;
+              console.log(JSON.stringify({
+                event: 'ai_call_success',
+                sourceItemId: raw.source_item_id,
+                latencyMs: aiResult.latencyMs,
+                fieldsExtracted: [
+                  aiResult.data.price && 'price',
+                  aiResult.data.city && 'city',
+                  aiResult.data.neighborhood && 'neighborhood',
+                  aiResult.data.street && 'street',
+                  aiResult.data.bedrooms != null && 'bedrooms',
+                  aiResult.data.floor != null && 'floor',
+                  aiResult.data.squareMeters != null && 'squareMeters',
+                  aiResult.data.entryDate && 'entryDate',
+                ].filter(Boolean),
+              }));
             } else {
               aiMetrics.failed++;
+              console.log(JSON.stringify({
+                event: 'ai_call_failed',
+                sourceItemId: raw.source_item_id,
+                latencyMs: aiResult.latencyMs,
+                reason: aiResult.reason,
+              }));
             }
           } else {
             aiMetrics.skippedBudget++;
+            console.log(JSON.stringify({
+              event: 'ai_call_skipped_budget',
+              sourceItemId: raw.source_item_id,
+            }));
           }
         }
       }
@@ -210,6 +234,19 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
 
       await db.markRawListingProcessed(raw.id);
       result.processed++;
+
+      console.log(JSON.stringify({
+        event: 'item_processed',
+        sourceItemId: raw.source_item_id,
+        city: listingRow.city,
+        price: listingRow.price,
+        bedrooms: listingRow.bedrooms,
+        neighborhood: listingRow.neighborhood,
+        street: listingRow.street,
+        aiUsed: aiWasUsed,
+        duplicateOf: listingRow.duplicate_of,
+        confidence: listingRow.relevance_score,
+      }));
 
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
