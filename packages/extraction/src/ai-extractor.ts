@@ -10,12 +10,20 @@ export interface AiGatewayOptions {
 }
 
 export interface AiProvider {
-  run(model: string, input: { messages: Array<{ role: string; content: string }> }, options?: { gateway?: AiGatewayOptions }): Promise<{ response?: string }>;
+  run(
+    model: string,
+    input: { messages: Array<{ role: string; content: string }> },
+    options?: { gateway?: AiGatewayOptions }
+  ): Promise<{ response?: string }>;
 }
 
 export interface AiExtractionResult {
   isRental: boolean;
-  price: { amount: number; currency: 'ILS' | 'USD' | 'EUR'; period: 'month' | 'week' | 'day' } | null;
+  price: {
+    amount: number;
+    currency: 'ILS' | 'USD' | 'EUR';
+    period: 'month' | 'week' | 'day';
+  } | null;
   bedrooms: number | null;
   city: string | null;
   neighborhood: string | null;
@@ -47,7 +55,12 @@ export interface AiExtractorMetrics {
   avgLatencyMs: number;
 }
 
-export type AiFailureReason = 'timeout' | 'empty_response' | 'json_parse' | 'zod_validation' | 'non_rental';
+export type AiFailureReason =
+  | 'timeout'
+  | 'empty_response'
+  | 'json_parse'
+  | 'zod_validation'
+  | 'non_rental';
 
 export type AiExtractDetailedResult =
   | { ok: true; data: AiExtractionResult; latencyMs: number }
@@ -85,7 +98,7 @@ type AiResponse = z.infer<typeof AiResponseSchema>;
 export function shouldInvokeAI(
   extraction: ExtractionResult,
   sourceName: string,
-  textLength: number,
+  textLength: number
 ): boolean {
   // Never invoke AI for yad2 (structured data)
   if (sourceName === 'yad2') {
@@ -126,12 +139,12 @@ export function shouldInvokeAI(
 export async function aiExtract(
   text: string,
   ai: AiProvider,
-  config?: Partial<AiExtractorConfig>,
+  config?: Partial<AiExtractorConfig>
 ): Promise<AiExtractDetailedResult> {
   const fullConfig = { ...DEFAULT_AI_CONFIG, ...config };
   const startTime = Date.now();
 
-  const prompt = `You are a Hebrew real estate listing parser. Extract structured data from this post.
+  const prompt = `You are a Hebrew real estate listing parser in Israel. Extract structured data from this post.
 
 Rules:
 - Respond with JSON only, no explanation
@@ -140,7 +153,7 @@ Rules:
 - is_rental: false for any of these: for-sale listings (למכירה), searching/wanted posts, service ads, community announcements, non-rental content
 - Price: monthly rent amount only. Sale prices (typically 1M+₪) mean is_rental is false
 - Street: extract only if a specific street name is mentioned. Neighborhood names are not streets
-- City names in Hebrew
+- City, neighborhood, street: strip Hebrew prefix letters (ב, ה, ל, מ, ש, כ, ו) from the result. Return the bare name, not the prefixed form (בפלורנטין → פלורנטין, בתל אביב → תל אביב, ברחוב הרצל → הרצל)
 - Tags: only use these values: parking, balcony, pets, furnished, immediate, long-term, accessible, air-conditioning, elevator, storage, renovated
 
 Post text:
@@ -174,11 +187,13 @@ JSON schema:
       ? { gateway: { id: fullConfig.gatewayId } }
       : undefined;
 
-    const aiPromise = ai.run(fullConfig.model, {
-      messages: [
-        { role: 'user', content: prompt },
-      ],
-    }, gatewayOptions);
+    const aiPromise = ai.run(
+      fullConfig.model,
+      {
+        messages: [{ role: 'user', content: prompt }],
+      },
+      gatewayOptions
+    );
 
     const result = await Promise.race([aiPromise, timeoutPromise]);
     const latencyMs = Date.now() - startTime;
@@ -221,13 +236,14 @@ JSON schema:
     }
 
     // Build price object
-    const price = validated.price !== null && validated.currency && validated.price_period
-      ? {
-          amount: validated.price,
-          currency: validated.currency,
-          period: validated.price_period,
-        }
-      : null;
+    const price =
+      validated.price !== null && validated.currency && validated.price_period
+        ? {
+            amount: validated.price,
+            currency: validated.currency,
+            period: validated.price_period,
+          }
+        : null;
 
     // Normalize city name
     const normalizedCity = normalizeCity(validated.city);
@@ -250,9 +266,8 @@ JSON schema:
     };
   } catch (error) {
     const latencyMs = Date.now() - startTime;
-    const reason: AiFailureReason = error instanceof Error && error.message === 'AI request timeout'
-      ? 'timeout'
-      : 'json_parse';
+    const reason: AiFailureReason =
+      error instanceof Error && error.message === 'AI request timeout' ? 'timeout' : 'json_parse';
     return { ok: false, reason, latencyMs };
   }
 }
@@ -271,10 +286,11 @@ JSON schema:
  */
 export function mergeExtractionResults(
   regex: ExtractionResult,
-  ai: AiExtractionResult,
+  ai: AiExtractionResult
 ): ExtractionResult {
   // Price: regex takes priority
-  const price: PriceResult | null = regex.price || (ai.price ? { ...ai.price, confidence: 0.6 } : null);
+  const price: PriceResult | null =
+    regex.price || (ai.price ? { ...ai.price, confidence: 0.6 } : null);
 
   // Bedrooms: regex takes priority
   const bedrooms = regex.bedrooms ?? ai.bedrooms;
@@ -308,10 +324,10 @@ export function mergeExtractionResults(
 
   // Weighted field coverage confidence (same formula as extractAll)
   let overallConfidence = 0;
-  if (price) overallConfidence += 0.30 * price.confidence;
+  if (price) overallConfidence += 0.3 * price.confidence;
   if (location) overallConfidence += 0.25 * location.confidence;
-  if (bedrooms !== null) overallConfidence += 0.20;
-  if (location?.neighborhood) overallConfidence += 0.10;
+  if (bedrooms !== null) overallConfidence += 0.2;
+  if (location?.neighborhood) overallConfidence += 0.1;
   if (street) overallConfidence += 0.05;
   if (tags.length > 0) overallConfidence += 0.05;
   if (!isSearchPost) overallConfidence += 0.05;
