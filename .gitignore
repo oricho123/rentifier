@@ -155,6 +155,10 @@ Thumbs.db
 *.swp
 *.swo
 
+# Eval results (generated)
+scripts/eval/results/
+scripts/eval/samples-*-golden-template.json
+
 # Lock files (pnpm is canonical)
 package-lock.json
 yarn.lock

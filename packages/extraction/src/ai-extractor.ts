@@ -14,7 +14,7 @@ export interface AiProvider {
     model: string,
     input: { messages: Array<{ role: string; content: string }> },
     options?: { gateway?: AiGatewayOptions }
-  ): Promise<{ response?: string }>;
+  ): Promise<{ response?: string; [key: string]: unknown }>;
 }
 
 export interface AiExtractionResult {
@@ -44,7 +44,7 @@ export interface AiExtractorConfig {
 export const DEFAULT_AI_CONFIG: AiExtractorConfig = {
   maxCallsPerBatch: 10,
   timeoutMs: 5000,
-  model: '@cf/meta/llama-3.1-8b-instruct',
+  model: '@cf/ibm-granite/granite-4.0-h-micro',
 };
 
 export interface AiExtractorMetrics {
@@ -66,20 +66,29 @@ export type AiExtractDetailedResult =
   | { ok: true; data: AiExtractionResult; latencyMs: number }
   | { ok: false; reason: AiFailureReason; latencyMs: number };
 
+// Preprocess: coerce non-numeric values to null for numeric fields
+const coerceNumber = z.preprocess(
+  (v) => (typeof v === 'number' ? v : null),
+  z.number().nullable()
+).optional().default(null);
+
 // Zod schema for validating AI JSON responses
 const AiResponseSchema = z.object({
   is_rental: z.boolean(),
-  price: z.number().nullable(),
-  currency: z.enum(['ILS', 'USD', 'EUR']).nullable(),
-  price_period: z.enum(['month', 'week', 'day']).nullable(),
-  bedrooms: z.number().nullable(),
-  city: z.string().nullable(),
-  neighborhood: z.string().nullable(),
-  street: z.string().nullable(),
-  floor: z.number().nullable(),
-  square_meters: z.number().nullable(),
-  entry_date: z.string().nullable(),
-  tags: z.array(z.string()),
+  price: coerceNumber,
+  currency: z.preprocess(
+    (v) => (v === '₪' || v === 'NIS' ? 'ILS' : v),
+    z.enum(['ILS', 'USD', 'EUR']).nullable()
+  ).optional().default(null),
+  price_period: z.enum(['month', 'week', 'day']).nullable().optional().default(null),
+  bedrooms: coerceNumber,
+  city: z.string().nullable().optional().default(null),
+  neighborhood: z.string().nullable().optional().default(null),
+  street: z.string().nullable().optional().default(null),
+  floor: coerceNumber,
+  square_meters: coerceNumber,
+  entry_date: z.string().nullable().optional().default(null),
+  tags: z.array(z.string()).optional().default([]),
 });
 
 type AiResponse = z.infer<typeof AiResponseSchema>;
@@ -156,11 +165,13 @@ Rules:
 - Respond with JSON only, no explanation
 - Only extract values explicitly stated in the text — never guess or invent
 - If a field is not mentioned, use null. Many posts omit street, price, or floor — that is normal
-- is_rental: false for any of these: for-sale listings (למכירה), searching/wanted posts, service ads, community announcements, non-rental content
+- is_rental: false for any of these: for-sale listings (למכירה), searching/wanted posts (מחפש/ה דירה, דרוש/ה, מעוניין/ת, מישהו מכיר), service ads, community announcements, non-rental content. Posts where someone is LOOKING for an apartment are NOT rental listings
 - Price: monthly rent amount only. Sale prices (typically 1M+₪) mean is_rental is false
-- Street: extract only if a specific street name is mentioned. Neighborhood names are not streets
+- Street: extract only if a specific street name is mentioned. Neighborhood names are not streets. Do not include the word "רחוב" but DO include the house number if one is mentioned (e.g. "רחוב וושינגטון 31" → "וושינגטון 31")
+- Floor: extract ONLY if the post explicitly mentions a floor/קומה. Return null if no floor is mentioned. קומת קרקע or קומת כניסה = 0. Hebrew ordinals: ראשונה/ראשון = 1, שנייה/שני = 2, שלישית/שלישי = 3. "קומה 5" = 5. Do NOT guess or infer floor from other details
+- City: return the city name in Hebrew. Most posts in this dataset are from תל אביב. Neighborhoods like פלורנטין, כרם התימנים, יפו, הצפון הישן are NOT cities — they are neighborhoods within תל אביב
 - City, neighborhood, street: strip Hebrew prefix letters (ב, ה, ל, מ, ש, כ, ו) from the result. Return the bare name, not the prefixed form
-- Tags: only use these values: parking, balcony, pets, furnished, immediate, long-term, accessible, air-conditioning, elevator, storage, renovated
+- Tags: return ONLY tags for features explicitly mentioned in the post. Most posts have 0-3 tags. If a feature is not mentioned, do NOT include its tag. Valid tag values (use English only): parking, balcony, pets, furnished, immediate, long-term, accessible, air-conditioning, elevator, storage, renovated
 
 Post text:
 """
@@ -204,13 +215,16 @@ JSON schema:
     const result = await Promise.race([aiPromise, timeoutPromise]);
     const latencyMs = Date.now() - startTime;
 
-    // Parse response
-    if (!result.response) {
+    // Normalize response: support both Workers AI ({ response }) and OpenAI-compatible ({ choices }) formats
+    const choices = result.choices as Array<{ message?: { content?: string } }> | undefined;
+    const responseText = result.response ?? choices?.[0]?.message?.content ?? null;
+
+    if (!responseText || typeof responseText !== 'string') {
       return { ok: false, reason: 'empty_response', latencyMs };
     }
 
     // Extract JSON from response (may have markdown code blocks)
-    let jsonText = result.response.trim();
+    let jsonText = responseText.trim();
     if (jsonText.startsWith('```json')) {
       jsonText = jsonText.slice(7);
     }

@@ -1,11 +1,31 @@
 # State
 
-**Last Updated:** 2026-03-03
-**Current Work:** M5 in progress. AI extraction DEPLOYED (PR #36, migration 0012, AI Gateway enabled). Duplicate detection SPECIFIED (`.specs/features/duplicate-detection/spec.md`) — field-based cross-source matching, source priority (YAD2 > Facebook), `duplicate_of` column. 267 tests, 0 typecheck errors. Next: design + tasks for duplicate-detection, then brokerage-detection and sublet-classification.
+**Last Updated:** 2026-03-04
+**Current Work:** M5 in progress. AI extraction hardened (Zod coercion, OpenAI format support, prompt improvements). Eval pipeline built (`scripts/eval/`). Golden dataset has 12 placeholder entries — **user needs to re-label with ground truth**. Granite shows 100% success vs Llama 75% on placeholder labels. Non-rental filtering PR #40 (ready for merge). Duplicate detection PR #38 pending merge + deploy. 313 tests, 0 typecheck errors. Next: user labels golden dataset → re-run evals → decide Llama vs Granite → merge PRs #38 + #40 → deploy.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-022: AI extraction hardening + eval pipeline (2026-03-04)
+
+**Decision:** Harden `aiExtract()` Zod schema, add OpenAI-compatible response format support, improve prompts for Hebrew extraction, and build an evaluation pipeline for data-driven prompt iteration.
+**Reason:** A/B testing Llama 3.1 8B vs Granite 4.0-h-micro revealed: (1) Granite uses OpenAI `choices[0].message.content` format — production code only read `result.response`, causing 100% false failures, (2) Missing fields caused Zod validation errors, (3) Granite returns Hebrew strings for numeric fields, (4) Both models misclassify "searching for apartment" posts as rentals.
+**Changes:**
+- Zod schema: `z.preprocess()` coerces non-numbers to null, `.optional().default(null)` for all nullable fields, tags default `[]`
+- Response normalization: `aiExtract()` checks both `result.response` and `choices[0].message.content`
+- Prompt: city hints (neighborhoods ≠ cities), selective English-only tags, stronger non-rental detection with Hebrew keywords (מחפש/ה, דרוש/ה)
+- Eval pipeline: `scripts/eval/export-samples.ts` (fetch posts from D1), `scripts/eval/run-eval.ts` (field-level accuracy metrics), golden dataset format with Facebook URLs
+- 3 new tests (missing fields, type coercion, OpenAI format)
+**Eval results (placeholder labels):** Granite 100% success, Llama 75%. City accuracy improved 25%→88% with prompt hints. Tags remain 0% for both models (regex handles tags via `mergeExtractionResults()`).
+**Pending:** User must label golden dataset with ground truth before final model decision.
+
+### AD-021: Non-rental filtering to reduce AI waste (2026-03-04)
+
+**Decision:** Add regex-based filtering for sale posts (`למכירה`), service ads (painters, clinics, movers), and expanded neighborhood data (150+ entries across 10 cities) to reduce unnecessary AI extraction calls. Renamed `isSearchPost` field to `isNonRental` across the codebase.
+**Reason:** Analysis of a production batch showed 6/10 AI calls (60%) were wasted — 3 on sale listings, 2 on service ads, 1 on a valid listing where regex could have extracted the neighborhood. AI prompt also had example values that models were copying into output fields.
+**Trade-off:** Regex patterns are conservative to avoid false positives. Some edge cases (unusual service ads) may still reach AI.
+**Impact:** PR #40 (8 commits): `SALE_POST_PATTERNS`, `SERVICE_AD_PATTERNS`, `isNonRentalPost()` unified check, 150+ neighborhoods, AI prompt cleanup (no examples, prefix stripping rule, Facebook title dedup), `shouldInvokeAI()` skips non-rental posts. Estimated 70-80% reduction in unnecessary AI calls. 313 tests.
 
 ### AD-020: Playwright migration for Facebook connector (2026-03-03)
 

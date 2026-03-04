@@ -1,0 +1,234 @@
+[
+  {
+    "id": "golden-001",
+    "sourcePostId": "3057547047774457",
+    "url": "https://www.facebook.com/groups/305724686290054/posts/3057547047774457/",
+    "category": "standard_rental",
+    "text": "להשכרה במיקום מעולה בצפון הישן של תל אביב ברחוב דוד ילין ממש בקרבת כיכר המדינה 3 חדרים מרווחים כ-75 מטר + משופצת  ונעימה + 2 מרפסות מקורות ענקיות תיקורת גבוהות חללים ענקיים + מתאימה גם ל2 שותפים ולזוגות  מיזוג מלאיש תשתית למכונת כביסה קומת קרקע מסורגת בניין שמור עם קודן ומיקלט מסודר מותר בעלי חיים כניסה 01/04/26מחיר 7000 ₪ לטווח ארוך לתיאום 050-3277215 או דרך וואצאפ https://wa.me/503277215תיווך אבי&דן נכסיםלדירות נוספות הצטרפו אלינו לקבוצה:https://www.facebook.com/groups/662327187275268/",
+    "expected": {
+      "isRental": true,
+      "price": {
+        "amount": 7000,
+        "currency": "ILS",
+        "period": "month"
+      },
+      "bedrooms": 3,
+      "city": "תל אביב",
+      "neighborhood": "הצפון הישן",
+      "street": "דוד ילין",
+      "floor": 0,
+      "squareMeters": 75,
+      "entryDate": "2026-04-01",
+      "tags": ["pets", "air-conditioning", "long-term", "balcony"]
+    },
+    "notes": "Standard rental with full details, ground floor (קומת קרקע), pets allowed, entry date"
+  },
+  {
+    "id": "golden-002",
+    "sourcePostId": "3057552464440582",
+    "url": "https://www.facebook.com/groups/305724686290054/posts/3057552464440582/",
+    "category": "standard_rental",
+    "text": "*** להשכרה, 3חד + מרפסת ענקית ***הצפון הישןרחוב בן יהודה3חד'75 מ'רקומה 5נוף ישיר ליםמעלית2 חדרי רחצה ושירותיםממ'דדופלקסמרפסת ענקיתחיבור למכונת כביסהדוד שמשלפרטים נוספים לחצו כאן:https://tinyurl.com/2p755w8hכניסה: 31.2שכ'ד: 9500 ש'חלפרטים ותיאום: עופר - 0509783334תיווך - ARAD",
+    "expected": {
+      "isRental": true,
+      "price": {
+        "amount": 9500,
+        "currency": "ILS",
+        "period": "month"
+      },
+      "bedrooms": 3,
+      "city": "תל אביב",
+      "neighborhood": "הצפון הישן",
+      "street": "בן יהודה",
+      "floor": 5,
+      "squareMeters": 75,
+      "entryDate": "2026-02-31",
+      "tags": ["elevator", "balcony"]
+    },
+    "notes": "Compact Hebrew listing format with abbreviations (חד', מ'ר, שכ'ד)"
+  },
+  {
+    "id": "golden-003",
+    "sourcePostId": "2834202490251981",
+    "url": "https://www.facebook.com/groups/101875683484689/posts/2834202490251981/",
+    "category": "standard_rental",
+    "text": "להשכרה מפרטי - ללא דמי תיווךבפרויקט \"בית מרגלית\" בתל אביב, בלב  שכונת פלורנטין המבוקשת ברחוב וושינגטון 31, דירת 2 חדרים חדשה מקבלן , (56 מ\"ר) עם מרפסת מרווחת! (11 מ\"ר)הדירה מעוצבת אדריכלית במפרט ברמה גבוהה מאוד :חימום תת-רצפתי בכל הדירה, מערכת \"בית חכם\", רמקולים שקועים בתקרת הסלון, תריסים חשמליים, גופי תאורה, ארונות מובנים של חברת \"זדקה\" , מטבח משודרג  ברמה מאוד גבוהה של מטבחי אביבי  , קולט אדים, מדיח אינטגרלי, כיריים אינדוקציה, תנור של \"גרנייה\" , מקרר אינטגרלי \"גרנייה\"במיקום מרכזי מאוד הקרוב להכל! בקרבת מסעדות, חנויות, תחבורה ציבורית.שווה להגיע לראות! מחפשים שוכרים טובים ואיכותיים לטווח ארוך.קומה: 1 (יש 2 מעליות).שכ\"ד:  8,500 ₪ (צמוד מדד) כניסה: מיידיתלפרטים וקביעת פגישה בנכס רק דרך המספר שמופיע מטה בפוסט זה!:לינוי- 053-4582042 - ללא תיווך",
+    "expected": {
+      "isRental": true,
+      "price": {
+        "amount": 8500,
+        "currency": "ILS",
+        "period": "month"
+      },
+      "bedrooms": 2,
+      "city": "תל אביב",
+      "neighborhood": "פלורנטין",
+      "street": "וושינגטון 31",
+      "floor": 1,
+      "squareMeters": 56,
+      "entryDate": null,
+      "tags": ["elevator", "balcony", "immediate", "long-term"]
+    },
+    "notes": "Rich detail, Florentin neighborhood, immediate entry, long-term"
+  },
+  {
+    "id": "golden-004",
+    "sourcePostId": "3057517934444035",
+    "url": "https://www.facebook.com/groups/305724686290054/posts/3057517934444035/",
+    "category": "standard_rental",
+    "text": "להשכרה בקינג ג׳ורג׳ – דירת 3 חדרים90 מ״ר + מרפסת קטנהקומה 3 עם מעלית, מוארת ומרווחתמעוצבת אדריכליתמרוהטת קומפלט בריהוט יוקרתי2 חדרי רחצה מלאיםיש מקלט בבניין!שכירות: 13,500 ₪כניסה מיידיתלעוד פרטים ופגישה בנכס:בר – 052-6033006תיווך",
+    "expected": {
+      "isRental": true,
+      "price": {
+        "amount": 13500,
+        "currency": "ILS",
+        "period": "month"
+      },
+      "bedrooms": 3,
+      "city": "תל אביב",
+      "neighborhood": null,
+      "street": "קינג ג׳ורג׳",
+      "floor": 3,
+      "squareMeters": 90,
+      "entryDate": null,
+      "tags": ["furnished", "elevator", "balcony", "immediate"]
+    },
+    "notes": "King George st, furnished, immediate entry"
+  },
+  {
+    "id": "golden-005",
+    "sourcePostId": "3057546597774502",
+    "url": "https://www.facebook.com/groups/305724686290054/posts/3057546597774502/",
+    "category": "standard_rental",
+    "text": "להשכרה ליד כיכר המדינה דירת 4 חדרים מרווחת ומוארת במיוחד, כ־120 מ״ר עם מרפסת נעימה ותכנון חכם למגורים נוחים ושקטים בלוקיישן מבוקש.כוללת חניה מקורה פרטית ומחסן צמוד – יתרון נדיר ומשמעותי באזור.בניין חדש ומטופח עם מעלית, ממ״ד, מטבח מאובזר במדיח אינטגרלי, כיריים ותנור, מיזוג מיני מרכזי בסלון ומזגנים נפרדים בחדרים, תריסים חשמליים ורשתות.כניסה מיידית.16,000₪לפרטים נוספים בוואטסאפ: https://app.ezpost.co.il/wa/CkP9jP",
+    "expected": {
+      "isRental": true,
+      "price": {
+        "amount": 16000,
+        "currency": "ILS",
+        "period": "month"
+      },
+      "bedrooms": 4,
+      "city": "תל אביב",
+      "neighborhood": "כיכר המדינה",
+      "street": null,
+      "floor": null,
+      "squareMeters": 120,
+      "entryDate": null,
+      "tags": ["parking", "storage", "elevator", "air-conditioning", "balcony", "immediate"]
+    },
+    "notes": "Near Kikar Hamedina, no street name, parking + storage mentioned"
+  },
+  {
+    "id": "golden-006",
+    "sourcePostId": "3057537347775427",
+    "url": "https://www.facebook.com/groups/305724686290054/posts/3057537347775427/",
+    "category": "missing_fields",
+    "text": "להשכרה ברחוב בן דוסא, שוק הפשפשים יפו.דירת סטודיו יפואית אותנטית משופצת ומרווחת 40 מ\"ר מפלס תחתוןגלריה 20 מ\"ר עם קשתות (גובה 1.8 מ')מיקום מוגדר למכונת כביסה כניסה מיידית לפרטים נוספים וסירטון הנכס https://wa.me/972548039613שלומית אוחיון 054-8039613 אוניקס נדל\"ן *תיווךמ.ר 3212513",
+    "expected": {
+      "isRental": true,
+      "price": null,
+      "bedrooms": null,
+      "city": "יפו",
+      "neighborhood": "שוק הפשפשים",
+      "street": "בן דוסא",
+      "floor": null,
+      "squareMeters": 40,
+      "entryDate": null,
+      "tags": ["immediate"]
+    },
+    "notes": "Missing price and bedrooms (studio). Jaffa flea market area"
+  },
+  {
+    "id": "golden-007",
+    "sourcePostId": "3057555047773657",
+    "url": "https://www.facebook.com/groups/305724686290054/posts/3057555047773657/",
+    "category": "missing_fields",
+    "text": "להשכרה דירת 3 חד׳ עם ממ״ד לכניסה מיידית!להשכרה בפרויקט שרביב המבוקש בשכונת המשתלה שבצפון ת״א  דירת 3 חד׳ בתכנון מעולה עם חלל אירוח מפנק  כ־70 מ״ר + 8 מ״ר מרפסת  פרויקט יוקרתי עם שומר 24/7, בריכה, חדר כושר, חדר דיירים, משחקייה | דמי ניהול 1350 לחודש  מרוהטת חלקית  חניה בחניון תת קרקעי  כניסה מיידית מחיר מבוקש 8,100  תיאומים גמישים ‏Reuveny Real Estate תומר 050-7292000 / מס רישיון - 3221525מאי 050-3113000 / מס רישיון - 3217585",
+    "expected": {
+      "isRental": true,
+      "price": {
+        "amount": 8100,
+        "currency": "ILS",
+        "period": "month"
+      },
+      "bedrooms": 3,
+      "city": "תל אביב",
+      "neighborhood": "המשתלה",
+      "street": null,
+      "floor": null,
+      "squareMeters": 70,
+      "entryDate": null,
+      "tags": ["parking", "furnished", "balcony", "immediate"]
+    },
+    "notes": "Missing street and floor. Uses ת״א abbreviation for city. Partially furnished"
+  },
+  {
+    "id": "golden-008",
+    "sourcePostId": "110538478974886",
+    "url": "https://www.facebook.com/groups/101875683484689/posts/110538478974886/",
+    "category": "non_rental",
+    "text": "פנטהאוז חדש במושבה האיטלקית – קריית שלום רחוב נס הרים 16 (3628) | תל אביבבפרויקט חדש שאוכלס לאחרונה –פנטהאוז מדהים בקומה 8 עם נוף פתוח שלא ייחסם. 4 חדרים 105 מ״ר בנוי 75 מ״ר מרפסות שמש סלון מרווח עם יציאה למרפסת ענקית של 60 מ״ר סוויטת הורים עם חדר רחצה ויציאה למרפסת הגדולה חדר נוסף עם מרפסת פרטית 15 מ״ר ממ״ד מרווח 3 כיווני אוויר היחידה בבניין עם 2 חניות פרטיותמיקום מנצח בקרבת:מוסדות חינוך, שירותים קהילתיים, תחבורה ציבורית וחנויות נוחות. נכס נדיר באזור – לא יישאר הרבה זמן בשוק.מחיר שיווק : 5,500,000₪",
+    "expected": {
+      "isRental": false
+    },
+    "notes": "For sale (5.5M ILS), not rental"
+  },
+  {
+    "id": "golden-009",
+    "sourcePostId": "3057555471106948",
+    "url": "https://www.facebook.com/groups/305724686290054/posts/3057555471106948/",
+    "category": "non_rental",
+    "text": "היי לכולם, הדירה שלי נפגעה ואני מחפש דירת 2 חדרים באיזור לב העיר, הבימה, שינקין וכו.. אשמח לכל חיבור רלוונטי תודה רבה",
+    "expected": {
+      "isRental": false
+    },
+    "notes": "Searching post (מחפש דירה) — wanted ad, not a listing"
+  },
+  {
+    "id": "golden-010",
+    "sourcePostId": "556667244734943",
+    "url": "https://www.facebook.com/groups/101875683484689/posts/556667244734943/",
+    "category": "non_rental",
+    "text": "היי אהובות למרות התקופה המאתגרת – הקליניקה שלי פתוחה כרגיל השבוע.וכן, חשוב לי שתדעו – אנחנו עובדים בממ״ד, כך שבמקרה של אזעקה אנחנו כבר בתוך המרחב מוגן ובטוח.דווקא עכשיו, בין כל החדשות והלחץ, מגיע לכן שעה של שקט, פינוק ונשימה.טיפולי לק ג'ל | פדיקור | בנייה | מילוי – באווירה רגועה, נקייה ובטוחה.נשארו לי כמה תורים פנויים השבוע מי שרוצה לשריין מקום שתשלח לי הודעה פרטית ואחזור אליה עם שעות מדויקות.בואו נכניס קצת צבע לימים אלו ועכשיו מבצע מיוחד לימים אלו לפרטים נוספים כתבי לי בפרטי",
+    "expected": {
+      "isRental": false
+    },
+    "notes": "Service ad (nail salon/beauty) — not a rental listing at all"
+  },
+  {
+    "id": "golden-011",
+    "sourcePostId": "2834217260250504",
+    "url": "https://www.facebook.com/groups/101875683484689/posts/2834217260250504/",
+    "category": "edge_case",
+    "text": "דירת 2 חדרים להשכרה | סימטת צריפין 31, פלורנטיןרחוב בעלי מלאכה פעיל — בין אברבנאל לגינה הקהילתית. מתאימה לזוג או יחיד. לא לשותפים.55 מ\"ר | קומה שנייה | רצפת עץ מולבן | נעימה ומוצפת אורכלול בדירה: ספה קטנה, שולחן אוכל, סולם מדפים, ספסל עץ גדול, כיריים חשמליות, ארון בגדים, מקרר וארון ספרים.עוד פרטים: שני מזגנים, דוד שמש, סורגים, חניה ברחוב. מקלט שכונתי בקצה הרחוב כ 70 מטרים מהדירה, רכבת קלה (אליפלט) כארבע דק הליכה.5,850 ש\"ח כולל ארנונה | ללא ועד בית  ללא בעלי חיים, סורי.מועד כניסה: 15 למרץ קצת על המקום: הסימטה מאכלסת נגריות ורפדיות פעילות לצד דירות מגורים — אנשים צבעוניים ונחמדים, גרפיטי על הקירות, סיורי צילום בשישי. די מגניב, אבל לא מתאים לכל אחד. ממליצים לעשות סיבוב בסימטה לפני שמצהירים על התעניינות רצינית.לפרטים — ווטסאפ: אורי (בעל הבית) 054-496-9911 ארי (דייר נוכחי) 054-531-7611",
+    "expected": {
+      "isRental": true,
+      "price": {
+        "amount": 5850,
+        "currency": "ILS",
+        "period": "month"
+      },
+      "bedrooms": 2,
+      "city": "תל אביב",
+      "neighborhood": "פלורנטין",
+      "street": "סימטת צריפין 31 ",
+      "floor": 2,
+      "squareMeters": 55,
+      "entryDate": "2026-03-15",
+      "tags": ["furnished", "air-conditioning"]
+    },
+    "notes": "Edge case: Hebrew text date (15 למרץ), floor written as word (קומה שנייה=2), furnished with itemized list, street is an alley name"
+  },
+  {
+    "id": "golden-012",
+    "sourcePostId": "txt_67zoud",
+    "url": "https://www.facebook.com/groups/101875683484689/",
+    "category": "non_rental",
+    "text": "מחפש דירה 3 חדרים  בתל אביב או בית פרטי בפרדס - חנה עם ממ\"ד או מקלט תקין. דירה עם מרפסת גדולה או לחלופין גינה. רצוי עם מעלית או קומות נמוכות. ללא תכולה עם מזגנים.ללא תיווך  !!!!! במחיר עד 8500 כניסה 1/4 או סוף מרץ רצוי לטווח ארוך",
+    "expected": {
+      "isRental": false
+    },
+    "notes": "Searching post with lots of requirements — could confuse AI into thinking it's a listing with price/bedrooms"
+  }
+]
