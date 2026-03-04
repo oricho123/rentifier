@@ -44,7 +44,7 @@ export interface AiExtractorConfig {
 export const DEFAULT_AI_CONFIG: AiExtractorConfig = {
   maxCallsPerBatch: 10,
   timeoutMs: 5000,
-  model: '@cf/meta/llama-3.1-8b-instruct',
+  model: '@cf/ibm-granite/granite-4.0-h-micro',
 };
 
 export interface AiExtractorMetrics {

@@ -100,7 +100,7 @@ Tags supported: `parking`, `balcony`, `pets`, `furnished`, `immediate`, `long-te
 
 When regex misses key fields (neighborhood, street, price, or city), the processor invokes Cloudflare Workers AI:
 
-- **Model:** `@cf/meta/llama-3.1-8b-instruct`
+- **Model:** `@cf/ibm-granite/granite-4.0-h-micro`
 - **Gate:** Only triggered for non-YAD2 sources when specific fields are null
 - **Budget:** Max 20 AI calls per processor batch
 - **Merge strategy:** Regex results take priority; AI fills gaps with 0.6 confidence

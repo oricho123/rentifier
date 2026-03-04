@@ -8,7 +8,7 @@
  *   pnpm tsx --env-file=.env scripts/eval/run-eval.ts [options]
  *
  * Options:
- *   --model <model>       Model to evaluate (default: @cf/meta/llama-3.1-8b-instruct)
+ *   --model <model>       Model to evaluate (default: @cf/ibm-granite/granite-4.0-h-micro)
  *   --golden <path>       Path to golden dataset (default: scripts/eval/golden-dataset.json)
  *   --output <path>       Write JSON results to file
  *   --quick <N>           Run against N randomly-selected golden posts (fast feedback)
@@ -29,7 +29,7 @@ function getArg(flag: string): string | undefined {
   return idx !== -1 ? process.argv[idx + 1] : undefined;
 }
 
-const MODEL = getArg('--model') ?? '@cf/meta/llama-3.1-8b-instruct';
+const MODEL = getArg('--model') ?? '@cf/ibm-granite/granite-4.0-h-micro';
 const GOLDEN_PATH = getArg('--golden') ?? 'scripts/eval/golden-dataset.json';
 const OUTPUT_PATH = getArg('--output');
 const QUICK_N = getArg('--quick') ? parseInt(getArg('--quick')!, 10) : undefined;
