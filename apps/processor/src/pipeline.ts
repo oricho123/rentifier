@@ -2,7 +2,7 @@ import type { DB, ListingRaw, ListingRow } from '@rentifier/db';
 import type { Connector } from '@rentifier/connectors';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import { MockConnector, Yad2Connector, FacebookNormalizer } from '@rentifier/connectors';
-import { extractAll, isSearchPost, shouldInvokeAI, aiExtract, mergeExtractionResults, DEDUP_THRESHOLD, type AiProvider, type AiExtractorMetrics, type AiExtractDetailedResult, type AiExtractorConfig, DEFAULT_AI_CONFIG } from '@rentifier/extraction';
+import { extractAll, isNonRentalPost, shouldInvokeAI, aiExtract, mergeExtractionResults, DEDUP_THRESHOLD, type AiProvider, type AiExtractorMetrics, type AiExtractDetailedResult, type AiExtractorConfig, DEFAULT_AI_CONFIG } from '@rentifier/extraction';
 
 export interface ProcessingResult {
   processed: number;
@@ -86,9 +86,9 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
       }
 
       // Step 3: Skip search/wanted posts
-      if (isSearchPost(`${candidate.rawTitle} ${candidate.rawDescription}`)) {
+      if (isNonRentalPost(`${candidate.rawTitle} ${candidate.rawDescription}`)) {
         console.log(JSON.stringify({
-          event: 'item_skipped_search_post',
+          event: 'item_skipped_non_rental',
           sourceId: raw.source_id,
           sourceItemId: raw.source_item_id,
         }));
@@ -111,7 +111,11 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
         if (shouldUseAI) {
           const maxCalls = aiConfig?.maxCallsPerBatch ?? DEFAULT_AI_CONFIG.maxCallsPerBatch;
           if (aiMetrics.called < maxCalls) {
-            const aiResult = await aiExtract(`${draft.title}\n\n${draft.description}`, ai, aiConfig);
+            // For Facebook posts, title === description, so don't duplicate
+            const aiText = source.name === 'facebook'
+              ? draft.description
+              : `${draft.title}\n\n${draft.description}`;
+            const aiResult = await aiExtract(aiText, ai, aiConfig);
 
             aiMetrics.called++;
             totalLatency += aiResult.latencyMs;

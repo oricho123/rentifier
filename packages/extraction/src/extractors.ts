@@ -1,5 +1,5 @@
 import { PriceResult, LocationResult, ExtractionResult } from './types';
-import { PRICE_PATTERNS, PERIOD_PATTERNS, BEDROOM_PATTERNS, TAG_KEYWORDS, CITY_NAMES, CITY_NEIGHBORHOODS, STREET_PATTERNS, SEARCH_POST_PATTERNS } from './patterns';
+import { PRICE_PATTERNS, PERIOD_PATTERNS, BEDROOM_PATTERNS, TAG_KEYWORDS, CITY_NAMES, CITY_NEIGHBORHOODS, STREET_PATTERNS, SEARCH_POST_PATTERNS, SALE_POST_PATTERNS, SERVICE_AD_PATTERNS } from './patterns';
 
 export function extractPrice(text: string): PriceResult | null {
   for (const { pattern, currency } of PRICE_PATTERNS) {
@@ -244,6 +244,19 @@ export function isSearchPost(text: string): boolean {
   return SEARCH_POST_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+export function isSalePost(text: string): boolean {
+  return SALE_POST_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+export function isServiceAd(text: string): boolean {
+  return SERVICE_AD_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+/** Unified check: returns true if text is not a rental listing (search, sale, or service ad). */
+export function isNonRentalPost(text: string): boolean {
+  return isSearchPost(text) || isSalePost(text) || isServiceAd(text);
+}
+
 export function extractAll(title: string, description: string): ExtractionResult {
   const combinedText = `${title} ${description}`;
 
@@ -252,7 +265,7 @@ export function extractAll(title: string, description: string): ExtractionResult
   const street = extractStreet(combinedText);
   const tags = extractTags(combinedText);
   const location = extractLocation(combinedText);
-  const searchPost = isSearchPost(combinedText);
+  const searchPost = isNonRentalPost(combinedText);
 
   // Weighted field coverage confidence
   // Each field contributes based on its importance for filter matching
