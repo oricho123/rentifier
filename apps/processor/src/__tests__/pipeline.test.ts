@@ -3,6 +3,9 @@ import { processBatch } from '../pipeline';
 import type { DB, ListingRaw, Source } from '@rentifier/db';
 import type { AiProvider } from '@rentifier/extraction';
 
+// Long description that triggers AI gate (100+ chars, no extractable price/street/neighborhood)
+const FB_LONG_DESC = 'דירה להשכרה, מרפסת גדולה עם נוף, ממוזגת, חניה בבניין, מעלית, מחסן, משופצת לאחרונה, כניסה מיידית לדיירים רציניים בלבד';
+
 describe('processBatch with AI integration', () => {
   let mockDb: Partial<DB>;
   let mockAi: AiProvider;
@@ -70,7 +73,7 @@ describe('processBatch with AI integration', () => {
     expect(upsertedListings[0].ai_extracted).toBe(0);
   });
 
-  it('should call AI when neighborhood is null for Facebook listing', async () => {
+  it('should call AI when price is missing for Facebook listing', async () => {
     const fbSource: Source = { id: 2, name: 'facebook', enabled: true, created_at: '2026-01-01' };
     const rawListing: ListingRaw = {
       id: 2,
@@ -80,8 +83,8 @@ describe('processBatch with AI integration', () => {
       raw_json: JSON.stringify({
         source: 'facebook',
         sourceItemId: 'fb_123',
-        rawTitle: 'דירה להשכרה',
-        rawDescription: 'דירה יפה בתל אביב, 3 חדרים, 5000 שקלים',
+        rawTitle: 'דירה להשכרה בתל אביב',
+        rawDescription: FB_LONG_DESC,
         rawUrl: 'https://facebook.com/groups/123/posts/456',
         rawPostedAt: '2026-03-01T10:00:00Z',
         sourceData: { groupId: '123' },
@@ -119,7 +122,7 @@ describe('processBatch with AI integration', () => {
     expect(upsertedListings[0].entry_date).toBe('2026-04-01');
   });
 
-  it('should call AI when street is null for Facebook listing', async () => {
+  it('should call AI when both neighborhood and street are null for Facebook listing', async () => {
     const fbSource: Source = { id: 2, name: 'facebook', enabled: true, created_at: '2026-01-01' };
     const rawListing: ListingRaw = {
       id: 3,
@@ -129,8 +132,8 @@ describe('processBatch with AI integration', () => {
       raw_json: JSON.stringify({
         source: 'facebook',
         sourceItemId: 'fb_456',
-        rawTitle: 'דירה בפלורנטין',
-        rawDescription: 'דירה מעולה, 3 חדרים',
+        rawTitle: 'דירה 3 חדרים 5000 שקלים',
+        rawDescription: FB_LONG_DESC,
         rawUrl: 'https://facebook.com/groups/123/posts/789',
         rawPostedAt: '2026-03-01T10:00:00Z',
         sourceData: { groupId: '123' },
@@ -144,9 +147,9 @@ describe('processBatch with AI integration', () => {
     (mockAi.run as any).mockResolvedValue({
       response: JSON.stringify({
         is_rental: true,
-        price: null,
-        currency: null,
-        price_period: null,
+        price: 5000,
+        currency: 'ILS',
+        price_period: 'month',
         bedrooms: 3,
         city: 'תל אביב',
         neighborhood: 'פלורנטין',
@@ -162,6 +165,7 @@ describe('processBatch with AI integration', () => {
 
     expect(mockAi.run).toHaveBeenCalledTimes(1);
     expect(upsertedListings[0].ai_extracted).toBe(1);
+    expect(upsertedListings[0].neighborhood).toBe('פלורנטין');
     expect(upsertedListings[0].street).toBe('דיזנגוף');
   });
 
@@ -197,8 +201,8 @@ describe('processBatch with AI integration', () => {
   it('should respect AI budget exhaustion and fall back to regex-only', async () => {
     const fbSource: Source = { id: 2, name: 'facebook', enabled: true, created_at: '2026-01-01' };
 
-    // Create 25 listings (more than maxCallsPerBatch of 20)
-    const rawListings: ListingRaw[] = Array.from({ length: 25 }, (_, i) => ({
+    // Create 15 listings (more than maxCallsPerBatch of 10)
+    const rawListings: ListingRaw[] = Array.from({ length: 15 }, (_, i) => ({
       id: i + 1,
       source_id: 2,
       source_item_id: `fb_${i}`,
@@ -207,7 +211,7 @@ describe('processBatch with AI integration', () => {
         source: 'facebook',
         sourceItemId: `fb_${i}`,
         rawTitle: 'דירה',
-        rawDescription: 'דירה בתל אביב',
+        rawDescription: FB_LONG_DESC,
         rawUrl: `https://facebook.com/groups/123/posts/${i}`,
         rawPostedAt: '2026-03-01T10:00:00Z',
         sourceData: { groupId: '123' },
@@ -237,11 +241,11 @@ describe('processBatch with AI integration', () => {
 
     const result = await processBatch(mockDb as DB, 50, mockAi);
 
-    // Should call AI exactly 20 times (budget limit)
-    expect(mockAi.run).toHaveBeenCalledTimes(20);
-    expect(result.processed).toBe(25);
+    // Should call AI exactly 10 times (budget limit)
+    expect(mockAi.run).toHaveBeenCalledTimes(10);
+    expect(result.processed).toBe(15);
     expect(result.aiMetrics).toBeDefined();
-    expect(result.aiMetrics!.called).toBe(20);
+    expect(result.aiMetrics!.called).toBe(10);
     expect(result.aiMetrics!.skippedBudget).toBe(5);
   });
 
@@ -256,7 +260,7 @@ describe('processBatch with AI integration', () => {
         source: 'facebook',
         sourceItemId: 'fb_fail',
         rawTitle: 'דירה',
-        rawDescription: 'דירה בתל אביב',
+        rawDescription: FB_LONG_DESC,
         rawUrl: 'https://facebook.com/groups/123/posts/fail',
         rawPostedAt: '2026-03-01T10:00:00Z',
         sourceData: { groupId: '123' },
@@ -288,7 +292,7 @@ describe('processBatch with AI integration', () => {
         source: 'facebook',
         sourceItemId: 'fb_merge',
         rawTitle: 'דירה 3 חדרים',
-        rawDescription: 'דירה יפה, 5000 שקלים לחודש',
+        rawDescription: FB_LONG_DESC,
         rawUrl: 'https://facebook.com/groups/123/posts/merge',
         rawPostedAt: '2026-03-01T10:00:00Z',
         sourceData: { groupId: '123' },
@@ -319,10 +323,9 @@ describe('processBatch with AI integration', () => {
     await processBatch(mockDb as DB, 10, mockAi);
 
     const listing = upsertedListings[0];
-    // Regex extraction should get price and bedrooms
-    // AI should fill in missing fields
-    expect(listing.price).toBe(5000); // From regex
-    expect(listing.bedrooms).toBe(3); // From regex
+    // Regex extracts bedrooms from title, AI fills price and other gaps
+    expect(listing.price).toBe(5000); // From AI (no price in text)
+    expect(listing.bedrooms).toBe(3); // From regex (title)
     expect(listing.neighborhood).toBe('פלורנטין'); // From AI
     expect(listing.floor).toBe(3); // From AI
     expect(listing.square_meters).toBe(90); // From AI
@@ -343,7 +346,7 @@ describe('processBatch with AI integration', () => {
         source: 'facebook',
         sourceItemId: 'fb_flag',
         rawTitle: 'דירה',
-        rawDescription: 'דירה בתל אביב',
+        rawDescription: FB_LONG_DESC,
         rawUrl: 'https://facebook.com/groups/123/posts/flag',
         rawPostedAt: '2026-03-01T10:00:00Z',
         sourceData: { groupId: '123' },
@@ -421,7 +424,7 @@ describe('processBatch with AI integration', () => {
         source: 'facebook',
         sourceItemId: 'fb_newfields',
         rawTitle: 'דירה',
-        rawDescription: 'דירה בתל אביב',
+        rawDescription: FB_LONG_DESC,
         rawUrl: 'https://facebook.com/groups/123/posts/newfields',
         rawPostedAt: '2026-03-01T10:00:00Z',
         sourceData: { groupId: '123' },

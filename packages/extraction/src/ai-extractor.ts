@@ -3,8 +3,14 @@ import { ExtractionResult, PriceResult, LocationResult } from './types';
 import { normalizeCity } from './cities';
 
 // Generic AI provider interface (no Cloudflare-specific types)
+export interface AiGatewayOptions {
+  id: string;
+  skipCache?: boolean;
+  cacheTtl?: number;
+}
+
 export interface AiProvider {
-  run(model: string, input: { messages: Array<{ role: string; content: string }> }): Promise<{ response?: string }>;
+  run(model: string, input: { messages: Array<{ role: string; content: string }> }, options?: { gateway?: AiGatewayOptions }): Promise<{ response?: string }>;
 }
 
 export interface AiExtractionResult {
@@ -24,10 +30,11 @@ export interface AiExtractorConfig {
   maxCallsPerBatch: number;
   timeoutMs: number;
   model: string;
+  gatewayId?: string;
 }
 
 export const DEFAULT_AI_CONFIG: AiExtractorConfig = {
-  maxCallsPerBatch: 20,
+  maxCallsPerBatch: 10,
   timeoutMs: 5000,
   model: '@cf/meta/llama-3.1-8b-instruct',
 };
@@ -39,6 +46,12 @@ export interface AiExtractorMetrics {
   skippedBudget: number;
   avgLatencyMs: number;
 }
+
+export type AiFailureReason = 'timeout' | 'empty_response' | 'json_parse' | 'zod_validation' | 'non_rental';
+
+export type AiExtractDetailedResult =
+  | { ok: true; data: AiExtractionResult; latencyMs: number }
+  | { ok: false; reason: AiFailureReason; latencyMs: number };
 
 // Zod schema for validating AI JSON responses
 const AiResponseSchema = z.object({
@@ -63,11 +76,11 @@ type AiResponse = z.infer<typeof AiResponseSchema>;
  *
  * Returns true when:
  * - Source is NOT 'yad2' (structured data doesn't need AI)
- * - AND at least one of:
- *   - extraction.location?.neighborhood is null (12% gap — biggest value)
- *   - extraction.street is null (15% gap)
- *   - extraction.price is null AND textLength > 50 (likely has price but regex missed it)
- *   - extraction.location is null (no city even after group default)
+ * - AND text is long enough (>= 100 chars — short posts don't contain extractable data)
+ * - AND at least one high-value condition:
+ *   - No location at all (city unknown even after group defaults)
+ *   - Price is null (highest-value extraction — regex likely missed it)
+ *   - 2+ fields missing from: neighborhood, street, price (worth the neuron cost)
  */
 export function shouldInvokeAI(
   extraction: ExtractionResult,
@@ -79,13 +92,27 @@ export function shouldInvokeAI(
     return false;
   }
 
-  // Invoke AI if any of these conditions are met
-  return (
-    extraction.location?.neighborhood === null ||
-    extraction.street === null ||
-    (extraction.price === null && textLength > 50) ||
-    extraction.location === null
-  );
+  // Skip short posts — not enough text for AI to extract from
+  if (textLength < 100) {
+    return false;
+  }
+
+  // Always invoke if no location at all (highest value)
+  if (extraction.location === null) {
+    return true;
+  }
+
+  // Always invoke if price is missing (high value extraction)
+  if (extraction.price === null) {
+    return true;
+  }
+
+  // Count missing fields — only invoke if 2+ gaps exist
+  let missingFields = 0;
+  if (extraction.location?.neighborhood === null) missingFields++;
+  if (extraction.street === null) missingFields++;
+
+  return missingFields >= 2;
 }
 
 /**
@@ -94,14 +121,15 @@ export function shouldInvokeAI(
  * @param text - The post text to extract from
  * @param ai - AI provider instance
  * @param config - Optional configuration overrides
- * @returns Extracted data or null on failure
+ * @returns Detailed result with success/failure reason and latency
  */
 export async function aiExtract(
   text: string,
   ai: AiProvider,
   config?: Partial<AiExtractorConfig>,
-): Promise<AiExtractionResult | null> {
+): Promise<AiExtractDetailedResult> {
   const fullConfig = { ...DEFAULT_AI_CONFIG, ...config };
+  const startTime = Date.now();
 
   const prompt = `You are a Hebrew real estate listing parser. Extract structured data from this Facebook group post.
 
@@ -143,17 +171,22 @@ JSON schema:
       setTimeout(() => reject(new Error('AI request timeout')), fullConfig.timeoutMs);
     });
 
+    const gatewayOptions = fullConfig.gatewayId
+      ? { gateway: { id: fullConfig.gatewayId } }
+      : undefined;
+
     const aiPromise = ai.run(fullConfig.model, {
       messages: [
         { role: 'user', content: prompt },
       ],
-    });
+    }, gatewayOptions);
 
     const result = await Promise.race([aiPromise, timeoutPromise]);
+    const latencyMs = Date.now() - startTime;
 
     // Parse response
     if (!result.response) {
-      return null;
+      return { ok: false, reason: 'empty_response', latencyMs };
     }
 
     // Extract JSON from response (may have markdown code blocks)
@@ -169,12 +202,23 @@ JSON schema:
     }
     jsonText = jsonText.trim();
 
-    const parsed = JSON.parse(jsonText);
-    const validated = AiResponseSchema.parse(parsed);
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(jsonText);
+    } catch {
+      return { ok: false, reason: 'json_parse', latencyMs };
+    }
 
-    // Return null if this is not a rental listing
+    let validated: AiResponse;
+    try {
+      validated = AiResponseSchema.parse(parsed);
+    } catch {
+      return { ok: false, reason: 'zod_validation', latencyMs };
+    }
+
+    // Return failure if this is not a rental listing
     if (!validated.is_rental) {
-      return null;
+      return { ok: false, reason: 'non_rental', latencyMs };
     }
 
     // Build price object
@@ -190,20 +234,27 @@ JSON schema:
     const normalizedCity = normalizeCity(validated.city);
 
     return {
-      isRental: validated.is_rental,
-      price,
-      bedrooms: validated.bedrooms,
-      city: normalizedCity,
-      neighborhood: validated.neighborhood,
-      street: validated.street,
-      tags: validated.tags,
-      floor: validated.floor,
-      squareMeters: validated.square_meters,
-      entryDate: validated.entry_date,
+      ok: true,
+      latencyMs,
+      data: {
+        isRental: validated.is_rental,
+        price,
+        bedrooms: validated.bedrooms,
+        city: normalizedCity,
+        neighborhood: validated.neighborhood,
+        street: validated.street,
+        tags: validated.tags,
+        floor: validated.floor,
+        squareMeters: validated.square_meters,
+        entryDate: validated.entry_date,
+      },
     };
   } catch (error) {
-    // Return null on any error (timeout, parse failure, validation error)
-    return null;
+    const latencyMs = Date.now() - startTime;
+    const reason: AiFailureReason = error instanceof Error && error.message === 'AI request timeout'
+      ? 'timeout'
+      : 'json_parse';
+    return { ok: false, reason, latencyMs };
   }
 }
 
