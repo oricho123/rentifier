@@ -131,18 +131,17 @@ export async function aiExtract(
   const fullConfig = { ...DEFAULT_AI_CONFIG, ...config };
   const startTime = Date.now();
 
-  const prompt = `You are a Hebrew real estate listing parser. Extract structured data from this Facebook group post.
+  const prompt = `You are a Hebrew real estate listing parser. Extract structured data from this post.
 
 Rules:
 - Respond with JSON only, no explanation
-- If a field is not mentioned or cannot be determined, use null
-- Do NOT guess or invent values — only extract what is explicitly stated
-- Some listings intentionally hide the price — if no price is mentioned, return null
-- Price is monthly rent unless stated otherwise
-- Street names: extract even without "רחוב" prefix (e.g., "באברבנאל" → "אברבנאל", "דיזנגוף 5" → "דיזנגוף")
-- City names in Hebrew (e.g., תל אביב, not Tel Aviv)
+- Only extract values explicitly stated in the text — never guess or invent
+- If a field is not mentioned, use null. Many posts omit street, price, or floor — that is normal
+- is_rental: false for any of these: for-sale listings (למכירה), searching/wanted posts, service ads, community announcements, non-rental content
+- Price: monthly rent amount only. Sale prices (typically 1M+₪) mean is_rental is false
+- Street: extract only if a specific street name is mentioned. Neighborhood names are not streets
+- City names in Hebrew
 - Tags: only use these values: parking, balcony, pets, furnished, immediate, long-term, accessible, air-conditioning, elevator, storage, renovated
-- is_rental: false for searching/wanted posts, ads, community announcements, non-rental content
 
 Post text:
 """
