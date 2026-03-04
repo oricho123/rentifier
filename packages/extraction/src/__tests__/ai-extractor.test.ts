@@ -758,6 +758,98 @@ describe('aiExtract', () => {
     expect(result.ok).toBe(false);
   });
 
+  it('should handle missing optional fields by defaulting to null', async () => {
+    const mockAi: AiProvider = {
+      run: vi.fn().mockResolvedValue({
+        response: JSON.stringify({
+          is_rental: true,
+          price: 5000,
+          currency: 'ILS',
+          price_period: 'month',
+          bedrooms: 3,
+          city: 'תל אביב',
+          // floor, square_meters, entry_date, neighborhood, street, tags all omitted
+        }),
+      }),
+    };
+
+    const result = await aiExtract('דירת 3 חדרים בתל אביב', mockAi);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.price?.amount).toBe(5000);
+    expect(result.data.bedrooms).toBe(3);
+    expect(result.data.floor).toBeNull();
+    expect(result.data.squareMeters).toBeNull();
+    expect(result.data.entryDate).toBeNull();
+    expect(result.data.neighborhood).toBeNull();
+    expect(result.data.street).toBeNull();
+    expect(result.data.tags).toEqual([]);
+  });
+
+  it('should coerce string-typed numeric fields to null', async () => {
+    const mockAi: AiProvider = {
+      run: vi.fn().mockResolvedValue({
+        response: JSON.stringify({
+          is_rental: true,
+          price: 5000,
+          currency: 'ILS',
+          price_period: 'month',
+          bedrooms: 'שלושה', // Hebrew string instead of number
+          city: 'תל אביב',
+          neighborhood: null,
+          street: null,
+          floor: 'גבוהה', // Hebrew string instead of number
+          square_meters: 'large',
+          entry_date: null,
+          tags: [],
+        }),
+      }),
+    };
+
+    const result = await aiExtract('דירה בתל אביב', mockAi);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.floor).toBeNull();
+    expect(result.data.bedrooms).toBeNull();
+    expect(result.data.squareMeters).toBeNull();
+    expect(result.data.price?.amount).toBe(5000);
+  });
+
+  it('should handle OpenAI-compatible response format (choices)', async () => {
+    const mockAi: AiProvider = {
+      run: vi.fn().mockResolvedValue({
+        choices: [{
+          message: {
+            content: JSON.stringify({
+              is_rental: true,
+              price: 4000,
+              currency: 'ILS',
+              price_period: 'month',
+              bedrooms: 2,
+              city: 'חיפה',
+              neighborhood: null,
+              street: null,
+              floor: 1,
+              square_meters: 60,
+              entry_date: null,
+              tags: ['parking'],
+            }),
+          },
+        }],
+      }),
+    };
+
+    const result = await aiExtract('דירת 2 חדרים בחיפה', mockAi);
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+    expect(result.data.price?.amount).toBe(4000);
+    expect(result.data.city).toBe('חיפה');
+    expect(result.data.bedrooms).toBe(2);
+  });
+
   it('should use custom config when provided', async () => {
     const mockAi: AiProvider = {
       run: vi.fn().mockResolvedValue({
