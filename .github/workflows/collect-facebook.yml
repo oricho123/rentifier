@@ -3,7 +3,7 @@ name: Collect Facebook Listings
 on:
   workflow_dispatch: # Manual trigger for testing
   schedule:
-    - cron: '12,42 * * * *' # Every 30 minutes (offset to avoid GH Actions throttling)
+    - cron: '12,42 5-20 * * *' # Every 30 min, hours 5-20 UTC (7am-midnight Israel time)
 
 jobs:
   collect:

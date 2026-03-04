@@ -9,7 +9,7 @@
 		}
 	},
 	"triggers": {
-		"crons": ["*/30 * * * *"]
+		"crons": ["*/30 5-20 * * *"]
 	},
 	"d1_databases": [
 		{
