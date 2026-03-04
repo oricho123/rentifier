@@ -265,7 +265,7 @@ export function extractAll(title: string, description: string): ExtractionResult
   const street = extractStreet(combinedText);
   const tags = extractTags(combinedText);
   const location = extractLocation(combinedText);
-  const searchPost = isNonRentalPost(combinedText);
+  const nonRental = isNonRentalPost(combinedText);
 
   // Weighted field coverage confidence
   // Each field contributes based on its importance for filter matching
@@ -276,7 +276,7 @@ export function extractAll(title: string, description: string): ExtractionResult
   if (location?.neighborhood) overallConfidence += 0.10;
   if (street) overallConfidence += 0.05;
   if (tags.length > 0) overallConfidence += 0.05;
-  if (!searchPost) overallConfidence += 0.05;
+  if (!nonRental) overallConfidence += 0.05;
   // Round to 2 decimal places to avoid floating point noise
   overallConfidence = Math.round(overallConfidence * 100) / 100;
 
@@ -286,7 +286,7 @@ export function extractAll(title: string, description: string): ExtractionResult
     street,
     tags,
     location,
-    isSearchPost: searchPost,
+    isNonRental: nonRental,
     overallConfidence,
     floor: null,
     squareMeters: null,

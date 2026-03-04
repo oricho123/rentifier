@@ -16,7 +16,7 @@ describe('shouldInvokeAI', () => {
       street: null,
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -33,7 +33,7 @@ describe('shouldInvokeAI', () => {
       street: null,
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -51,7 +51,7 @@ describe('shouldInvokeAI', () => {
       street: 'דיזנגוף',
       tags: [],
       location: { city: 'תל אביב', neighborhood: null, confidence: 0.8 },
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0.8,
       floor: null,
       squareMeters: null,
@@ -68,7 +68,7 @@ describe('shouldInvokeAI', () => {
       street: null,
       tags: [],
       location: { city: 'תל אביב', neighborhood: 'פלורנטין', confidence: 0.9 },
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0.9,
       floor: null,
       squareMeters: null,
@@ -85,7 +85,7 @@ describe('shouldInvokeAI', () => {
       street: null,
       tags: [],
       location: { city: 'תל אביב', neighborhood: null, confidence: 0.8 },
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0.8,
       floor: null,
       squareMeters: null,
@@ -102,7 +102,7 @@ describe('shouldInvokeAI', () => {
       street: 'דיזנגוף',
       tags: [],
       location: { city: 'תל אביב', neighborhood: 'פלורנטין', confidence: 0.9 },
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -119,7 +119,7 @@ describe('shouldInvokeAI', () => {
       street: 'דיזנגוף',
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0.9,
       floor: null,
       squareMeters: null,
@@ -136,7 +136,7 @@ describe('shouldInvokeAI', () => {
       street: 'דיזנגוף',
       tags: ['parking'],
       location: { city: 'תל אביב', neighborhood: 'פלורנטין', confidence: 0.9 },
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0.9,
       floor: null,
       squareMeters: null,
@@ -155,7 +155,7 @@ describe('mergeExtractionResults', () => {
       street: null,
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0.9,
       floor: null,
       squareMeters: null,
@@ -187,7 +187,7 @@ describe('mergeExtractionResults', () => {
       street: null,
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -219,7 +219,7 @@ describe('mergeExtractionResults', () => {
       street: null,
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -250,7 +250,7 @@ describe('mergeExtractionResults', () => {
       street: null,
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -281,7 +281,7 @@ describe('mergeExtractionResults', () => {
       street: null,
       tags: [],
       location: { city: 'תל אביב', neighborhood: 'פלורנטין', confidence: 0.9 },
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0.9,
       floor: null,
       squareMeters: null,
@@ -314,7 +314,7 @@ describe('mergeExtractionResults', () => {
       street: null,
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -347,7 +347,7 @@ describe('mergeExtractionResults', () => {
       street: null,
       tags: [],
       location: { city: 'תל אביב', neighborhood: null, confidence: 0.8 },
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0.8,
       floor: null,
       squareMeters: null,
@@ -380,7 +380,7 @@ describe('mergeExtractionResults', () => {
       street: 'דיזנגוף',
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -411,7 +411,7 @@ describe('mergeExtractionResults', () => {
       street: null,
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -442,7 +442,7 @@ describe('mergeExtractionResults', () => {
       street: null,
       tags: ['parking', 'balcony'],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -470,14 +470,14 @@ describe('mergeExtractionResults', () => {
     expect(result.tags).toContain('furnished');
   });
 
-  it('should set isSearchPost to true when regex isSearchPost is true', () => {
+  it('should set isNonRental to true when regex isNonRental is true', () => {
     const regex: ExtractionResult = {
       price: null,
       bedrooms: null,
       street: null,
       tags: [],
       location: null,
-      isSearchPost: true,
+      isNonRental: true,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -498,17 +498,17 @@ describe('mergeExtractionResults', () => {
     };
 
     const result = mergeExtractionResults(regex, ai);
-    expect(result.isSearchPost).toBe(true);
+    expect(result.isNonRental).toBe(true);
   });
 
-  it('should set isSearchPost to true when AI isRental is false', () => {
+  it('should set isNonRental to true when AI isRental is false', () => {
     const regex: ExtractionResult = {
       price: null,
       bedrooms: null,
       street: null,
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,
@@ -529,7 +529,7 @@ describe('mergeExtractionResults', () => {
     };
 
     const result = mergeExtractionResults(regex, ai);
-    expect(result.isSearchPost).toBe(true);
+    expect(result.isNonRental).toBe(true);
   });
 
   it('should recalculate overallConfidence with AI fields at 0.6', () => {
@@ -539,7 +539,7 @@ describe('mergeExtractionResults', () => {
       street: null,
       tags: [],
       location: null,
-      isSearchPost: false,
+      isNonRental: false,
       overallConfidence: 0,
       floor: null,
       squareMeters: null,

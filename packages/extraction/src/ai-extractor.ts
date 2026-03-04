@@ -107,7 +107,7 @@ export function shouldInvokeAI(
   }
 
   // Skip non-rental posts (sale, service ads, search posts) — AI call would be wasted
-  if (extraction.isSearchPost) {
+  if (extraction.isNonRental) {
     return false;
   }
 
@@ -287,7 +287,7 @@ JSON schema:
  * - Location: Use regex city/neighborhood if non-null, else AI
  * - Street: Use regex if non-null, else AI
  * - Tags: Union of regex + AI tags (deduplicated)
- * - isSearchPost: Regex true takes priority; AI isRental=false also sets it true
+ * - isNonRental: Regex true takes priority; AI isRental=false also sets it true
  * - Recalculate overallConfidence with AI fields getting 0.6
  */
 export function mergeExtractionResults(
@@ -325,8 +325,8 @@ export function mergeExtractionResults(
   // Tags: union and deduplicate
   const tags = Array.from(new Set([...regex.tags, ...ai.tags]));
 
-  // isSearchPost: regex true takes priority; AI isRental=false also sets it true
-  const isSearchPost = regex.isSearchPost || !ai.isRental;
+  // isNonRental: regex true takes priority; AI isRental=false also sets it true
+  const isNonRental = regex.isNonRental || !ai.isRental;
 
   // Weighted field coverage confidence (same formula as extractAll)
   let overallConfidence = 0;
@@ -336,7 +336,7 @@ export function mergeExtractionResults(
   if (location?.neighborhood) overallConfidence += 0.1;
   if (street) overallConfidence += 0.05;
   if (tags.length > 0) overallConfidence += 0.05;
-  if (!isSearchPost) overallConfidence += 0.05;
+  if (!isNonRental) overallConfidence += 0.05;
   overallConfidence = Math.round(overallConfidence * 100) / 100;
 
   return {
@@ -345,7 +345,7 @@ export function mergeExtractionResults(
     street,
     tags,
     location,
-    isSearchPost,
+    isNonRental,
     overallConfidence,
     floor: ai.floor,
     squareMeters: ai.squareMeters,
