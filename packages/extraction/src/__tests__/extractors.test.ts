@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { extractPrice, extractBedrooms, extractTags, extractLocation, extractStreet, isSearchPost, extractAll, matchNeighborhoodInCity } from '../extractors';
+import { extractPrice, extractBedrooms, extractTags, extractLocation, extractStreet, isSearchPost, isSalePost, isServiceAd, isNonRentalPost, extractAll, matchNeighborhoodInCity } from '../extractors';
 
 describe('extractPrice', () => {
   it('should extract ILS amounts with ש״ח', () => {
@@ -423,6 +423,13 @@ describe('matchNeighborhoodInCity', () => {
     const result = matchNeighborhoodInCity('דירה בהדר', 'חיפה');
     expect(result).toBe('הדר');
   });
+
+  it('should match newly added Tel Aviv neighborhoods', () => {
+    expect(matchNeighborhoodInCity('בגינדי האפרהאוס', 'תל אביב')).toBe('גינדי');
+    expect(matchNeighborhoodInCity('על נחלת בנימין', 'תל אביב')).toBe('נחלת בנימין');
+    expect(matchNeighborhoodInCity('ברחוב הירשנברג', 'תל אביב')).toBe('הירשנברג');
+    expect(matchNeighborhoodInCity('ביד אליהו', 'תל אביב')).toBe('יד אליהו');
+  });
 });
 
 describe('extractStreet', () => {
@@ -479,6 +486,59 @@ describe('isSearchPost', () => {
   it('should detect search posts with greeting on first line', () => {
     const searchPost = 'הי,\nמחפש דירת 2-3 חדרים להשכרה בתל אביב';
     expect(isSearchPost(searchPost)).toBe(true);
+  });
+});
+
+describe('isSalePost', () => {
+  it('should detect Hebrew sale posts', () => {
+    expect(isSalePost('דירה ברחוב בן יהודה למכירה!')).toBe(true);
+    expect(isSalePost('למכירה - דירה חדשה בבלעדיות')).toBe(true);
+    expect(isSalePost('הנחה במחיר! למכירה ביד אליהו')).toBe(true);
+  });
+
+  it('should detect English sale posts', () => {
+    expect(isSalePost('Apartment for sale in Tel Aviv')).toBe(true);
+  });
+
+  it('should not flag rental listings', () => {
+    expect(isSalePost('להשכרה דירת 3 חדרים')).toBe(false);
+    expect(isSalePost('דירה להשכרה בפלורנטין')).toBe(false);
+  });
+});
+
+describe('isServiceAd', () => {
+  it('should detect painter ads', () => {
+    expect(isServiceAd('צבעי עם ניסיון של שנים בתחום. שירותים מקצועיים: צביעת דירות')).toBe(true);
+  });
+
+  it('should detect clinic/beauty ads', () => {
+    expect(isServiceAd('הקליניקה שלי פתוחה כרגיל השבוע')).toBe(true);
+  });
+
+  it('should detect moving services', () => {
+    expect(isServiceAd('הובלות בתל אביב והמרכז')).toBe(true);
+  });
+
+  it('should detect renovation services', () => {
+    expect(isServiceAd('שיפוצניק מומחה לעבודות גמר')).toBe(true);
+  });
+
+  it('should not flag rental listings', () => {
+    expect(isServiceAd('להשכרה דירת 3 חדרים')).toBe(false);
+    expect(isServiceAd('דירה מרוהטת עם מרפסת, 5000 ₪')).toBe(false);
+  });
+});
+
+describe('isNonRentalPost', () => {
+  it('should combine all non-rental checks', () => {
+    // Search post
+    expect(isNonRentalPost('מחפשת דירה בתל אביב')).toBe(true);
+    // Sale post
+    expect(isNonRentalPost('דירה למכירה ברחוב הרצל')).toBe(true);
+    // Service ad
+    expect(isNonRentalPost('צביעת דירות במחירים מיוחדים')).toBe(true);
+    // Rental listing
+    expect(isNonRentalPost('להשכרה דירת 3 חדרים בפלורנטין 5000 ₪')).toBe(false);
   });
 });
 
