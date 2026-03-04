@@ -89,6 +89,7 @@ type AiResponse = z.infer<typeof AiResponseSchema>;
  *
  * Returns true when:
  * - Source is NOT 'yad2' (structured data doesn't need AI)
+ * - AND post is not already flagged as non-rental (sale, service ad, search post)
  * - AND text is long enough (>= 100 chars — short posts don't contain extractable data)
  * - AND at least one high-value condition:
  *   - No location at all (city unknown even after group defaults)
@@ -102,6 +103,11 @@ export function shouldInvokeAI(
 ): boolean {
   // Never invoke AI for yad2 (structured data)
   if (sourceName === 'yad2') {
+    return false;
+  }
+
+  // Skip non-rental posts (sale, service ads, search posts) — AI call would be wasted
+  if (extraction.isSearchPost) {
     return false;
   }
 
