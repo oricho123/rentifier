@@ -59,6 +59,23 @@ export const SEARCH_POST_PATTERNS: RegExp[] = [
   /^[\s\S]{0,50}looking\s+for\s+(?:an?\s+)?(?:apartment|room|flat|studio)/i,
 ];
 
+/** Patterns indicating a for-sale listing, not a rental.
+ * "למכירה" is definitive — rental listings never use this term. */
+export const SALE_POST_PATTERNS: RegExp[] = [
+  /למכירה/,
+  /\bfor\s+sale\b/i,
+];
+
+/** Patterns indicating service advertisements (painters, cleaners, movers, etc.).
+ * These posts often appear in rental groups but are not listings. */
+export const SERVICE_AD_PATTERNS: RegExp[] = [
+  /שירותי?\s+(?:ניקיון|הובלה|צביעה|שיפוץ)/,
+  /צביעת\s+דירות/,
+  /^[\s\S]{0,80}קליניקה/,
+  /^[\s\S]{0,80}(?:צבעי|שיפוצניק|חשמלאי|אינסטלטור)(?:\s|$)/,
+  /^[\s\S]{0,80}הובלות/,
+];
+
 // Import city normalization data from centralized module
 // All city names now normalize to Hebrew canonical form
 import { CITY_VARIANTS, CITY_NEIGHBORHOODS } from './cities';
