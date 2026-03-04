@@ -153,7 +153,7 @@ Rules:
 - is_rental: false for any of these: for-sale listings (למכירה), searching/wanted posts, service ads, community announcements, non-rental content
 - Price: monthly rent amount only. Sale prices (typically 1M+₪) mean is_rental is false
 - Street: extract only if a specific street name is mentioned. Neighborhood names are not streets
-- City, neighborhood, street: strip Hebrew prefix letters (ב, ה, ל, מ, ש, כ, ו) from the result. Return the bare name, not the prefixed form (בפלורנטין → פלורנטין, בתל אביב → תל אביב, ברחוב הרצל → הרצל)
+- City, neighborhood, street: strip Hebrew prefix letters (ב, ה, ל, מ, ש, כ, ו) from the result. Return the bare name, not the prefixed form
 - Tags: only use these values: parking, balcony, pets, furnished, immediate, long-term, accessible, air-conditioning, elevator, storage, renovated
 
 Post text:
