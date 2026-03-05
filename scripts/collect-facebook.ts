@@ -20,7 +20,6 @@
  */
 
 import { FacebookConnector } from '@rentifier/connectors/src/facebook';
-import { FacebookClientError } from '@rentifier/connectors/src/facebook/client';
 import { createRestDBFromEnv } from '@rentifier/db';
 import type { DB } from '@rentifier/db';
 
@@ -40,6 +39,36 @@ async function getDB(): Promise<{ db: DB; cleanup?: () => Promise<void> }> {
     return { db, cleanup: () => proxy.dispose() };
   }
   return { db: createRestDBFromEnv() };
+}
+
+/**
+ * Extract the errorType from a caught error using duck typing.
+ * Avoids instanceof checks which break under tsx monorepo module resolution.
+ */
+function getConnectorErrorType(err: unknown): string | undefined {
+  if (err instanceof Error && 'errorType' in err) {
+    return (err as { errorType: string }).errorType;
+  }
+  return undefined;
+}
+
+/**
+ * Determine which Facebook account was active when the error occurred.
+ * Replicates the connector's selectAccount logic using cursor state.
+ */
+function resolveFailedAccountId(cursor: string | null): string {
+  const accountCount = parseInt(process.env.FB_ACCOUNT_COUNT || '1');
+  if (!cursor || accountCount <= 1) return '1';
+  try {
+    const state = JSON.parse(cursor);
+    const disabled = new Set<string>(state.disabledAccounts || []);
+    const start = state.lastAccountIndex ?? 0;
+    for (let i = 0; i < accountCount; i++) {
+      const id = String(((start + i) % accountCount) + 1);
+      if (!disabled.has(id)) return id;
+    }
+  } catch { /* fall through */ }
+  return '1';
 }
 
 /**
@@ -148,10 +177,9 @@ async function main() {
     );
 
     // Notify admin on cookie/ban errors
-    if (err instanceof FacebookClientError) {
-      if (err.errorType === 'auth_expired' || err.errorType === 'banned') {
-        await notifyAdminCookieExpiry('unknown', err.errorType);
-      }
+    const errorType = getConnectorErrorType(err);
+    if (errorType === 'auth_expired' || errorType === 'banned') {
+      await notifyAdminCookieExpiry(resolveFailedAccountId(cursor), errorType);
     }
 
     await db.updateSourceState(source.id, {
