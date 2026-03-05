@@ -29,4 +29,7 @@ export interface FacebookCursorState {
   lastGroupIndex: number;
   lastAccountIndex: number;
   disabledAccounts: string[];
+  /** Refreshed cookies per account, captured after successful scrape.
+   *  Keyed by account ID. Used on next run to avoid session token rotation. */
+  refreshedCookies?: Record<string, string>;
 }

@@ -89,13 +89,23 @@ export class FacebookConnector implements Connector {
       return { candidates: [], nextCursor: JSON.stringify(state) };
     }
 
-    // Launch browser with cookies for selected account
+    // Prefer refreshed cookies from last successful run over env var seed
+    const hasRefreshedCookies = !!state.refreshedCookies?.[selected.account.id];
+    const cookiesForAccount =
+      state.refreshedCookies?.[selected.account.id] || selected.account.cookies;
+    console.log(
+      JSON.stringify({
+        event: 'fb_cookie_source',
+        accountId: selected.account.id,
+        source: hasRefreshedCookies ? 'cursor' : 'env',
+      }),
+    );
     const browser = await launchBrowser();
 
     try {
-      const { page } = await createBrowserContext(
+      const { context, page } = await createBrowserContext(
         browser,
-        selected.account.cookies,
+        cookiesForAccount,
       );
 
       // Fetch from all groups
@@ -192,6 +202,29 @@ export class FacebookConnector implements Connector {
         }
       }
 
+      // Capture refreshed cookies from the browser context.
+      // Facebook rotates session tokens (xs) on each visit — persisting
+      // updated cookies prevents auth_expired on the next run.
+      const updatedCookies = { ...state.refreshedCookies };
+      try {
+        const browserCookies = await context.cookies('https://www.facebook.com');
+        const cookieStr = browserCookies
+          .map((c) => `${c.name}=${c.value}`)
+          .join('; ');
+        if (cookieStr) {
+          updatedCookies[selected.account.id] = cookieStr;
+          console.log(
+            JSON.stringify({
+              event: 'fb_cookies_refreshed',
+              accountId: selected.account.id,
+              cookieCount: browserCookies.length,
+            }),
+          );
+        }
+      } catch {
+        // Non-fatal — next run will use previous cookies or env var seed
+      }
+
       // Update cursor state
       const updatedKnownIds = [...state.knownPostIds, ...allNewPostIds].slice(
         -MAX_KNOWN_POST_IDS,
@@ -205,6 +238,7 @@ export class FacebookConnector implements Connector {
         lastGroupIndex: 0,
         lastAccountIndex: selected.nextIndex,
         disabledAccounts: state.disabledAccounts,
+        refreshedCookies: updatedCookies,
       };
 
       return {
