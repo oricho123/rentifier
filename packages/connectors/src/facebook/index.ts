@@ -3,9 +3,9 @@ import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import type { DB } from '@rentifier/db';
 import type { FacebookConfig, FacebookCursorState } from './types';
 import {
-  launchBrowser,
-  createBrowserContext,
-  closeBrowser,
+  launchPersistentContext,
+  closeContext,
+  clearProfile,
   fetchGroupWithRetry,
   FacebookClientError,
 } from './client';
@@ -89,14 +89,13 @@ export class FacebookConnector implements Connector {
       return { candidates: [], nextCursor: JSON.stringify(state) };
     }
 
-    // Launch browser with cookies for selected account
-    const browser = await launchBrowser();
+    // Launch persistent browser context — preserves session across runs
+    const { context, page } = await launchPersistentContext(
+      selected.account.id,
+      selected.account.cookies,
+    );
 
     try {
-      const { page } = await createBrowserContext(
-        browser,
-        selected.account.cookies,
-      );
 
       // Fetch from all groups
       const allCandidates: ListingCandidate[] = [];
@@ -155,6 +154,8 @@ export class FacebookConnector implements Connector {
               if (!state.disabledAccounts.includes(selected.account.id)) {
                 state.disabledAccounts.push(selected.account.id);
               }
+              // Clear stale profile so next run re-seeds from env var cookies
+              clearProfile(selected.account.id);
               // Auth errors affect all groups — stop and re-throw
               throw error;
             }
@@ -212,7 +213,7 @@ export class FacebookConnector implements Connector {
         nextCursor: JSON.stringify(updatedState),
       };
     } finally {
-      await closeBrowser(browser);
+      await closeContext(context);
     }
   }
 

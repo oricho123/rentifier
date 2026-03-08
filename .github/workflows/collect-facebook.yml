@@ -26,6 +26,12 @@ jobs:
       - name: Install Playwright browsers
         run: pnpm exec playwright install --with-deps chromium
 
+      - name: Restore browser profile cache
+        uses: actions/cache@v4
+        with:
+          path: .browser-profiles
+          key: fb-browser-profiles
+
       - name: Run Facebook collector
         run: pnpm exec tsx scripts/collect-facebook.ts
         env:
