@@ -5,6 +5,7 @@ import type { FacebookConfig, FacebookCursorState } from './types';
 import {
   launchPersistentContext,
   closeContext,
+  clearProfile,
   fetchGroupWithRetry,
   FacebookClientError,
 } from './client';
@@ -153,6 +154,8 @@ export class FacebookConnector implements Connector {
               if (!state.disabledAccounts.includes(selected.account.id)) {
                 state.disabledAccounts.push(selected.account.id);
               }
+              // Clear stale profile so next run re-seeds from env var cookies
+              clearProfile(selected.account.id);
               // Auth errors affect all groups — stop and re-throw
               throw error;
             }

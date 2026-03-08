@@ -95,6 +95,23 @@ export async function closeContext(context: BrowserContext): Promise<void> {
   }
 }
 
+/**
+ * Delete a browser profile directory so the next run re-seeds from env var cookies.
+ * Called on auth_expired/banned to clear stale session state.
+ */
+export function clearProfile(accountId: string, profileBase?: string): void {
+  const base = profileBase || DEFAULT_PROFILE_BASE;
+  const profileDir = `${base}/fb-account-${accountId}`;
+  try {
+    fs.rmSync(profileDir, { recursive: true, force: true });
+    console.log(
+      JSON.stringify({ event: 'fb_profile_cleared', accountId, profileDir }),
+    );
+  } catch {
+    // Non-fatal — next run will overwrite
+  }
+}
+
 // --- Backward compatibility exports for tests ---
 export async function launchBrowser(): Promise<Browser> {
   return chromium.launch({ headless: true });
