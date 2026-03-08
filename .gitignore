@@ -159,6 +159,9 @@ Thumbs.db
 scripts/eval/results/
 scripts/eval/samples-*-golden-template.json
 
+# Persistent browser profiles (Playwright)
+.browser-profiles/
+
 # Lock files (pnpm is canonical)
 package-lock.json
 yarn.lock

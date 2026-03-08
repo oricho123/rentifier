@@ -16,6 +16,12 @@ vi.mock('../client', () => {
   };
 
   return {
+    launchPersistentContext: vi.fn().mockResolvedValue({
+      context: { close: vi.fn().mockResolvedValue(undefined) },
+      page: {},
+    }),
+    closeContext: vi.fn().mockResolvedValue(undefined),
+    // Backward compat exports (used by other tests)
     launchBrowser: vi.fn().mockResolvedValue({
       close: vi.fn().mockResolvedValue(undefined),
     }),
@@ -267,19 +273,19 @@ describe('FacebookConnector', () => {
       expect(result.candidates[0].rawDescription).toBe(fullContent);
     });
 
-    it('launches and closes browser', async () => {
-      const { launchBrowser, closeBrowser, fetchGroupWithRetry } = await import('../client');
+    it('launches and closes persistent context', async () => {
+      const { launchPersistentContext, closeContext, fetchGroupWithRetry } = await import('../client');
       vi.mocked(fetchGroupWithRetry).mockResolvedValueOnce([]);
 
       const mockDb = {} as any;
       await connector.fetchNew(null, mockDb);
 
-      expect(launchBrowser).toHaveBeenCalledOnce();
-      expect(closeBrowser).toHaveBeenCalledOnce();
+      expect(launchPersistentContext).toHaveBeenCalledOnce();
+      expect(closeContext).toHaveBeenCalledOnce();
     });
 
-    it('closes browser even on error', async () => {
-      const { launchBrowser, closeBrowser, fetchGroupWithRetry, FacebookClientError } = await import('../client');
+    it('closes context even on error', async () => {
+      const { launchPersistentContext, closeContext, fetchGroupWithRetry, FacebookClientError } = await import('../client');
       vi.mocked(fetchGroupWithRetry).mockRejectedValueOnce(
         new FacebookClientError('Auth expired', 'auth_expired', false),
       );
@@ -287,8 +293,8 @@ describe('FacebookConnector', () => {
       const mockDb = {} as any;
       await expect(connector.fetchNew(null, mockDb)).rejects.toThrow();
 
-      expect(launchBrowser).toHaveBeenCalledOnce();
-      expect(closeBrowser).toHaveBeenCalledOnce();
+      expect(launchPersistentContext).toHaveBeenCalledOnce();
+      expect(closeContext).toHaveBeenCalledOnce();
     });
   });
 });

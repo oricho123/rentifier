@@ -1,4 +1,5 @@
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
+import * as fs from 'fs';
 import type { FacebookPost } from './types';
 import { parseCookieString } from './accounts';
 import {
@@ -10,6 +11,9 @@ import {
   MAX_RETRIES,
   INITIAL_RETRY_DELAY_MS,
 } from './constants';
+
+/** Default directory for persistent browser profiles */
+const DEFAULT_PROFILE_BASE = '.browser-profiles';
 
 export type FacebookErrorType =
   | 'network'
@@ -31,16 +35,71 @@ export class FacebookClientError extends Error {
 }
 
 /**
- * Launch a headless Chromium browser.
+ * Launch a persistent browser context that preserves cookies, localStorage,
+ * and session state across runs. This prevents Facebook from seeing each
+ * scrape as a new device login, which causes session invalidation.
+ *
+ * On first run (no profile dir exists), seed cookies are injected from env vars.
+ * On subsequent runs, the persisted profile already has valid session state.
  */
+export async function launchPersistentContext(
+  accountId: string,
+  seedCookies: string,
+  profileBase?: string,
+): Promise<{ context: BrowserContext; page: Page }> {
+  const base = profileBase || DEFAULT_PROFILE_BASE;
+  const profileDir = `${base}/fb-account-${accountId}`;
+  const isNewProfile = !fs.existsSync(profileDir);
+
+  if (isNewProfile) {
+    fs.mkdirSync(profileDir, { recursive: true });
+  }
+
+  console.log(
+    JSON.stringify({
+      event: 'fb_browser_profile',
+      accountId,
+      profileDir,
+      isNewProfile,
+    }),
+  );
+
+  const context = await chromium.launchPersistentContext(profileDir, {
+    headless: true,
+    viewport: { width: 1280, height: 900 },
+    userAgent:
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+    locale: 'en-US',
+  });
+
+  // Seed cookies only on first run — after that the profile has its own state
+  if (isNewProfile) {
+    await context.addCookies(parseCookieString(seedCookies));
+    console.log(
+      JSON.stringify({ event: 'fb_cookies_seeded', accountId }),
+    );
+  }
+
+  const page = context.pages()[0] || await context.newPage();
+  return { context, page };
+}
+
+/**
+ * Close a persistent browser context safely.
+ */
+export async function closeContext(context: BrowserContext): Promise<void> {
+  try {
+    await context.close();
+  } catch {
+    // Ignore close errors
+  }
+}
+
+// --- Backward compatibility exports for tests ---
 export async function launchBrowser(): Promise<Browser> {
   return chromium.launch({ headless: true });
 }
 
-/**
- * Create a browser context with injected cookies.
- * SECURITY: cookies are never logged.
- */
 export async function createBrowserContext(
   browser: Browser,
   cookies: string,
@@ -51,15 +110,11 @@ export async function createBrowserContext(
       'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
     locale: 'en-US',
   });
-
   await context.addCookies(parseCookieString(cookies));
   const page = await context.newPage();
   return { context, page };
 }
 
-/**
- * Close the browser safely.
- */
 export async function closeBrowser(browser: Browser): Promise<void> {
   try {
     await browser.close();
