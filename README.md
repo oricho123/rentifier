@@ -344,7 +344,7 @@ Facebook scraping requires browser cookies from an authenticated session.
 
 1. Log into Facebook in your browser
 2. Use a browser extension (e.g., "EditThisCookie") to export cookies as a string
-3. Set `FB_COOKIES_1` in your `.env` file (or GitHub Actions secrets for production)
+3. Set `FB_COOKIES_1` in your `.env` file. For production schedulers on GitHub Actions, add the same values as repository secrets — see [GitHub Actions Secrets](#github-actions-secrets) below.
 
 ### 2. Configure monitored groups
 
@@ -398,6 +398,19 @@ pnpm webhook:setup
 | `FB_COOKIES_1..N`     | Facebook         | Cookie strings per account               |
 | `TELEGRAM_BOT_TOKEN`  | Facebook         | Bot token (for admin cookie alerts)      |
 | `TELEGRAM_ADMIN_CHAT_ID` | Facebook      | Admin chat ID for alerts                 |
+
+**Facebook cookies:** Each secret **`FB_COOKIES_1`**, **`FB_COOKIES_2`**, … holds the full exported cookie string for that account (the same format as in `.env`, e.g. `name=value; name2=value2`). Set **`FB_ACCOUNT_COUNT`** to how many accounts you use (`1`, `2`, …).
+
+**Adding secrets:** In GitHub open the repo → **Settings** → **Secrets and variables** → **Actions** → **New repository secret**. Names must match the table exactly (case-sensitive).
+
+**CLI** ([GitHub CLI](https://cli.github.com/)):
+
+```bash
+gh secret set FB_COOKIES_1 --body 'your-cookie-string-here'
+gh secret set FB_ACCOUNT_COUNT --body '1'
+```
+
+The workflow [`.github/workflows/collect-facebook.yml`](.github/workflows/collect-facebook.yml) passes **`FB_COOKIES_1`** and **`FB_COOKIES_2`** into the job. For a third account or more, create secrets `FB_COOKIES_3`, … and add matching `env` lines to that workflow (same pattern as `FB_COOKIES_2`).
 
 ### Cron Schedules
 

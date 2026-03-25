@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import * as fs from 'fs';
 import type { FacebookPost } from './types';
@@ -14,6 +15,25 @@ import {
 
 /** Default directory for persistent browser profiles */
 const DEFAULT_PROFILE_BASE = '.browser-profiles';
+
+/** Tracks which env cookie string was last applied — avoids re-applying unchanged secrets */
+const SEED_COOKIE_HASH_FILE = '.rentifier-seed-cookie-sha256';
+
+function hashSeedCookies(seedCookies: string): string {
+  return createHash('sha256').update(seedCookies.trim(), 'utf8').digest('hex');
+}
+
+function readStoredSeedHash(profileDir: string): string | null {
+  try {
+    return fs.readFileSync(`${profileDir}/${SEED_COOKIE_HASH_FILE}`, 'utf8').trim();
+  } catch {
+    return null;
+  }
+}
+
+function writeStoredSeedHash(profileDir: string, hash: string): void {
+  fs.writeFileSync(`${profileDir}/${SEED_COOKIE_HASH_FILE}`, `${hash}\n`, 'utf8');
+}
 
 export type FacebookErrorType =
   | 'network'
@@ -40,7 +60,10 @@ export class FacebookClientError extends Error {
  * scrape as a new device login, which causes session invalidation.
  *
  * On first run (no profile dir exists), seed cookies are injected from env vars.
- * On subsequent runs, the persisted profile already has valid session state.
+ * On subsequent runs, the persisted profile keeps Facebook-rotated cookies unless
+ * the env cookie string changes (detected by SHA-256 of the seed) — then we
+ * re-seed. This fixes GitHub cache restoring a profile while ignoring updated
+ * secrets, without overwriting the profile every run with a stale secret.
  */
 export async function launchPersistentContext(
   accountId: string,
@@ -72,11 +95,22 @@ export async function launchPersistentContext(
     locale: 'en-US',
   });
 
-  // Seed cookies only on first run — after that the profile has its own state
-  if (isNewProfile) {
+  const seedHash = hashSeedCookies(seedCookies);
+  const storedSeedHash = readStoredSeedHash(profileDir);
+  const shouldSeedCookies = storedSeedHash !== seedHash;
+
+  if (shouldSeedCookies) {
     await context.addCookies(parseCookieString(seedCookies));
+    writeStoredSeedHash(profileDir, seedHash);
     console.log(
-      JSON.stringify({ event: 'fb_cookies_seeded', accountId }),
+      JSON.stringify({
+        event: 'fb_cookies_seeded',
+        accountId,
+        reason:
+          isNewProfile || storedSeedHash === null
+            ? 'new_or_untracked_profile'
+            : 'seed_string_changed',
+      }),
     );
   }
 
