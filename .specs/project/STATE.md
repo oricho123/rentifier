@@ -1,11 +1,41 @@
 # State
 
-**Last Updated:** 2026-03-04
-**Current Work:** M5 in progress. AI extraction hardened (Zod coercion, OpenAI format support, prompt improvements). Eval pipeline built (`scripts/eval/`). Golden dataset has 12 placeholder entries — **user needs to re-label with ground truth**. Granite shows 100% success vs Llama 75% on placeholder labels. Non-rental filtering PR #40 (ready for merge). Duplicate detection PR #38 pending merge + deploy. 313 tests, 0 typecheck errors. Next: user labels golden dataset → re-run evals → decide Llama vs Granite → merge PRs #38 + #40 → deploy.
+**Last Updated:** 2026-03-08
+**Current Work:** M5 complete. AI extraction hardened, model switched to Granite, eval pipeline built. PRs #38, #40, #41 merged. Facebook session stability improved: persistent browser context (PR #44), admin Telegram notifications fixed (PR #42). Cron jobs restricted to daytime hours. 316 tests, 0 typecheck errors. Next: monitor Facebook session stability over coming days → brokerage-detection + sublet-classification.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-026: Re-seed when cookie secret changes (hash), not every run (2026-03-24)
+
+**Decision:** After `launchPersistentContext()`, call `addCookies()` only when the SHA-256 of the env cookie string differs from `.rentifier-seed-cookie-sha256` stored in the profile (or profile is new / hash file missing). Replaced an earlier `CI=true` re-seed every run.
+**Reason:** (1) Cached `.browser-profiles` on GitHub made `isNewProfile` false, so **updated `FB_COOKIES_*` secrets were ignored** until profile clear — that was a real bug. (2) Re-seeding **every** CI run would **overwrite** cookies Facebook had rotated inside the persisted profile with a **stale** static secret, hurting session longevity.
+**Impact:** `packages/connectors/src/facebook/client.ts`. Updating the secret string changes the hash → one re-seed; unchanged secret → no overwrite, Facebook’s in-profile rotation preserved.
+
+### AD-025: Persistent browser context for Facebook scraping (2026-03-08)
+
+**Decision:** Replace ephemeral Playwright browser sessions with persistent browser context (`launchPersistentContext`) that preserves cookies, localStorage, and session state across runs.
+**Reason:** Facebook was invalidating sessions daily because each scrape appeared as a new device login. Creating a fresh browser context every 30 minutes triggered Facebook's anti-bot detection.
+**Changes:**
+- `client.ts`: `launchPersistentContext()` stores browser profile at `.browser-profiles/fb-account-{id}/`, seeds cookies when profile is new or env cookie string changes (hash; see AD-026)
+- `client.ts`: `clearProfile()` deletes stale profile on `auth_expired`/`banned` so next run re-seeds from env vars
+- `index.ts`: switched from `launchBrowser()`+`createBrowserContext()` to persistent context lifecycle
+- `.github/workflows/collect-facebook.yml`: `actions/cache` preserves profile between workflow runs
+**Trade-off:** ~150MB cache per account in GitHub Actions. If Facebook detects scraping via other signals (datacenter IPs, headless fingerprint), this won't fully prevent logouts.
+**Impact:** PR #44. Tested 3 consecutive CI runs — profile reused successfully on runs 2 and 3.
+
+### AD-024: Fix admin Telegram notifications (2026-03-08)
+
+**Decision:** Replace `instanceof FacebookClientError` with duck typing (`'errorType' in err`) for error detection in `collect-facebook.ts`. Also resolve failed account ID from cursor state.
+**Reason:** `instanceof` was silently failing due to tsx monorepo module resolution loading the class from different paths. Admin Telegram notifications were never sent on cookie expiry.
+**Impact:** PR #42. Also updated `TELEGRAM_ADMIN_CHAT_ID` GitHub secret to use negative group chat ID.
+
+### AD-023: Restrict cron jobs to daytime hours (2026-03-08)
+
+**Decision:** Limit all cron jobs to UTC hours 5-20 (7am–midnight Israel time, accounting for IST/IDT).
+**Reason:** Save resources by not running collectors, processor, and notifier during quiet nighttime hours.
+**Impact:** 5 files updated (3 wrangler.json + 2 GitHub Actions workflows). Pushed directly to main.
 
 ### AD-022: AI extraction hardening + eval pipeline (2026-03-04)
 
