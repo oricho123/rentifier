@@ -13,11 +13,12 @@
  *   CF_D1_DATABASE_ID  — D1 database ID
  */
 
-import { Yad2Connector } from '@rentifier/connectors';
+import { Yad2Connector, fetchYad2Region } from '@rentifier/connectors';
 import { createRestDBFromEnv } from '@rentifier/db';
 import type { DB } from '@rentifier/db';
 
 const isLocal = process.argv.includes('--local');
+const isDiscoverRegions = process.argv.includes('--discover-regions');
 
 async function getDB(): Promise<{ db: DB; cleanup?: () => Promise<void> }> {
   if (isLocal) {
@@ -33,7 +34,48 @@ async function getDB(): Promise<{ db: DB; cleanup?: () => Promise<void> }> {
   return { db: createRestDBFromEnv() };
 }
 
+async function discoverRegions() {
+  console.log('Discovering Yad2 region codes (trying regions 1-10)...\n');
+  const cityToRegions: Record<string, number[]> = {};
+
+  for (let regionCode = 1; regionCode <= 10; regionCode++) {
+    try {
+      const response = await fetchYad2Region(regionCode, 1); // 1 retry only
+      const markers = response.data.markers;
+      if (markers.length === 0) continue;
+
+      const cities: Record<string, number> = {};
+      for (const m of markers) {
+        const city = m.address?.city?.text ?? '?';
+        cities[city] = (cities[city] || 0) + 1;
+      }
+
+      const regionName = markers[0]?.address?.region?.text ?? '?';
+      console.log(`Region ${regionCode} (${regionName}): ${markers.length} markers`);
+      for (const [city, count] of Object.entries(cities).sort((a, b) => b[1] - a[1])) {
+        console.log(`  ${city}: ${count}`);
+        if (!cityToRegions[city]) cityToRegions[city] = [];
+        cityToRegions[city].push(regionCode);
+      }
+      console.log();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.log(`Region ${regionCode}: ERROR - ${msg}`);
+    }
+  }
+
+  console.log('\n--- SQL to update monitored_cities ---');
+  for (const [city, regions] of Object.entries(cityToRegions)) {
+    console.log(`UPDATE monitored_cities SET region_code = ${regions[0]} WHERE city_name = '${city}';`);
+  }
+}
+
 async function main() {
+  if (isDiscoverRegions) {
+    await discoverRegions();
+    return;
+  }
+
   const { db, cleanup } = await getDB();
   if (isLocal) console.log('Using local D1 database');
 

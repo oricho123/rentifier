@@ -97,6 +97,7 @@ export interface MonitoredCity {
   id: number;
   city_name: string;
   city_code: number;
+  region_code: number | null;
   enabled: boolean;
   priority: number;
   created_at: string;

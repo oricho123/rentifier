@@ -12,12 +12,15 @@ Yad2 (yad2.co.il) is Israel's largest classified ads platform. Their real estate
 
 - **Base URL:** `https://gw.yad2.co.il/realestate-feed/rent/map` (rental; the existing scraper used `/forsale/map` for sales)
 - **Method:** GET with query parameters
+- **Required parameter:** `region` (integer) — as of ~March 2026, the API returns 400 ("region is required") without this. City-only queries no longer work.
+- **Region codes:** 1=מרכז והשרון, 2=דרום, 3=תל אביב והסביבה, 4=יהודה ושומרון, 5=מישור החוף הצפוני (Haifa), 6=ירושלים והסביבה, 7=צפון ועמקים
+- **City filtering:** Server-side `city` parameter no longer filters results. City filtering is done client-side using `normalizeCity()` after fetching region data.
 - **Headers required:** Must include `Origin: https://www.yad2.co.il`, `Referer: https://www.yad2.co.il/`, and a realistic `User-Agent`
 - **Response format:** JSON with `data.markers[]` array containing listing objects
-- **Listing fields:** `orderId`, `token`, `price`, `address` (city/neighborhood/street), `additionalDetails` (roomsCount, squareMeter, property type), `metaData` (images, coverImage)
+- **Listing fields:** `orderId`, `token`, `price`, `address` (region/city/neighborhood/street), `additionalDetails` (roomsCount, squareMeter, property type), `metaData` (images, coverImage)
 - **Listing URL pattern:** `https://www.yad2.co.il/realestate/item/{token}`
-- **Pagination:** The map endpoint may not have traditional cursor-based pagination; it returns all markers within the query bounds. Incremental fetching will use `orderId`-based dedup and time-based cursoring.
-- **Rate limiting:** Minimum 1 second between requests recommended
+- **Pagination:** The map endpoint may not have traditional cursor-based pagination; it returns all markers within the query bounds (up to 200 per region). Incremental fetching uses `orderId`-based dedup and time-based cursoring.
+- **Rate limiting:** Minimum 1 second between requests recommended. Radware rate-limits aggressive curl requests.
 - **Captcha:** Radware Bot Manager Captcha — detectable by checking for `"Radware Bot Manager Captcha"` in non-JSON responses
 
 ## Requirements
@@ -42,7 +45,7 @@ Yad2 (yad2.co.il) is Israel's largest classified ads platform. Their real estate
 
 ### Configuration
 
-13. **Cities to fetch** — configurable list of Yad2 city codes to scrape (initially hardcoded, later from env/config)
+13. **Cities to fetch** — configurable list of Yad2 cities with region codes in `monitored_cities` table. Region code is required for API queries; city filtering happens client-side.
 14. **Source seed migration** — add `'yad2'` to the `sources` table via a new migration
 
 ## Out of Scope

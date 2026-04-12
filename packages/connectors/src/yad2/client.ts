@@ -19,9 +19,9 @@ export class Yad2ApiError extends Error {
   }
 }
 
-export async function fetchYad2Listings(cityCode: number): Promise<Yad2ApiResponse> {
+export async function fetchYad2Listings(regionCode: number): Promise<Yad2ApiResponse> {
   const url = new URL(YAD2_API_BASE);
-  url.searchParams.set('city', String(cityCode));
+  url.searchParams.set('region', String(regionCode));
   url.searchParams.set('priceOnly', '1');
   url.searchParams.set('zoom', '11');
 
@@ -104,7 +104,7 @@ export async function fetchYad2Listings(cityCode: number): Promise<Yad2ApiRespon
 }
 
 export async function fetchWithRetry(
-  cityCode: number,
+  regionCode: number,
   maxRetries: number = MAX_RETRIES,
 ): Promise<Yad2ApiResponse> {
   let lastError: Yad2ApiError | null = null;
@@ -118,12 +118,12 @@ export async function fetchWithRetry(
           attempt: attempt + 1,
           maxRetries,
           delayMs: delay,
-          cityCode,
+          regionCode,
         }));
         await new Promise(resolve => setTimeout(resolve, delay));
       }
 
-      return await fetchYad2Listings(cityCode);
+      return await fetchYad2Listings(regionCode);
     } catch (error) {
       if (!(error instanceof Yad2ApiError)) throw error;
 
@@ -137,7 +137,7 @@ export async function fetchWithRetry(
         statusCode: error.statusCode,
         retryable: error.retryable,
         message: error.message,
-        cityCode,
+        regionCode,
       }));
 
       // Do not retry non-retryable errors (captcha, 4xx, parse)
