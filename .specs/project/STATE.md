@@ -1,11 +1,24 @@
 # State
 
-**Last Updated:** 2026-03-08
-**Current Work:** M5 complete. AI extraction hardened, model switched to Granite, eval pipeline built. PRs #38, #40, #41 merged. Facebook session stability improved: persistent browser context (PR #44), admin Telegram notifications fixed (PR #42). Cron jobs restricted to daytime hours. 316 tests, 0 typecheck errors. Next: monitor Facebook session stability over coming days → brokerage-detection + sublet-classification.
+**Last Updated:** 2026-04-12
+**Current Work:** Yad2 API breaking change fixed (region parameter now required). PR #46. Facebook session stability: persistent browser context (PR #44), cookie re-seeding on secret change (PR #45). 316 tests, 0 typecheck errors. Next: merge PR #46, run migration 0014 on D1, verify first cron run → brokerage-detection + sublet-classification.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-027: Yad2 API migration from city to region parameter (2026-04-12)
+
+**Decision:** Switch Yad2 API calls from `city=X` to `region=X` parameter, add `region_code` column to `monitored_cities`, and filter results client-side by city name using `normalizeCity()`.
+**Reason:** Yad2 API broke around March 11-18, 2026 — requests without `region` parameter now return HTTP 400 (`"region is required"`). The `city` parameter no longer filters server-side either. The connector silently returned 0 candidates for ~4 weeks because errors were caught gracefully and the workflow exited 0.
+**Changes:**
+- `packages/db/migrations/0014_add_region_code.sql`: adds `region_code` to `monitored_cities`, seeds 3 cities (TLV→3, JLM→6, Haifa→5)
+- `packages/connectors/src/yad2/client.ts`: `fetchYad2Listings(regionCode)` uses `region=X` param
+- `packages/connectors/src/yad2/index.ts`: fetches by region, filters markers client-side via `normalizeCity()`, tracks knownOrderIds/minOrderId region-wide
+- `scripts/collect-yad2.ts`: `--discover-regions` mode to map all 7 Yad2 regions
+- `.github/workflows/collect-yad2.yml`: `discover-regions` workflow dispatch input
+**Trade-off:** Region queries return markers for all cities in the region (~200 cap), so client-side filtering discards irrelevant cities. This wastes some bandwidth but is the only working approach.
+**Impact:** PR #46. After merge: run migration 0014 on D1, verify first cron produces candidates.
 
 ### AD-026: Re-seed when cookie secret changes (hash), not every run (2026-03-24)
 

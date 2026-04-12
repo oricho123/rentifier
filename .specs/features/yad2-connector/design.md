@@ -85,7 +85,15 @@ export const YAD2_HEADERS: Record<string, string> = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/137.0.0.0 Safari/537.36',
 };
 
-/** Yad2 city codes for cities we want to track */
+/** Yad2 city codes for cities we want to track (legacy reference).
+ *  As of March 2026, the API requires `region` parameter instead of `city`.
+ *  Region codes are stored in `monitored_cities.region_code` (migration 0014).
+ *  City filtering is done client-side after fetching by region.
+ *
+ *  Region mapping (discovered via --discover-regions):
+ *    1=מרכז והשרון, 2=דרום, 3=תל אביב והסביבה,
+ *    4=יהודה ושומרון, 5=חיפה, 6=ירושלים, 7=צפון ועמקים
+ */
 export const YAD2_CITY_CODES: Record<string, number> = {
   'תל אביב': 5000,
   'ירושלים': 3000,
@@ -129,10 +137,10 @@ export class Yad2ApiError extends Error {
 }
 
 export async function fetchYad2Listings(
-  cityCode: number,
+  regionCode: number,
   signal?: AbortSignal,
 ): Promise<Yad2ApiResponse> {
-  // 1. Build URL with query params (city, priceOnly=1, zoom=11)
+  // 1. Build URL with query params (region, priceOnly=1, zoom=11)
   // 2. Call fetch() with YAD2_HEADERS and AbortSignal (for timeout)
   // 3. Check response.ok — throw retryable Yad2ApiError for 5xx
   // 4. Try response.json() — if parse fails, check for captcha string
@@ -141,7 +149,7 @@ export async function fetchYad2Listings(
 }
 
 export async function fetchWithRetry(
-  cityCode: number,
+  regionCode: number,
   maxRetries: number = MAX_RETRIES,
 ): Promise<Yad2ApiResponse> {
   // Retry loop with exponential backoff
