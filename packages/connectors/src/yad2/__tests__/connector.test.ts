@@ -304,7 +304,7 @@ describe('Yad2Connector', () => {
 
       const mockDb = {
         getEnabledCities: vi.fn().mockResolvedValue([
-          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 1, city_name: 'תל אביב', city_code: 5000, region_code: 3, enabled: true, priority: 100, created_at: '2026-02-25' },
         ]),
       } as any;
 
@@ -332,7 +332,7 @@ describe('Yad2Connector', () => {
 
       const mockDb = {
         getEnabledCities: vi.fn().mockResolvedValue([
-          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 1, city_name: 'תל אביב', city_code: 5000, region_code: 3, enabled: true, priority: 100, created_at: '2026-02-25' },
         ]),
       } as any;
 
@@ -362,7 +362,7 @@ describe('Yad2Connector', () => {
 
       const mockDb = {
         getEnabledCities: vi.fn().mockResolvedValue([
-          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 1, city_name: 'תל אביב', city_code: 5000, region_code: 3, enabled: true, priority: 100, created_at: '2026-02-25' },
         ]),
       } as any;
 
@@ -387,7 +387,7 @@ describe('Yad2Connector', () => {
 
       const mockDb = {
         getEnabledCities: vi.fn().mockResolvedValue([
-          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 1, city_name: 'תל אביב', city_code: 5000, region_code: 3, enabled: true, priority: 100, created_at: '2026-02-25' },
         ]),
       } as any;
 
@@ -415,8 +415,8 @@ describe('Yad2Connector', () => {
     it('should fetch from enabled cities only', async () => {
       const mockDb = {
         getEnabledCities: vi.fn().mockResolvedValue([
-          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
-          { id: 2, city_name: 'ירושלים', city_code: 3000, enabled: true, priority: 90, created_at: '2026-02-25' },
+          { id: 1, city_name: 'תל אביב', city_code: 5000, region_code: 3, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 2, city_name: 'ירושלים', city_code: 3000, region_code: 6, enabled: true, priority: 90, created_at: '2026-02-25' },
         ]),
       } as any;
 
@@ -428,14 +428,14 @@ describe('Yad2Connector', () => {
       const result = await connector.fetchNew(null, mockDb);
 
       expect(mockDb.getEnabledCities).toHaveBeenCalled();
-      expect(client.fetchWithRetry).toHaveBeenCalledWith(5000);
+      expect(client.fetchWithRetry).toHaveBeenCalledWith(3);
       expect(result.candidates).toHaveLength(1);
     });
 
     it('should track resultCounts in cursor state', async () => {
       const mockDb = {
         getEnabledCities: vi.fn().mockResolvedValue([
-          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 1, city_name: 'תל אביב', city_code: 5000, region_code: 3, enabled: true, priority: 100, created_at: '2026-02-25' },
         ]),
       } as any;
 
@@ -455,7 +455,7 @@ describe('Yad2Connector', () => {
       const consoleLogSpy = vi.spyOn(console, 'log');
       const mockDb = {
         getEnabledCities: vi.fn().mockResolvedValue([
-          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 1, city_name: 'תל אביב', city_code: 5000, region_code: 3, enabled: true, priority: 100, created_at: '2026-02-25' },
         ]),
       } as any;
 
@@ -494,7 +494,7 @@ describe('Yad2Connector', () => {
 
       const mockDb = {
         getEnabledCities: vi.fn().mockResolvedValue([
-          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 1, city_name: 'תל אביב', city_code: 5000, region_code: 3, enabled: true, priority: 100, created_at: '2026-02-25' },
         ]),
       } as any;
 
@@ -518,7 +518,7 @@ describe('Yad2Connector', () => {
     it('should accept all markers on first run and set minOrderId', async () => {
       const mockDb = {
         getEnabledCities: vi.fn().mockResolvedValue([
-          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 1, city_name: 'תל אביב', city_code: 5000, region_code: 3, enabled: true, priority: 100, created_at: '2026-02-25' },
         ]),
       } as any;
 
@@ -550,7 +550,7 @@ describe('Yad2Connector', () => {
 
       const mockDb = {
         getEnabledCities: vi.fn().mockResolvedValue([
-          { id: 1, city_name: 'תל אביב', city_code: 5000, enabled: true, priority: 100, created_at: '2026-02-25' },
+          { id: 1, city_name: 'תל אביב', city_code: 5000, region_code: 3, enabled: true, priority: 100, created_at: '2026-02-25' },
         ]),
       } as any;
 

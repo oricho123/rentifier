@@ -1,7 +1,7 @@
 export * from './interface';
 export * from './mock';
 export { Yad2Connector } from './yad2';
-export { Yad2ApiError } from './yad2/client';
+export { Yad2ApiError, fetchWithRetry as fetchYad2Region } from './yad2/client';
 export type { Yad2Marker, Yad2CursorState, Yad2ApiResponse } from './yad2/types';
 // FacebookConnector uses Playwright (headless browser) and MUST NOT be
 // re-exported here — Wrangler would try to bundle Playwright into Workers.

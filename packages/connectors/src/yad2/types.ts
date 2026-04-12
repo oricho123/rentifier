@@ -14,6 +14,7 @@ export interface Yad2Marker {
   categoryId: number;
   subcategoryId: number;
   address: {
+    region?: { text: string; id?: number };
     city: { text: string; id?: number };
     area: { text: string; id?: number };
     neighborhood: { text: string; id?: number };

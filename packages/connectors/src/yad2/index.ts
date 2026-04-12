@@ -65,15 +65,27 @@ export class Yad2Connector implements Connector {
     const cityIndex = state.lastCityIndex % cities.length;
     const city = cities[cityIndex];
 
+    // Yad2 API requires region parameter (city-only queries stopped working ~March 2026)
+    if (city.region_code == null) {
+      console.warn(JSON.stringify({
+        event: 'yad2_missing_region',
+        city: city.city_name,
+        cityCode: city.city_code,
+        message: 'City has no region_code. Run: pnpm exec tsx scripts/collect-yad2.ts --discover-regions',
+      }));
+      state.lastCityIndex = cityIndex + 1;
+      return { candidates: [], nextCursor: JSON.stringify(state) };
+    }
+
     try {
       console.log(JSON.stringify({
         event: 'yad2_fetch_start',
         city: city.city_name,
-        cityCode: city.city_code,
+        regionCode: city.region_code,
         cityIndex,
       }));
 
-      const response = await fetchWithRetry(city.city_code);
+      const response = await fetchWithRetry(city.region_code);
       const markers = response.data.markers;
 
       // Filter out already-known orderIds
@@ -98,12 +110,30 @@ export class Yad2Connector implements Connector {
         }
       }
 
-      // Map to ListingCandidate
-      const candidates: ListingCandidate[] = newMarkers.map(marker =>
+      // Filter to target city (region returns all cities in the region)
+      const targetCity = normalizeCity(city.city_name) ?? city.city_name;
+      const cityMarkers = newMarkers.filter(m => {
+        const markerCity = m.address?.city?.text;
+        if (!markerCity) return false;
+        return (normalizeCity(markerCity) ?? markerCity) === targetCity;
+      });
+
+      const filteredByCityCount = newMarkers.length - cityMarkers.length;
+      if (filteredByCityCount > 0) {
+        console.log(JSON.stringify({
+          event: 'yad2_city_filter',
+          city: city.city_name,
+          keptCount: cityMarkers.length,
+          filteredCount: filteredByCityCount,
+        }));
+      }
+
+      // Map city-filtered markers to candidates
+      const candidates: ListingCandidate[] = cityMarkers.map(marker =>
         this.markerToCandidate(marker, city.city_name)
       );
 
-      // Update cursor state
+      // Update cursor state using ALL new markers (region-wide) for accurate dedup
       const newOrderIds = newMarkers.map(m => m.orderId);
       const updatedKnownIds = [...state.knownOrderIds, ...newOrderIds]
         .slice(-MAX_KNOWN_ORDER_IDS); // Keep last N (FIFO)
@@ -120,13 +150,13 @@ export class Yad2Connector implements Connector {
         console.log(JSON.stringify({
           event: 'yad2_result_limit_warning',
           city: city.city_name,
-          cityCode: city.city_code,
+          regionCode: city.region_code,
           resultCount: 200,
-          message: 'City may have truncated results. Consider splitting query.'
+          message: 'Region may have truncated results. Consider splitting query.'
         }));
       }
 
-      // Update minOrderId baseline from current batch
+      // Update minOrderId baseline from current batch (region-wide)
       const numericOrderIds = newMarkers
         .map(m => typeof m.orderId === 'string' ? parseInt(m.orderId, 10) : m.orderId)
         .filter(id => !isNaN(id));
@@ -149,6 +179,7 @@ export class Yad2Connector implements Connector {
         city: city.city_name,
         totalMarkers: markers.length,
         newMarkers: newMarkers.length,
+        cityMarkers: cityMarkers.length,
       }));
 
       return {

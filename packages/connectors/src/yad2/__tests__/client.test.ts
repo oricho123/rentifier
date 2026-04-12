@@ -35,7 +35,7 @@ describe('fetchYad2Listings', () => {
       },
     });
     expect(fetch).toHaveBeenCalledWith(
-      expect.stringContaining('city=5000'),
+      expect.stringContaining('region=5000'),
       expect.any(Object)
     );
   });
