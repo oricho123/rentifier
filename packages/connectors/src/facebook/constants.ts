@@ -24,6 +24,21 @@ export const MONITORED_GROUPS: {
     name: 'דירות בתל אביב ללא תיווך',
     defaultCities: ['תל אביב'],
   },
+  {
+    groupId: '253957624766723',
+    name: 'דירות להשכרה ברמת גן',
+    defaultCities: ['רמת גן'],
+  },
+  {
+    groupId: '402682483445663',
+    name: 'דירות להשכרה רמת גן/גבעתיים',
+    defaultCities: ['רמת גן', 'גבעתיים'],
+  },
+  {
+    groupId: '1870209196564360',
+    name: 'דירות להשכרה רמת גן גבעתיים',
+    defaultCities: ['רמת גן', 'גבעתיים'],
+  },
 ];
 
 export const MAX_CONSECUTIVE_FAILURES = 5;
