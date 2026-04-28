@@ -113,3 +113,18 @@ export interface MonitoredCity {
   priority: number;
   created_at: string;
 }
+
+export interface CleanupOpts {
+  retentionDays: number;
+  batchSize: number;
+  maxDeletesPerRun: number;
+}
+
+export interface CleanupResult {
+  listings_deleted: number;
+  listings_raw_deleted: number;
+  duplicates_deleted: number;
+  orphan_notifications_deleted: number;
+  capped: boolean;
+  ms: number;
+}

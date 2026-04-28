@@ -1,11 +1,26 @@
 # State
 
-**Last Updated:** 2026-04-26
-**Current Work:** Tasks phase complete for `neighborhood-extraction-coverage` (18 atomic tasks in `tasks.md`). Next: implementation starting at T01.
+**Last Updated:** 2026-04-28
+**Current Work:** `neighborhood-extraction-coverage` implemented (T01–T14 done, PR #48 open). `listings-cleanup-cron` implemented locally (T01–T16 done, needs deploy). Next: merge PR #48 then deploy both features.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-030: Daily cleanup cron with retention-based delete (2026-04-28)
+
+**Decision:** Add a new dedicated Cloudflare Worker `apps/cleanup` running once per day at `0 4 * * *` UTC. It deletes (1) duplicate listings whose canonical is missing/expired, (2) canonical listings where `COALESCE(posted_at, ingested_at) < now - RETENTION_DAYS` (default 30), (3) `listings_raw` where `fetched_at < now - RETENTION_DAYS`, and (4) defensive orphan `notifications_sent`. FK CASCADE handles `notifications_sent` for path (2). All deletes are batched via `DELETE … WHERE id IN (SELECT id FROM … LIMIT 500)` (D1's SQLite is built without `SQLITE_ENABLE_UPDATE_DELETE_LIMIT`).
+**Reason:** D1 free tier caps at 5 GB and `findDuplicate` / `getNewListingsSince` table scans grow with row count. Listings older than ~1 month are no longer relevant for renters. Without auto-prune the project hits storage and perf ceilings within a few months.
+**Why a new worker (not a handler in processor):** Cleanup runs at 04:00 UTC, **outside** the daytime cron window (`5-20 UTC`, AD-023) — zero contention. Separate worker keeps cron triggers/logs cleanly attributable. New worker package costs nothing on the free tier.
+**Trade-off:** One additional `wrangler deploy` target. No new migration (uses existing columns only). `MAX_DELETES_PER_RUN=50_000` daily cap means a one-time backfill of larger backlogs may need multiple nights or a `scripts/cleanup-listings.ts` script (deferred — only build if needed).
+**Spec/design/tasks:** `.specs/features/listings-cleanup-cron/`.
+**Impact:**
+- New package `@rentifier/cleanup` (`apps/cleanup/{package.json,tsconfig.json,wrangler.json,src/index.ts,src/cleanup-service.ts}`)
+- `packages/db/src/schema.ts`: added `CleanupOpts`, `CleanupResult` types
+- `packages/db/src/queries.ts`: added `deleteOldListings`, `deleteOldRawListings`, `deleteOrphanedDuplicates`, `deleteOrphanedNotifications`
+- `package.json` (root): `dev:cleanup`, `trigger:cleanup`, `deploy:cleanup` scripts; `deploy:all` extended
+- `apps/cleanup/src/__tests__/cleanup-service.test.ts`: 13 unit tests covering order, batching, capping, validation
+- 326 tests pass (was 313). Local E2E verified.
 
 ### AD-029: Nominatim chosen as P1 resolver for neighborhood extraction (2026-04-26)
 
