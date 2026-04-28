@@ -34,7 +34,11 @@
     "deploy:processor": "pnpm --filter @rentifier/processor exec wrangler deploy",
     "deploy:notify": "pnpm --filter @rentifier/notify exec wrangler deploy",
     "webhook:setup": "tsx scripts/setup-webhook.ts",
-    "ngrok:notify": "ngrok http 8789"
+    "ngrok:notify": "ngrok http 8789",
+    "spike:baseline": "tsx --env-file=.env scripts/spike-neighborhoods/baseline.ts",
+    "spike:sample": "tsx --env-file=.env scripts/spike-neighborhoods/sample-listings.ts",
+    "spike:run": "tsx --env-file=.env scripts/spike-neighborhoods/run-spike.ts",
+    "secrets:fb-cookies": "tsx --env-file=.env scripts/push-fb-cookies-secret.ts"
   },
   "packageManager": "pnpm@10.6.2",
   "engines": {
