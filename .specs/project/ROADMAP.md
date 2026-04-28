@@ -193,6 +193,15 @@
 
 ### Features
 
+**Listings Cleanup Cron** - ✅ IMPLEMENTED (local), pending prod deploy (`.specs/features/listings-cleanup-cron/`)
+
+- New worker `apps/cleanup` runs daily at `0 4 * * *` UTC
+- Deletes canonical `listings`, `listings_raw`, and orphaned duplicates older than `RETENTION_DAYS` (default 30)
+- FK CASCADE auto-deletes related `notifications_sent`; defensive orphan sweep covers edge cases
+- Batched deletes (500/loop) with `MAX_DELETES_PER_RUN=50_000` safety cap
+- 13 new unit tests, 326 total tests passing
+- Status: Local E2E verified, ready for `pnpm deploy:cleanup`
+
 **Dynamic City Discovery** - PLANNED
 
 - Auto-discover YAD2 city codes instead of manual mapping

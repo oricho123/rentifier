@@ -1,0 +1,11 @@
+{
+  "name": "@rentifier/cleanup",
+  "private": true,
+  "main": "src/index.ts",
+  "dependencies": {
+    "@rentifier/db": "workspace:*"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^4.20240117.0"
+  }
+}
