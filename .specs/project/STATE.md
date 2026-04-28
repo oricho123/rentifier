@@ -1,11 +1,26 @@
 # State
 
-**Last Updated:** 2026-04-12
-**Current Work:** Yad2 API breaking change fixed (region parameter now required). PR #46. Facebook session stability: persistent browser context (PR #44), cookie re-seeding on secret change (PR #45). 316 tests, 0 typecheck errors. Next: merge PR #46, run migration 0014 on D1, verify first cron run → brokerage-detection + sublet-classification.
+**Last Updated:** 2026-04-28
+**Current Work:** `listings-cleanup-cron` feature implemented locally (T01–T16 done). New `apps/cleanup` worker prunes listings + listings_raw + duplicate chains older than `RETENTION_DAYS` (default 30) on a daily cron `0 4 * * *`. Local E2E verified: stale rows deleted, fresh rows kept, `worker_state.cleanup` ok. Next: T17 production deploy (`pnpm deploy:cleanup`) — gated on user.
 
 ---
 
 ## Recent Decisions (Last 60 days)
+
+### AD-030: Daily cleanup cron with retention-based delete (2026-04-28)
+
+**Decision:** Add a new dedicated Cloudflare Worker `apps/cleanup` running once per day at `0 4 * * *` UTC. It deletes (1) duplicate listings whose canonical is missing/expired, (2) canonical listings where `COALESCE(posted_at, ingested_at) < now - RETENTION_DAYS` (default 30), (3) `listings_raw` where `fetched_at < now - RETENTION_DAYS`, and (4) defensive orphan `notifications_sent`. FK CASCADE handles `notifications_sent` for path (2). All deletes are batched via `DELETE … WHERE id IN (SELECT id FROM … LIMIT 500)` (D1's SQLite is built without `SQLITE_ENABLE_UPDATE_DELETE_LIMIT`).
+**Reason:** D1 free tier caps at 5 GB and `findDuplicate` / `getNewListingsSince` table scans grow with row count. Listings older than ~1 month are no longer relevant for renters. Without auto-prune the project hits storage and perf ceilings within a few months.
+**Why a new worker (not a handler in processor):** Cleanup runs at 04:00 UTC, **outside** the daytime cron window (`5-20 UTC`, AD-023) — zero contention. Separate worker keeps cron triggers/logs cleanly attributable. New worker package costs nothing on the free tier.
+**Trade-off:** One additional `wrangler deploy` target. No new migration (uses existing columns only). `MAX_DELETES_PER_RUN=50_000` daily cap means a one-time backfill of larger backlogs may need multiple nights or a `scripts/cleanup-listings.ts` script (deferred — only build if needed).
+**Spec/design/tasks:** `.specs/features/listings-cleanup-cron/`.
+**Impact:**
+- New package `@rentifier/cleanup` (`apps/cleanup/{package.json,tsconfig.json,wrangler.json,src/index.ts,src/cleanup-service.ts}`)
+- `packages/db/src/schema.ts`: added `CleanupOpts`, `CleanupResult` types
+- `packages/db/src/queries.ts`: added `deleteOldListings`, `deleteOldRawListings`, `deleteOrphanedDuplicates`, `deleteOrphanedNotifications`
+- `package.json` (root): `dev:cleanup`, `trigger:cleanup`, `deploy:cleanup` scripts; `deploy:all` extended
+- `apps/cleanup/src/__tests__/cleanup-service.test.ts`: 13 unit tests covering order, batching, capping, validation
+- 326 tests pass (was 313). Local E2E verified.
 
 ### AD-027: Yad2 API migration from city to region parameter (2026-04-12)
 

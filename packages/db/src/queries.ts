@@ -49,6 +49,10 @@ export interface DB {
   enableCity(cityCode: number): Promise<void>;
   findDuplicate(params: FindDuplicateParams): Promise<DuplicateCandidate | null>;
   swapCanonical(newCanonicalId: number, oldCanonicalId: number): Promise<void>;
+  deleteOldListings(retentionDays: number, batchSize: number): Promise<number>;
+  deleteOldRawListings(retentionDays: number, batchSize: number): Promise<number>;
+  deleteOrphanedDuplicates(retentionDays: number, batchSize: number): Promise<number>;
+  deleteOrphanedNotifications(): Promise<number>;
 }
 
 export function createDB(d1: D1Database): DB {
@@ -340,6 +344,56 @@ export function createDB(d1: D1Database): DB {
       await d1.prepare(
         'UPDATE listings SET duplicate_of = ? WHERE duplicate_of = ?'
       ).bind(newCanonicalId, oldCanonicalId).run();
+    },
+
+    async deleteOldListings(retentionDays: number, batchSize: number): Promise<number> {
+      const result = await d1.prepare(
+        `DELETE FROM listings
+         WHERE id IN (
+           SELECT id FROM listings
+           WHERE duplicate_of IS NULL
+             AND COALESCE(posted_at, ingested_at) < datetime('now', ?)
+           LIMIT ?
+         )`
+      ).bind(`-${retentionDays} days`, batchSize).run();
+      return result.meta?.changes ?? 0;
+    },
+
+    async deleteOldRawListings(retentionDays: number, batchSize: number): Promise<number> {
+      const result = await d1.prepare(
+        `DELETE FROM listings_raw
+         WHERE id IN (
+           SELECT id FROM listings_raw
+           WHERE fetched_at < datetime('now', ?)
+           LIMIT ?
+         )`
+      ).bind(`-${retentionDays} days`, batchSize).run();
+      return result.meta?.changes ?? 0;
+    },
+
+    async deleteOrphanedDuplicates(retentionDays: number, batchSize: number): Promise<number> {
+      const result = await d1.prepare(
+        `DELETE FROM listings
+         WHERE id IN (
+           SELECT d.id
+           FROM listings d
+           LEFT JOIN listings c ON c.id = d.duplicate_of
+           WHERE d.duplicate_of IS NOT NULL
+             AND (
+               c.id IS NULL
+               OR COALESCE(c.posted_at, c.ingested_at) < datetime('now', ?)
+             )
+           LIMIT ?
+         )`
+      ).bind(`-${retentionDays} days`, batchSize).run();
+      return result.meta?.changes ?? 0;
+    },
+
+    async deleteOrphanedNotifications(): Promise<number> {
+      const result = await d1.prepare(
+        'DELETE FROM notifications_sent WHERE listing_id NOT IN (SELECT id FROM listings)'
+      ).run();
+      return result.meta?.changes ?? 0;
     },
   };
 }
