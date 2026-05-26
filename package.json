@@ -37,7 +37,8 @@
     "deploy:notify": "pnpm --filter @rentifier/notify exec wrangler deploy",
     "deploy:cleanup": "pnpm --filter @rentifier/cleanup exec wrangler deploy",
     "webhook:setup": "tsx scripts/setup-webhook.ts",
-    "ngrok:notify": "ngrok http 8789"
+    "ngrok:notify": "ngrok http 8789",
+    "secrets:fb-cookies": "tsx --env-file=.env scripts/push-fb-cookies-secret.ts"
   },
   "packageManager": "pnpm@10.6.2",
   "engines": {
