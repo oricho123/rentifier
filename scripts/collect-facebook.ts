@@ -20,8 +20,10 @@
  */
 
 import { FacebookConnector } from '@rentifier/connectors/src/facebook';
+import type { LoginFailureReason, LoginOutcome } from '@rentifier/connectors/src/facebook/types';
 import { createRestDBFromEnv } from '@rentifier/db';
 import type { DB } from '@rentifier/db';
+import { buildAlertMessage, getConnectorLoginOutcome } from './lib/fb-alerts';
 
 const isLocal = process.argv.includes('--local');
 
@@ -67,7 +69,9 @@ function resolveFailedAccountId(cursor: string | null): string {
       const id = String(((start + i) % accountCount) + 1);
       if (!disabled.has(id)) return id;
     }
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   return '1';
 }
 
@@ -78,6 +82,7 @@ function resolveFailedAccountId(cursor: string | null): string {
 async function notifyAdminCookieExpiry(
   accountId: string,
   errorType: string,
+  loginOutcome?: LoginOutcome
 ): Promise<void> {
   const botToken = process.env.TELEGRAM_BOT_TOKEN;
   const chatId = process.env.TELEGRAM_ADMIN_CHAT_ID;
@@ -87,28 +92,23 @@ async function notifyAdminCookieExpiry(
       JSON.stringify({
         event: 'fb_admin_notify_skip',
         reason: 'TELEGRAM_BOT_TOKEN or TELEGRAM_ADMIN_CHAT_ID not set',
-      }),
+      })
     );
     return;
   }
 
-  const message =
-    `⚠️ Facebook account #${accountId} ${errorType === 'banned' ? 'banned/challenged' : 'cookie expired'}.\n\n` +
-    `Please refresh cookies in GitHub Secrets (FB_COOKIES_${accountId}).`;
+  const message = buildAlertMessage(accountId, errorType, loginOutcome);
 
   try {
-    const response = await fetch(
-      `https://api.telegram.org/bot${botToken}/sendMessage`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          chat_id: chatId,
-          text: message,
-          parse_mode: 'HTML',
-        }),
-      },
-    );
+    const response = await fetch(`https://api.telegram.org/bot${botToken}/sendMessage`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: chatId,
+        text: message,
+        parse_mode: 'HTML',
+      }),
+    });
 
     if (!response.ok) {
       console.log(
@@ -116,12 +116,10 @@ async function notifyAdminCookieExpiry(
           event: 'fb_admin_notify_failed',
           status: response.status,
           accountId,
-        }),
+        })
       );
     } else {
-      console.log(
-        JSON.stringify({ event: 'fb_admin_notify_sent', accountId }),
-      );
+      console.log(JSON.stringify({ event: 'fb_admin_notify_sent', accountId }));
     }
   } catch (err) {
     console.log(
@@ -129,7 +127,7 @@ async function notifyAdminCookieExpiry(
         event: 'fb_admin_notify_error',
         error: err instanceof Error ? err.message : String(err),
         accountId,
-      }),
+      })
     );
   }
 }
@@ -146,7 +144,7 @@ async function main() {
       JSON.stringify({
         event: 'collect_skip',
         reason: 'facebook source not found or disabled',
-      }),
+      })
     );
     return;
   }
@@ -161,7 +159,7 @@ async function main() {
       source: 'facebook',
       sourceId: source.id,
       hasCursor: !!cursor,
-    }),
+    })
   );
 
   const connector = new FacebookConnector();
@@ -172,14 +170,13 @@ async function main() {
     ({ candidates, nextCursor } = await connector.fetchNew(cursor, db));
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    console.error(
-      JSON.stringify({ event: 'collect_error', source: 'facebook', error: message }),
-    );
+    console.error(JSON.stringify({ event: 'collect_error', source: 'facebook', error: message }));
 
     // Notify admin on cookie/ban errors
     const errorType = getConnectorErrorType(err);
     if (errorType === 'auth_expired' || errorType === 'banned') {
-      await notifyAdminCookieExpiry(resolveFailedAccountId(cursor), errorType);
+      const loginOutcome = getConnectorLoginOutcome(err);
+      await notifyAdminCookieExpiry(resolveFailedAccountId(cursor), errorType, loginOutcome);
     }
 
     await db.updateSourceState(source.id, {
@@ -196,10 +193,16 @@ async function main() {
       const state = JSON.parse(nextCursor);
       const prevState = cursor ? JSON.parse(cursor) : { disabledAccounts: [] };
       const newlyDisabled = (state.disabledAccounts || []).filter(
-        (id: string) => !(prevState.disabledAccounts || []).includes(id),
+        (id: string) => !(prevState.disabledAccounts || []).includes(id)
       );
       for (const accountId of newlyDisabled) {
-        await notifyAdminCookieExpiry(accountId, 'auth_expired');
+        const lastReason = state.loginAttempts?.[accountId]?.lastReason as
+          | LoginFailureReason
+          | undefined;
+        const outcome: LoginOutcome | undefined = lastReason
+          ? { success: false, reason: lastReason }
+          : undefined;
+        await notifyAdminCookieExpiry(accountId, 'auth_expired', outcome);
       }
     } catch {
       // Cursor parse failed — skip notification check
@@ -211,7 +214,7 @@ async function main() {
       event: 'collect_fetched',
       source: 'facebook',
       candidateCount: candidates.length,
-    }),
+    })
   );
 
   // Insert raw listings
@@ -222,7 +225,7 @@ async function main() {
         source_item_id: c.sourceItemId,
         url: c.rawUrl,
         raw_json: JSON.stringify(c),
-      })),
+      }))
     );
   }
 
@@ -239,16 +242,13 @@ async function main() {
       event: 'collect_complete',
       source: 'facebook',
       candidateCount: candidates.length,
-    }),
+    })
   );
 
   if (cleanup) await cleanup();
 }
 
 main().catch((err) => {
-  console.error(
-    'Fatal:',
-    err instanceof Error ? err.message : String(err),
-  );
+  console.error('Fatal:', err instanceof Error ? err.message : String(err));
   process.exit(1);
 });

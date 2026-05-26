@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import * as fs from 'fs';
-import type { FacebookPost } from './types';
+import type { FacebookPost, LoginOutcome } from './types';
 import { parseCookieString } from './accounts';
 import {
   BROWSER_TIMEOUT_MS,
@@ -48,6 +48,7 @@ export class FacebookClientError extends Error {
     message: string,
     public readonly errorType: FacebookErrorType,
     public readonly retryable: boolean,
+    public readonly loginOutcome?: LoginOutcome
   ) {
     super(message);
     this.name = 'FacebookClientError';
@@ -68,7 +69,7 @@ export class FacebookClientError extends Error {
 export async function launchPersistentContext(
   accountId: string,
   seedCookies: string,
-  profileBase?: string,
+  profileBase?: string
 ): Promise<{ context: BrowserContext; page: Page }> {
   const base = profileBase || DEFAULT_PROFILE_BASE;
   const profileDir = `${base}/fb-account-${accountId}`;
@@ -84,7 +85,7 @@ export async function launchPersistentContext(
       accountId,
       profileDir,
       isNewProfile,
-    }),
+    })
   );
 
   const context = await chromium.launchPersistentContext(profileDir, {
@@ -110,11 +111,11 @@ export async function launchPersistentContext(
           isNewProfile || storedSeedHash === null
             ? 'new_or_untracked_profile'
             : 'seed_string_changed',
-      }),
+      })
     );
   }
 
-  const page = context.pages()[0] || await context.newPage();
+  const page = context.pages()[0] || (await context.newPage());
   return { context, page };
 }
 
@@ -138,9 +139,7 @@ export function clearProfile(accountId: string, profileBase?: string): void {
   const profileDir = `${base}/fb-account-${accountId}`;
   try {
     fs.rmSync(profileDir, { recursive: true, force: true });
-    console.log(
-      JSON.stringify({ event: 'fb_profile_cleared', accountId, profileDir }),
-    );
+    console.log(JSON.stringify({ event: 'fb_profile_cleared', accountId, profileDir }));
   } catch {
     // Non-fatal — next run will overwrite
   }
@@ -153,7 +152,7 @@ export async function launchBrowser(): Promise<Browser> {
 
 export async function createBrowserContext(
   browser: Browser,
-  cookies: string,
+  cookies: string
 ): Promise<{ context: BrowserContext; page: Page }> {
   const context = await browser.newContext({
     viewport: { width: 1280, height: 900 },
@@ -177,9 +176,7 @@ export async function closeBrowser(browser: Browser): Promise<void> {
 /**
  * Detect auth failures by checking page URL and content.
  */
-export async function detectAuthFailure(
-  page: Page,
-): Promise<FacebookErrorType | null> {
+export async function detectAuthFailure(page: Page): Promise<FacebookErrorType | null> {
   const url = page.url();
 
   if (url.includes('/login') || url.includes('login.php')) {
@@ -201,10 +198,7 @@ export async function detectAuthFailure(
 /**
  * Navigate to a Facebook group page with chronological sorting.
  */
-export async function navigateToGroup(
-  page: Page,
-  groupId: string,
-): Promise<void> {
+export async function navigateToGroup(page: Page, groupId: string): Promise<void> {
   const url = GROUP_URL_TEMPLATE.replace('{groupId}', groupId);
 
   await page.goto(url, {
@@ -218,7 +212,7 @@ export async function navigateToGroup(
     throw new FacebookClientError(
       `Auth failure after navigating to group ${groupId}: ${authError}`,
       authError,
-      false,
+      false
     );
   }
 
@@ -231,7 +225,7 @@ export async function navigateToGroup(
     throw new FacebookClientError(
       `Feed did not render within ${FEED_WAIT_TIMEOUT_MS}ms for group ${groupId}`,
       'timeout',
-      true,
+      true
     );
   }
 
@@ -267,9 +261,7 @@ async function expandAllSeeMore(page: Page): Promise<void> {
   if (count > 0) {
     // Wait for content to render after expanding
     await page.waitForTimeout(1000);
-    console.log(
-      JSON.stringify({ event: 'fb_see_more_expanded', count }),
-    );
+    console.log(JSON.stringify({ event: 'fb_see_more_expanded', count }));
   }
 }
 
@@ -279,10 +271,7 @@ async function expandAllSeeMore(page: Page): Promise<void> {
  * Uses string-based page.evaluate() to avoid tsx __name injection issue.
  * Selectors validated against live Facebook DOM (2026-03-03).
  */
-export async function extractPostsFromDOM(
-  page: Page,
-  groupId: string,
-): Promise<FacebookPost[]> {
+export async function extractPostsFromDOM(page: Page, groupId: string): Promise<FacebookPost[]> {
   const feedExists = await page.$('[role="feed"]');
   if (!feedExists) {
     console.log(
@@ -290,7 +279,7 @@ export async function extractPostsFromDOM(
         event: 'fb_no_feed',
         groupId,
         url: page.url(),
-      }),
+      })
     );
     return [];
   }
@@ -324,10 +313,7 @@ export async function extractPostsFromDOM(
 /**
  * Extract posts currently visible in the DOM (single pass, no scrolling).
  */
-async function extractVisiblePosts(
-  page: Page,
-  groupId: string,
-): Promise<FacebookPost[]> {
+async function extractVisiblePosts(page: Page, groupId: string): Promise<FacebookPost[]> {
   // Use string-based evaluate to avoid tsx __name injection
   const extractedPosts = await page.evaluate(`((groupId) => {
     var feed = document.querySelector('[role="feed"]');
@@ -512,7 +498,7 @@ async function extractVisiblePosts(
 export async function fetchGroupWithRetry(
   page: Page,
   groupId: string,
-  maxRetries: number = MAX_RETRIES,
+  maxRetries: number = MAX_RETRIES
 ): Promise<FacebookPost[]> {
   let lastError: FacebookClientError | null = null;
 
@@ -527,7 +513,7 @@ export async function fetchGroupWithRetry(
             maxRetries,
             delayMs: delay,
             groupId,
-          }),
+          })
         );
         await new Promise((resolve) => setTimeout(resolve, delay));
       }
@@ -540,7 +526,7 @@ export async function fetchGroupWithRetry(
         lastError = new FacebookClientError(
           error instanceof Error ? error.message : String(error),
           'network',
-          true,
+          true
         );
       } else {
         lastError = error;
@@ -555,7 +541,7 @@ export async function fetchGroupWithRetry(
           retryable: lastError.retryable,
           message: lastError.message,
           groupId,
-        }),
+        })
       );
 
       if (!lastError.retryable) throw lastError;

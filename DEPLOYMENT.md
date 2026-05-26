@@ -122,6 +122,24 @@ pnpm --filter @rentifier/collector exec wrangler secret put SECRET_NAME
 }
 ```
 
+## GitHub Actions Secrets — Facebook Collector
+
+The `Collect Facebook Listings` workflow runs the Playwright scraper and reads the following GitHub Secrets:
+
+| Secret | Required | Purpose |
+|---|---|---|
+| `FB_ACCOUNT_COUNT` | yes | Number of Facebook accounts (e.g. `1` or `2`). |
+| `FB_COOKIES_1`, `FB_COOKIES_2` | yes | Persisted cookie string per account (used to seed the browser profile). |
+| `FB_AUTO_LOGIN_ENABLED` | optional | Kill switch for the reactive auto-login flow. Set to `true` to enable; unset / `false` reverts to manual cookie recovery. |
+| `FB_EMAIL_1`, `FB_PASSWORD_1` | optional | Credentials for account #1, used only when `FB_AUTO_LOGIN_ENABLED=true` and the persisted session has expired. |
+| `FB_EMAIL_2`, `FB_PASSWORD_2` | optional | Same for account #2. |
+| `FB_EMAIL`, `FB_PASSWORD` | optional | Single-account fallback (used only when `FB_ACCOUNT_COUNT=1` and the scoped vars are unset). |
+| `TELEGRAM_BOT_TOKEN`, `TELEGRAM_ADMIN_CHAT_ID` | optional | Admin alerts for cookie expiry / auto-login failures. |
+
+**Recommended rollout order**: set credentials first, flip `FB_AUTO_LOGIN_ENABLED=true` last — auto-login activates immediately on the next cron tick.
+
+**Budget**: the connector will attempt at most 3 logins per account per 24h window before backing off (see `MAX_LOGIN_ATTEMPTS_PER_EPISODE` in `packages/connectors/src/facebook/login.ts`). The window resets automatically on first new attempt after 24h elapsed; the counter clears immediately on a successful login.
+
 ## Monitoring
 
 View logs for your workers:
