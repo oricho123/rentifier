@@ -11,7 +11,10 @@ export const LOGIN_EPISODE_WINDOW_MS = 24 * 60 * 60 * 1000;
 export const SELECTORS = {
   emailInput: 'input[name="email"]',
   passwordInput: 'input[name="pass"]',
-  loginSubmit: 'button[name="login"], button[type="submit"][data-testid="royal_login_button"]',
+  // Modern FB renders the submit as a div[role="button"] with an aria-label, not a <button>.
+  // Match aria-label across known locales used by this collector.
+  loginSubmit:
+    'div[role="button"][aria-label="Log In" i], div[role="button"][aria-label="Log in" i], div[role="button"][aria-label="התחבר" i], div[role="button"][aria-label="התחברות" i], button[name="login"]',
   passwordOnlyInput: 'input[name="pass"]:not([data-testid="royal_pass"])',
   invalidCredentialsBanner:
     '[data-testid="login_error"], div[role="alert"]:has-text("incorrect"), div[role="alert"]:has-text("password you entered")',
@@ -150,14 +153,14 @@ function logEvent(payload: Record<string, unknown>): void {
 }
 
 async function withNavigation<T>(page: Page, action: () => Promise<T>): Promise<T> {
-  const [, result] = await Promise.all([
-    page
-      .waitForLoadState('domcontentloaded', {
-        timeout: LOGIN_NAVIGATION_TIMEOUT_MS,
-      })
-      .catch(() => undefined),
-    action(),
-  ]);
+  // Run the action FIRST, then wait for the page to settle. FB login is XHR-based
+  // and does not always trigger a full navigation, so `domcontentloaded` resolves
+  // immediately on the existing document and provides no real wait. `networkidle`
+  // waits for in-flight XHRs (the login POST + any redirects) to complete.
+  const result = await action();
+  await page
+    .waitForLoadState('networkidle', { timeout: LOGIN_NAVIGATION_TIMEOUT_MS })
+    .catch(() => undefined);
   return result;
 }
 
@@ -201,7 +204,8 @@ export async function attemptLogin(
       }
 
       const state = await classifyLoginScreen(page);
-      logEvent({ event: 'fb_login_step', step, state });
+      const url = page.url();
+      logEvent({ event: 'fb_login_step', step, state, url });
 
       if (state === 'home_feed') {
         logEvent({ event: 'fb_login_success', step });
