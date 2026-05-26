@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { Page } from 'playwright';
-import { classifyLoginScreen } from '../login';
+import { classifyLoginScreen, SELECTORS } from '../login';
 
 interface SelectorMap {
   [selector: string]: number;
@@ -58,14 +58,11 @@ describe('classifyLoginScreen', () => {
   const TWO_FACTOR_URL = 'https://www.facebook.com/two_step_verification/';
   const LOGIN_URL = 'https://www.facebook.com/login/';
   const HOME_URL = 'https://www.facebook.com/';
-  const CAPTCHA = 'iframe[src*="captcha"], iframe[title*="captcha" i], img[src*="captcha"]';
-  const TWO_FACTOR = 'input[name="approvals_code"], #approvals_code, [data-testid="2fa_input"]';
-  const SAVE_LOGIN =
-    '[aria-label="Not Now"], [aria-label="Not now"], a[href*="/login/save-device/cancel/"]';
-  const COOKIE =
-    '[data-cookiebanner="accept_button"], [data-testid="cookie-policy-manage-dialog-accept-button"]';
-  const INVALID =
-    '[data-testid="login_error"], div[role="alert"]:has-text("incorrect"), div[role="alert"]:has-text("password you entered")';
+  const CAPTCHA = SELECTORS.captcha;
+  const TWO_FACTOR = SELECTORS.twoFactor;
+  const SAVE_LOGIN = SELECTORS.saveLoginNotNow;
+  const COOKIE = SELECTORS.cookieConsentAccept;
+  const INVALID = SELECTORS.invalidCredentialsBanner;
 
   it('returns home_feed when on home and feed root present', async () => {
     const page = makePage({ url: HOME_URL, selectors: { [FEED]: 1 } });

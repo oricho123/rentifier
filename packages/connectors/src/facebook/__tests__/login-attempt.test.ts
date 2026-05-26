@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Page } from 'playwright';
-import { attemptLogin } from '../login';
+import { attemptLogin, SELECTORS } from '../login';
 
 interface ScriptedPage {
   page: Page;
@@ -155,8 +155,7 @@ describe('attemptLogin', () => {
   });
 
   it('full_login → invalid_credentials returns invalid_credentials', async () => {
-    const INVALID =
-      '[data-testid="login_error"], div[role="alert"]:has-text("incorrect"), div[role="alert"]:has-text("password you entered")';
+    const INVALID = SELECTORS.invalidCredentialsBanner;
     const scripted = makeScriptedPage({
       steps: [
         { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
@@ -190,7 +189,7 @@ describe('attemptLogin', () => {
   });
 
   it('captcha detected → returns captcha, no clicks', async () => {
-    const CAPTCHA = 'iframe[src*="captcha"], iframe[title*="captcha" i], img[src*="captcha"]';
+    const CAPTCHA = SELECTORS.captcha;
     const scripted = makeScriptedPage({
       steps: [{ url: LOGIN_URL, selectors: { [CAPTCHA]: 1 } }],
     });
