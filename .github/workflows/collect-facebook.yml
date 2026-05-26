@@ -43,6 +43,12 @@ jobs:
           FB_ACCOUNT_COUNT: ${{ secrets.FB_ACCOUNT_COUNT }}
           FB_COOKIES_1: ${{ secrets.FB_COOKIES_1 }}
           FB_COOKIES_2: ${{ secrets.FB_COOKIES_2 }}
+          # Reactive auto-login (kill switch + per-account credentials)
+          FB_AUTO_LOGIN_ENABLED: ${{ secrets.FB_AUTO_LOGIN_ENABLED }}
+          FB_EMAIL_1: ${{ secrets.FB_EMAIL_1 }}
+          FB_PASSWORD_1: ${{ secrets.FB_PASSWORD_1 }}
+          FB_EMAIL_2: ${{ secrets.FB_EMAIL_2 }}
+          FB_PASSWORD_2: ${{ secrets.FB_PASSWORD_2 }}
           # Telegram admin alerts for cookie expiry
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_ADMIN_CHAT_ID: ${{ secrets.TELEGRAM_ADMIN_CHAT_ID }}

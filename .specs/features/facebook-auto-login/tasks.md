@@ -1,7 +1,7 @@
 # Facebook Auto-Login Tasks
 
 **Design**: `.specs/features/facebook-auto-login/design.md`
-**Status**: Draft
+**Status**: T01–T18 implemented + green (384/384 tests). T19–T20 are manual smoke tests pending the user's local Playwright run.
 
 ---
 
@@ -597,28 +597,28 @@ Phase 6 (after T13 + T16) — Workflow + smoke:
 
 ## Task Granularity Check
 
-| Task                                                  | Scope                | Status      |
-|-------------------------------------------------------|----------------------|-------------|
-| T01: Extend types                                     | 1 file, 2 type defs  | ✅ Granular |
-| T02: Extend FacebookClientError                       | 1 class, 1 prop      | ✅ Granular |
-| T03: Implement `credentials.ts`                       | 1 file, 2 functions  | ✅ Granular |
-| T04: Tests for credentials.ts                         | 1 test file          | ✅ Granular |
-| T05: `login.ts` skeleton                              | 1 file, constants    | ✅ Granular |
-| T06: `classifyLoginScreen`                            | 1 function           | ✅ Granular |
-| T07: `attemptLogin`                                   | 1 function (driver)  | ✅ Granular |
-| T08: Tests for classifier                             | 1 test file          | ✅ Granular |
-| T09: Tests for attemptLogin                           | 1 test file          | ✅ Granular |
-| T10: Budget helpers on connector                      | 3 private methods    | ✅ Granular |
-| T11: `fetchGroupWithLoginRecovery`                    | 1 private method     | ✅ Granular |
-| T12: Wire wrapper into fetchNew                       | 1 call-site swap     | ✅ Granular |
-| T13: Tests for connector wrapper                      | 1 test file          | ✅ Granular |
-| T14: Specialize alert messages                        | 1 function extension | ✅ Granular |
-| T15: Wire loginOutcome from error                     | 2 call sites         | ✅ Granular |
-| T16: Tests for alert text                             | 1 test file          | ✅ Granular |
-| T17: Workflow YAML diff                               | 1 file               | ✅ Granular |
-| T18: DEPLOYMENT.md update                             | 1 doc section        | ✅ Granular |
-| T19: Smoke test happy path                            | 1 manual run         | ✅ Granular |
-| T20: Smoke test failure path + budget                 | 1 manual run         | ✅ Granular |
+| Task                                                  | Scope                | Status                |
+|-------------------------------------------------------|----------------------|-----------------------|
+| T01: Extend types                                     | 1 file, 2 type defs  | ✅ Done               |
+| T02: Extend FacebookClientError                       | 1 class, 1 prop      | ✅ Done               |
+| T03: Implement `credentials.ts`                       | 1 file, 2 functions  | ✅ Done               |
+| T04: Tests for credentials.ts                         | 1 test file          | ✅ Done (13 tests)    |
+| T05: `login.ts` skeleton                              | 1 file, constants    | ✅ Done               |
+| T06: `classifyLoginScreen`                            | 1 function           | ✅ Done               |
+| T07: `attemptLogin`                                   | 1 function (driver)  | ✅ Done               |
+| T08: Tests for classifier                             | 1 test file          | ✅ Done (14 tests)    |
+| T09: Tests for attemptLogin                           | 1 test file          | ✅ Done (10 tests)    |
+| T10: Budget helpers on connector                      | 3 private methods    | ✅ Done               |
+| T11: `fetchGroupWithLoginRecovery`                    | 1 private method     | ✅ Done               |
+| T12: Wire wrapper into fetchNew                       | 1 call-site swap     | ✅ Done               |
+| T13: Tests for connector wrapper                      | 1 test file          | ✅ Done (9 tests)     |
+| T14: Specialize alert messages                        | 1 function extension | ✅ Done               |
+| T15: Wire loginOutcome from error                     | 2 call sites         | ✅ Done               |
+| T16: Tests for alert text                             | 1 test file          | ✅ Done (12 tests)    |
+| T17: Workflow YAML diff                               | 1 file               | ✅ Done               |
+| T18: DEPLOYMENT.md update                             | 1 doc section        | ✅ Done               |
+| T19: Smoke test happy path                            | 1 manual run         | ⏸ Pending user smoke |
+| T20: Smoke test failure path + budget                 | 1 manual run         | ⏸ Pending user smoke |
 
 ---
 

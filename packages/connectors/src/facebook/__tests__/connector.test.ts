@@ -8,7 +8,7 @@ vi.mock('../client', () => {
     constructor(
       message: string,
       public readonly errorType: string,
-      public readonly retryable: boolean,
+      public readonly retryable: boolean
     ) {
       super(message);
       this.name = 'FacebookClientError';
@@ -21,6 +21,7 @@ vi.mock('../client', () => {
       page: {},
     }),
     closeContext: vi.fn().mockResolvedValue(undefined),
+    clearProfile: vi.fn(),
     // Backward compat exports (used by other tests)
     launchBrowser: vi.fn().mockResolvedValue({
       close: vi.fn().mockResolvedValue(undefined),
@@ -52,9 +53,7 @@ vi.mock('../constants', async () => {
   const actual = await vi.importActual('../constants');
   return {
     ...actual,
-    MONITORED_GROUPS: [
-      { groupId: '111', name: 'Test Group', defaultCities: ['תל אביב'] },
-    ],
+    MONITORED_GROUPS: [{ groupId: '111', name: 'Test Group', defaultCities: ['תל אביב'] }],
     getMonitoredGroup: (groupId: string) => {
       if (groupId === '111') {
         return { groupId: '111', name: 'Test Group', defaultCities: ['תל אביב'] };
@@ -92,9 +91,7 @@ describe('FacebookConnector', () => {
       expect(draft.currency).toBe('ILS');
       expect(draft.bedrooms).toBe(3);
       expect(draft.city).toBe('תל אביב');
-      expect(draft.url).toBe(
-        'https://www.facebook.com/groups/111/permalink/12345/',
-      );
+      expect(draft.url).toBe('https://www.facebook.com/groups/111/permalink/12345/');
       expect(draft.postedAt).toEqual(new Date('2026-03-02T10:00:00.000Z'));
       expect(draft.imageUrl).toBe('https://scontent.fcdn.net/img.jpg');
     });
@@ -176,9 +173,7 @@ describe('FacebookConnector', () => {
         lastFetchedAt: null,
         knownPostIds: [],
         consecutiveFailures: 5,
-        circuitOpenUntil: new Date(
-          Date.now() + 60 * 60 * 1000,
-        ).toISOString(),
+        circuitOpenUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
         lastGroupIndex: 0,
         lastAccountIndex: 0,
         disabledAccounts: [],
@@ -247,7 +242,8 @@ describe('FacebookConnector', () => {
     it('truncates long titles and keeps full description', async () => {
       const { fetchGroupWithRetry } = await import('../client');
 
-      const longFirstLine = 'דירת 3 חדרים להשכרה בתל אביב עם מרפסת שמש גדולה ונוף פתוח לים במיקום מושלם ליד הים';
+      const longFirstLine =
+        'דירת 3 חדרים להשכרה בתל אביב עם מרפסת שמש גדולה ונוף פתוח לים במיקום מושלם ליד הים';
       const fullContent = `${longFirstLine}\n\nפרטים נוספים:\n5000 שח לחודש`;
 
       vi.mocked(fetchGroupWithRetry).mockResolvedValueOnce([
@@ -274,7 +270,8 @@ describe('FacebookConnector', () => {
     });
 
     it('launches and closes persistent context', async () => {
-      const { launchPersistentContext, closeContext, fetchGroupWithRetry } = await import('../client');
+      const { launchPersistentContext, closeContext, fetchGroupWithRetry } =
+        await import('../client');
       vi.mocked(fetchGroupWithRetry).mockResolvedValueOnce([]);
 
       const mockDb = {} as any;
@@ -285,13 +282,16 @@ describe('FacebookConnector', () => {
     });
 
     it('closes context even on error', async () => {
-      const { launchPersistentContext, closeContext, fetchGroupWithRetry, FacebookClientError } = await import('../client');
+      const { launchPersistentContext, closeContext, fetchGroupWithRetry, FacebookClientError } =
+        await import('../client');
       vi.mocked(fetchGroupWithRetry).mockRejectedValueOnce(
-        new FacebookClientError('Auth expired', 'auth_expired', false),
+        new FacebookClientError('Auth expired', 'auth_expired', false)
       );
 
       const mockDb = {} as any;
-      await expect(connector.fetchNew(null, mockDb)).rejects.toThrow();
+      const result = await connector.fetchNew(null, mockDb);
+      const cursor = JSON.parse(result.nextCursor!);
+      expect(cursor.disabledAccounts).toContain('1');
 
       expect(launchPersistentContext).toHaveBeenCalledOnce();
       expect(closeContext).toHaveBeenCalledOnce();
