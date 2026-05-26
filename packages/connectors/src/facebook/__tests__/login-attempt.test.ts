@@ -234,14 +234,8 @@ describe('attemptLogin', () => {
     const scripted = makeScriptedPage({
       steps: [{ url: LOGIN_URL, continueHits: 1 }],
     });
-    // continue_as_user → continue_as_user → ... never advances
-    // Actually no-progress detector hits first, but verify maxSteps=1 forces the fallback
-
-    const scripted2 = makeScriptedPage({
-      steps: [{ url: LOGIN_URL, continueHits: 1 }],
-    });
     const out = await attemptLogin(
-      scripted2.page,
+      scripted.page,
       { email: 'a@b.com', password: 'p' },
       { maxSteps: 1 }
     );

@@ -16,7 +16,7 @@ export const SELECTORS = {
   emailInput: 'input[name="email"]',
   passwordInput: 'input[name="pass"]',
   loginSubmit:
-    'div[role="button"][aria-label="Log In" i], div[role="button"][aria-label="Log in" i], div[role="button"][aria-label="התחבר" i], div[role="button"][aria-label="התחברות" i], button[name="login"]',
+    'div[role="button"][aria-label="Log In" i], div[role="button"][aria-label="התחבר" i], div[role="button"][aria-label="התחברות" i], button[name="login"]',
   invalidCredentialsBanner:
     'div[role="alert"]:has-text("incorrect"), div[role="alert"]:has-text("password you entered"), div[role="alert"]:has-text("הסיסמה")',
   twoFactor:
@@ -25,7 +25,7 @@ export const SELECTORS = {
   cookieConsentAccept:
     'div[role="button"][aria-label*="cookie" i], div[role="button"][aria-label*="Accept" i], div[role="button"][aria-label*="Allow" i]',
   saveLoginNotNow:
-    'div[role="button"][aria-label="Not Now" i], div[role="button"][aria-label="Not now" i], div[role="button"][aria-label="לא עכשיו" i]',
+    'div[role="button"][aria-label="Not Now" i], div[role="button"][aria-label="לא עכשיו" i]',
   feedRoot: '[role="feed"], [role="main"]',
 } as const;
 
