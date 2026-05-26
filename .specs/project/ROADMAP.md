@@ -91,6 +91,11 @@
 - ✅ Deduplication via notifications_sent table
 - ✅ 37 unit tests covering all matching criteria
 
+**Telegram groups — per-chat filters** — **CLOSED (as-is)** (`.specs/features/telegram-groups-per-chat-filters/`)
+
+- One subscriber per `telegram_chat_id`; per-group filters work
+- **No code change:** admins use BotFather “Group privacy” = Disabled if they need text steps in groups
+
 ---
 
 ## M4 - Additional Sources

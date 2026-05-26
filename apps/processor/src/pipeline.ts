@@ -2,13 +2,30 @@ import type { DB, ListingRaw, ListingRow } from '@rentifier/db';
 import type { Connector } from '@rentifier/connectors';
 import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import { MockConnector, Yad2Connector, FacebookNormalizer } from '@rentifier/connectors';
-import { extractAll, isNonRentalPost, shouldInvokeAI, aiExtract, mergeExtractionResults, DEDUP_THRESHOLD, type AiProvider, type AiExtractorMetrics, type AiExtractDetailedResult, type AiExtractorConfig, DEFAULT_AI_CONFIG } from '@rentifier/extraction';
+import { extractAll, isNonRentalPost, shouldInvokeAI, aiExtract, mergeExtractionResults, resolveNeighborhood, DEDUP_THRESHOLD, type AiProvider, type AiExtractorMetrics, type AiExtractDetailedResult, type AiExtractorConfig, type NominatimConfig, type NeighborhoodCache, DEFAULT_AI_CONFIG } from '@rentifier/extraction';
+
+export interface ProcessorConfig {
+  ai?: AiProvider;
+  aiConfig?: Partial<AiExtractorConfig>;
+  geocoderConfig?: {
+    userAgent: string;
+    budget: number;
+  };
+}
+
+export interface GeocodeMetrics {
+  cacheHits: number;
+  liveCalls: number;
+  misses: number;
+  budgetExhausted: boolean;
+}
 
 export interface ProcessingResult {
   processed: number;
   failed: number;
   errors: ProcessingError[];
   aiMetrics?: AiExtractorMetrics;
+  geocodeMetrics?: GeocodeMetrics;
 }
 
 export interface ProcessingError {
@@ -43,7 +60,7 @@ function createDefaultRegistry(): ConnectorRegistry {
   return registry;
 }
 
-export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvider, aiConfig?: Partial<AiExtractorConfig>): Promise<ProcessingResult> {
+export async function processBatch(db: DB, batchSize: number = 50, config?: ProcessorConfig): Promise<ProcessingResult> {
   const registry = createDefaultRegistry();
   const unprocessed = await db.getUnprocessedRawListings(batchSize);
 
@@ -65,6 +82,27 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
     avgLatencyMs: 0,
   };
   let totalLatency = 0;
+
+  // Geocoder metrics + budget
+  const geocodeMetrics: GeocodeMetrics = {
+    cacheHits: 0,
+    liveCalls: 0,
+    misses: 0,
+    budgetExhausted: false,
+  };
+  const geocodeBudget = { remaining: config?.geocoderConfig?.budget ?? 0 };
+
+  // D1-backed NeighborhoodCache adapter
+  const neighborhoodCache: NeighborhoodCache = {
+    async get(cacheKey) {
+      const row = await db.getCachedNeighborhood(cacheKey);
+      if (!row) return null;
+      return { rawName: row.raw_name, canonicalName: row.canonical_name };
+    },
+    async set(cacheKey, cacheType, rawName, canonicalName, provider) {
+      await db.setCachedNeighborhood(cacheKey, cacheType, rawName, canonicalName, provider);
+    },
+  };
 
   for (const raw of unprocessed) {
     try {
@@ -102,20 +140,23 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
       // Step 5: Extract structured data (regex-based)
       let extraction = extractAll(draft.title, draft.description);
 
+      // Snapshot regex neighborhood before AI may add to it
+      const regexNeighborhood = extraction.location?.neighborhood ?? null;
+
       // Step 5a: AI extraction (optional, gated)
       let aiWasUsed = false;
-      if (ai && source) {
+      if (config?.ai && source) {
         const textLength = `${draft.title} ${draft.description}`.length;
         const shouldUseAI = shouldInvokeAI(extraction, source.name, textLength);
 
         if (shouldUseAI) {
-          const maxCalls = aiConfig?.maxCallsPerBatch ?? DEFAULT_AI_CONFIG.maxCallsPerBatch;
+          const maxCalls = config.aiConfig?.maxCallsPerBatch ?? DEFAULT_AI_CONFIG.maxCallsPerBatch;
           if (aiMetrics.called < maxCalls) {
             // For Facebook posts, title === description, so don't duplicate
             const aiText = source.name === 'facebook'
               ? draft.description
               : `${draft.title}\n\n${draft.description}`;
-            const aiResult = await aiExtract(aiText, ai, aiConfig);
+            const aiResult = await aiExtract(aiText, config.ai, config.aiConfig);
 
             aiMetrics.called++;
             totalLatency += aiResult.latencyMs;
@@ -154,6 +195,47 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
               event: 'ai_call_skipped_budget',
               sourceItemId: raw.source_item_id,
             }));
+          }
+        }
+      }
+
+      // Determine neighborhood source after regex + AI
+      const aiSetNeighborhood = !regexNeighborhood && !!(extraction.location?.neighborhood);
+      let neighborhoodSource: string | null =
+        regexNeighborhood ? 'regex' : (aiSetNeighborhood ? 'ai' : null);
+
+      // Step 5c: Geocoder fallback (only when regex + AI both missed)
+      if (config?.geocoderConfig && neighborhoodSource === null) {
+        const city = extraction.location?.city ?? draft.city ?? null;
+        const budgetBefore = geocodeBudget.remaining;
+
+        const resolved = await resolveNeighborhood({
+          city,
+          latitude: draft.latitude ?? null,
+          longitude: draft.longitude ?? null,
+          street: extraction.street ?? draft.street ?? null,
+          cache: neighborhoodCache,
+          config: {
+            userAgent: config.geocoderConfig.userAgent,
+          },
+          budget: geocodeBudget,
+        });
+
+        if (resolved) {
+          if (!extraction.location) extraction.location = { city: city ?? '', neighborhood: null, confidence: 0 };
+          extraction.location!.neighborhood = resolved.neighborhood;
+          neighborhoodSource = resolved.source;
+
+          const usedCall = geocodeBudget.remaining < budgetBefore;
+          if (usedCall) {
+            geocodeMetrics.liveCalls++;
+          } else {
+            geocodeMetrics.cacheHits++;
+          }
+        } else {
+          geocodeMetrics.misses++;
+          if (geocodeBudget.remaining === 0 && budgetBefore > 0) {
+            geocodeMetrics.budgetExhausted = true;
           }
         }
       }
@@ -226,6 +308,7 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
         entry_date: extraction.entryDate ?? null,
         ai_extracted: aiWasUsed ? 1 : 0,
         duplicate_of: duplicateOf,
+        neighborhood_source: neighborhoodSource,
       };
 
       const newListingId = await db.upsertListing(listingRow);
@@ -246,6 +329,7 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
         price: listingRow.price,
         bedrooms: listingRow.bedrooms,
         neighborhood: listingRow.neighborhood,
+        neighborhoodSource: listingRow.neighborhood_source,
         street: listingRow.street,
         aiUsed: aiWasUsed,
         duplicateOf: listingRow.duplicate_of,
@@ -273,6 +357,10 @@ export async function processBatch(db: DB, batchSize: number = 50, ai?: AiProvid
   if (aiMetrics.called > 0) {
     aiMetrics.avgLatencyMs = totalLatency / aiMetrics.called;
     result.aiMetrics = aiMetrics;
+  }
+
+  if (geocodeMetrics.liveCalls > 0 || geocodeMetrics.cacheHits > 0 || geocodeMetrics.misses > 0) {
+    result.geocodeMetrics = geocodeMetrics;
   }
 
   console.log(JSON.stringify({ event: 'batch_complete', ...result }));

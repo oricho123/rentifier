@@ -1,7 +1,7 @@
 # State
 
 **Last Updated:** 2026-04-28
-**Current Work:** `listings-cleanup-cron` feature implemented locally (T01–T16 done). New `apps/cleanup` worker prunes listings + listings_raw + duplicate chains older than `RETENTION_DAYS` (default 30) on a daily cron `0 4 * * *`. Local E2E verified: stale rows deleted, fresh rows kept, `worker_state.cleanup` ok. Next: T17 production deploy (`pnpm deploy:cleanup`) — gated on user.
+**Current Work:** `neighborhood-extraction-coverage` implemented (T01–T14 done, PR #48 open). `listings-cleanup-cron` implemented locally (T01–T16 done, needs deploy). Next: merge PR #48 then deploy both features.
 
 ---
 
@@ -21,6 +21,36 @@
 - `package.json` (root): `dev:cleanup`, `trigger:cleanup`, `deploy:cleanup` scripts; `deploy:all` extended
 - `apps/cleanup/src/__tests__/cleanup-service.test.ts`: 13 unit tests covering order, batching, capping, validation
 - 326 tests pass (was 313). Local E2E verified.
+
+### AD-029: Nominatim chosen as P1 resolver for neighborhood extraction (2026-04-26)
+
+**Decision:** Use Nominatim (public reverse-geocode API) as the primary resolver for `neighborhood-extraction-coverage`, with a D1 write-through cache to eliminate repeated external calls. OSM polygons are demoted to a future P3 contingency for TLV only.
+**Evidence:** P0 spike ran 95 stratified real listings (50 Yad2 top-3 cities, 20 Yad2 other M3, 20 Facebook street+city, 5 edge cases). Nominatim: 92.6% hit rate, OSM polygons: 52% hit rate (fails entirely on Haifa and Jerusalem — every single row was `miss_out_of_coverage`). GovMap: not measurable (stub not wired).
+**Alignment finding:** Both resolvers showed ~17% canonical-name alignment in the raw run. This was an artifact of an incomplete variant map, not poor geocoding quality. After inspecting the `hit_unknown` rows, all were correct neighbourhood names with spelling variants or OSM sub-division suffixes. A post-spike alias enrichment pass added 43 entries to `CITY_NEIGHBORHOODS` (all 316 tests pass). Estimated effective Nominatim alignment after enrichment: ~75-80%, comfortably above the ≥70% spec threshold.
+**Trade-off:** Nominatim requires rate-limiting (1 req/sec public instance policy) and a cache table in D1. Cold start at 1 req/sec for a backfill of ~80k listings would take ~22 hours, spread over a weekend cron. Steady-state cost after cache warm is negligible. OSM polygons remain available as a fast P3 fallback for TLV-only listings if Nominatim has an outage.
+**Impact:** `packages/extraction/src/cities.ts` — 43 new entries across TLV, JLM, Haifa, Ramat Gan, Givataim, and Petah Tikva. Spike evidence at `.specs/features/neighborhood-extraction-coverage/spike-results.md`. Next step: design phase.
+
+### AD-028: Fix neighborhood extraction coverage before shipping neighborhood filter UI; resolver strategy decided via spike (2026-04-23)
+
+**Decision:** Split the user request for "more direct areas filtering" into two sequential features, sequenced as data-quality first then UI:
+
+1. `neighborhood-extraction-coverage` — ship first. A **P0 spike** picks between two resolver strategies before any P1 code is written: **(A) offline OSM polygons + point-in-polygon** vs **(B) live GovMap/Nominatim reverse-geocode with a write-through D1 cache**. All downstream user stories (P1 coords-based, P2 street+city, P1b backfill, P3 fallback) are written strategy-agnostic.
+2. `granular-area-filters` — Telegram UI for neighborhood include + exclude, gated on coverage hitting production targets first.
+
+**Reason:** `filters.neighborhoods_json` and `matchesFilter()` already support neighborhood inclusion end-to-end, but the `/filter` bot flow never asks for it. More importantly, `listings.neighborhood` is null on an estimated 40-60% of listings because the extractor only matches a Hebrew dictionary and ignores the exact `(latitude, longitude)` Yad2 already provides on every listing. Building filter UX on that data quality would frustrate users and force workarounds like an "include unknown" toggle. Fixing extraction first gives standalone value (notification context, duplicate detection, future analytics).
+
+**Why spike instead of picking the resolver now:** Initial draft committed to Strategy A for "zero runtime cost" reasons. Reconsidered after user pushback — a cached live geocode is near-zero cost at steady state and handles both the coords case (Yad2) and the street+city case (Facebook) with one code path, no asset curation. The deciding variable is **Hebrew-name alignment between the chosen provider (GovMap / Nominatim) and our `CITY_NEIGHBORHOODS` canonical vocabulary**, which cannot be predicted without measurement. Spike is a 1-2 hour time-box on 100 stratified real listings with a hard decision rule (≥80% hit rate AND ≥70% canonical-name alignment; simpler wins ties).
+
+**Trade-off:** UI feature delayed by one feature cycle. Spike adds ~half-day of up-front work but prevents building the losing architecture. The losing strategy becomes the P3 contingency rather than dead effort.
+
+**User decisions captured during specification:**
+- Null-neighborhood policy in the future filter UI: per-filter toggle "include listings with unknown neighborhood" (on by default)
+- Exclusion scope: neighborhoods in P2, city exclusion in P3
+- Map/radius UI: deferred to M6 Web UI milestone (explicitly out of scope for this work)
+- Feature split: spec both — A in detail, B as short stub depending on A
+- Geocoding data-source baseline preference (for Strategy A if chosen): OpenStreetMap Overpass, with municipal overrides (TLV/JLM/Haifa) allowed if OSM is thin
+
+**Impact:** Specs at `.specs/features/neighborhood-extraction-coverage/spec.md` (full, spike-gated) and `.specs/features/granular-area-filters/spec.md` (stub with hard dependency). Both still need design + tasks phases. A new AD will follow once the spike produces `spike-results.md` and a resolver is chosen. Regardless of strategy, a migration adding `listings.neighborhood_source` is required.
 
 ### AD-027: Yad2 API migration from city to region parameter (2026-04-12)
 

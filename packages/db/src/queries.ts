@@ -1,4 +1,4 @@
-import type { Source, SourceState, ListingRaw, ListingRow, User, FilterRow, NotificationSent, WorkerState, MonitoredCity } from './schema';
+import type { Source, SourceState, ListingRaw, ListingRow, NeighborhoodCacheRow, User, FilterRow, NotificationSent, WorkerState, MonitoredCity } from './schema';
 import type { D1Database } from '@cloudflare/workers-types';
 import { matchScore, DEDUP_THRESHOLD, type DedupFields } from '@rentifier/extraction';
 
@@ -49,6 +49,19 @@ export interface DB {
   enableCity(cityCode: number): Promise<void>;
   findDuplicate(params: FindDuplicateParams): Promise<DuplicateCandidate | null>;
   swapCanonical(newCanonicalId: number, oldCanonicalId: number): Promise<void>;
+  getCachedNeighborhood(cacheKey: string): Promise<NeighborhoodCacheRow | null>;
+  setCachedNeighborhood(
+    cacheKey: string,
+    cacheType: 'coords' | 'street',
+    rawName: string | null,
+    canonicalName: string | null,
+    provider: string,
+  ): Promise<void>;
+  updateListingNeighborhood(
+    listingId: number,
+    neighborhood: string | null,
+    neighborhoodSource: string | null,
+  ): Promise<void>;
   deleteOldListings(retentionDays: number, batchSize: number): Promise<number>;
   deleteOldRawListings(retentionDays: number, batchSize: number): Promise<number>;
   deleteOrphanedDuplicates(retentionDays: number, batchSize: number): Promise<number>;
@@ -121,8 +134,8 @@ export function createDB(d1: D1Database): DB {
 
     async upsertListing(listing: Omit<ListingRow, 'id' | 'ingested_at'>): Promise<number> {
       const result = await d1.prepare(
-        `INSERT INTO listings (source_id, source_item_id, title, description, price, currency, price_period, bedrooms, city, neighborhood, street, house_number, area_text, url, posted_at, tags_json, relevance_score, floor, square_meters, property_type, latitude, longitude, image_url, entry_date, ai_extracted, duplicate_of)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO listings (source_id, source_item_id, title, description, price, currency, price_period, bedrooms, city, neighborhood, street, house_number, area_text, url, posted_at, tags_json, relevance_score, floor, square_meters, property_type, latitude, longitude, image_url, entry_date, ai_extracted, duplicate_of, neighborhood_source)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(source_id, source_item_id) DO UPDATE SET
            title = excluded.title,
            description = excluded.description,
@@ -147,7 +160,8 @@ export function createDB(d1: D1Database): DB {
            image_url = excluded.image_url,
            entry_date = excluded.entry_date,
            ai_extracted = excluded.ai_extracted,
-           duplicate_of = excluded.duplicate_of
+           duplicate_of = excluded.duplicate_of,
+           neighborhood_source = excluded.neighborhood_source
          RETURNING id`
       ).bind(
         listing.source_id, listing.source_item_id, listing.title, listing.description,
@@ -156,7 +170,7 @@ export function createDB(d1: D1Database): DB {
         listing.posted_at, listing.tags_json, listing.relevance_score,
         listing.floor, listing.square_meters, listing.property_type,
         listing.latitude, listing.longitude, listing.image_url,
-        listing.entry_date, listing.ai_extracted, listing.duplicate_of
+        listing.entry_date, listing.ai_extracted, listing.duplicate_of, listing.neighborhood_source ?? null
       ).first<{ id: number }>();
       return result!.id;
     },
@@ -344,6 +358,41 @@ export function createDB(d1: D1Database): DB {
       await d1.prepare(
         'UPDATE listings SET duplicate_of = ? WHERE duplicate_of = ?'
       ).bind(newCanonicalId, oldCanonicalId).run();
+    },
+
+    async getCachedNeighborhood(cacheKey: string): Promise<NeighborhoodCacheRow | null> {
+      const result = await d1.prepare(
+        'SELECT * FROM neighborhood_cache WHERE cache_key = ?'
+      ).bind(cacheKey).first<NeighborhoodCacheRow>();
+      return result ?? null;
+    },
+
+    async setCachedNeighborhood(
+      cacheKey: string,
+      cacheType: 'coords' | 'street',
+      rawName: string | null,
+      canonicalName: string | null,
+      provider: string,
+    ): Promise<void> {
+      await d1.prepare(
+        `INSERT INTO neighborhood_cache (cache_key, cache_type, raw_name, canonical_name, provider)
+         VALUES (?, ?, ?, ?, ?)
+         ON CONFLICT(cache_key) DO UPDATE SET
+           raw_name = excluded.raw_name,
+           canonical_name = excluded.canonical_name,
+           provider = excluded.provider,
+           resolved_at = datetime('now')`
+      ).bind(cacheKey, cacheType, rawName, canonicalName, provider).run();
+    },
+
+    async updateListingNeighborhood(
+      listingId: number,
+      neighborhood: string | null,
+      neighborhoodSource: string | null,
+    ): Promise<void> {
+      await d1.prepare(
+        'UPDATE listings SET neighborhood = ?, neighborhood_source = ? WHERE id = ?'
+      ).bind(neighborhood, neighborhoodSource, listingId).run();
     },
 
     async deleteOldListings(retentionDays: number, batchSize: number): Promise<number> {

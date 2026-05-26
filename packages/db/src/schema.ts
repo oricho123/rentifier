@@ -52,6 +52,17 @@ export interface ListingRow {
   entry_date: string | null;
   ai_extracted: number;
   duplicate_of: number | null;
+  neighborhood_source: string | null;
+}
+
+export interface NeighborhoodCacheRow {
+  id: number;
+  cache_key: string;
+  cache_type: 'coords' | 'street';
+  raw_name: string | null;
+  canonical_name: string | null;
+  provider: string;
+  resolved_at: string;
 }
 
 export interface User {

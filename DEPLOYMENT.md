@@ -122,6 +122,11 @@ pnpm --filter @rentifier/collector exec wrangler secret put SECRET_NAME
 }
 ```
 
+## Telegram bot: groups
+
+- Each Telegram **chat** (DM or group) is one subscriber: run **`/start`** in that chat so notifications and filters are tied to its `chat_id`. Several groups ⇒ several independent filter sets—no extra deploy config.
+- For **supergroups**, the `/filter` wizard asks for plain text (prices, rooms, etc.). With Telegram’s default **Group Privacy** on, the bot may not receive those messages—only commands and mentions. If the wizard stalls in a group, open [@BotFather](https://t.me/BotFather) → your bot → **`/setprivacy`** → **Disable**. Admins should be aware the bot can then see ordinary group messages (Telegram’s rules, not Rentifier-specific).
+
 ## Monitoring
 
 View logs for your workers:

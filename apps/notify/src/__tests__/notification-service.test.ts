@@ -46,6 +46,7 @@ describe('NotificationService - Image Integration', () => {
     entry_date: null,
     ai_extracted: 0,
     duplicate_of: null,
+    neighborhood_source: null,
     ...overrides,
   });
 

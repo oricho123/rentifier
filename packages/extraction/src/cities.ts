@@ -150,6 +150,7 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'פלורנטין': 'פלורנטין',
     'florentin': 'פלורנטין',
     'נווה צדק': 'נווה צדק',
+    'נוה צדק': 'נווה צדק',         // OSM/Nominatim one-vav spelling
     'neve tzedek': 'נווה צדק',
     'שפירא': 'שפירא',
     'shapira': 'שפירא',
@@ -162,6 +163,7 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'כפר שלם': 'כפר שלם',
     'kfar shalem': 'כפר שלם',
     'קריית שלום': 'קריית שלום',
+    'קרית שלום': 'קריית שלום',     // without yud (Nominatim/OSM form)
     'kiryat shalom': 'קריית שלום',
     'נווה עופר': 'נווה עופר',
     'neve ofer': 'נווה עופר',
@@ -173,6 +175,7 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'לב העיר': 'לב העיר',
     'מרכז העיר': 'לב העיר',
     'לב תל אביב': 'לב העיר',
+    'לב תל-אביב': 'לב העיר',       // Nominatim uses hyphen
     'city center': 'לב העיר',
     'רוטשילד': 'רוטשילד',
     'rothschild': 'רוטשילד',
@@ -196,14 +199,19 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'לב יפו': 'לב יפו',
     'נוגה': 'נוגה',
     'noga': 'נוגה',
+    'גני שרונה': 'גני שרונה',      // central TLV near HaKirya, Nominatim/OSM name
 
     // North
     'הצפון הישן': 'הצפון הישן',
     'צפון הישן': 'הצפון הישן',
     'old north': 'הצפון הישן',
+    'הצפון הישן - החלק הדרומי': 'הצפון הישן', // OSM sub-neighbourhood
+    'הצפון הישן - החלק הצפוני': 'הצפון הישן', // OSM sub-neighbourhood
     'הצפון החדש': 'הצפון החדש',
     'צפון החדש': 'הצפון החדש',
     'new north': 'הצפון החדש',
+    'הצפון החדש - החלק הדרומי': 'הצפון החדש', // OSM sub-neighbourhood
+    'הצפון החדש - החלק הצפוני': 'הצפון החדש', // OSM sub-neighbourhood
     'בבלי': 'בבלי',
     'bavli': 'בבלי',
     'רמת אביב': 'רמת אביב',
@@ -222,6 +230,8 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'tel baruch': 'תל ברוך',
     'נווה דן': 'נווה דן',
     'neve dan': 'נווה דן',
+    'צמרות איילון': 'צמרות איילון', // north TLV near Ayalon, Nominatim/OSM name
+    'נופי ים': 'נופי ים',           // north TLV / Tel Baruch area
 
     // East
     'יד אליהו': 'יד אליהו',
@@ -243,6 +253,7 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     // Jaffa
     'יפו': 'יפו',
     'jaffa': 'יפו',
+    'יפו ד\'': 'יפו',              // OSM sub-area (Givat HaTamarim)
     'עג\'מי': 'עג\'מי',
     'אג\'מי': 'עג\'מי',
     'ajami': 'עג\'מי',
@@ -277,6 +288,7 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'מלחה': 'מלחה',
     'malha': 'מלחה',
     'קריית יובל': 'קריית יובל',
+    'קרית היובל': 'קריית יובל',    // Yad2 form (with definite article, without yud)
     'kiryat yovel': 'קריית יובל',
     'קריית מנחם': 'קריית מנחם',
     'kiryat menachem': 'קריית מנחם',
@@ -301,6 +313,16 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'musrara': 'מוסררה',
     'עיר העתיקה': 'עיר העתיקה',
     'old city': 'עיר העתיקה',
+    'הרובע היהודי': 'הרובע היהודי', // Jewish Quarter — OSM/Nominatim sub-area of Old City
+    'נחלת שבעה': 'נחלת שבעה',
+    'מקור חיים': 'מקור חיים',
+    'גבעת משואה': 'גבעת משואה',
+    'רמת דניה': 'רמת דניה',
+    'קריית בעלז': 'קריית בעלז',
+    'קרית בעלז': 'קריית בעלז',     // without yud
+    'קריית קמניץ': 'קריית קמניץ',
+    'קרית קמניץ': 'קריית קמניץ',   // without yud
+    'הולילנד': 'הולילנד',           // Holyland neighbourhood (Pat/Malha area)
   },
   'חיפה': {
     'כרמל': 'כרמל',
@@ -311,6 +333,7 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'carmelia': 'כרמליה',
     'הדר': 'הדר',
     'hadar': 'הדר',
+    'הדר הכרמל': 'הדר',            // full official name — Nominatim returns this
     'עיר תחתית': 'עיר תחתית',
     'downtown': 'עיר תחתית',
     'בת גלים': 'בת גלים',
@@ -321,8 +344,10 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'אחוזה': 'אחוזה',
     'ahuza': 'אחוזה',
     'נווה שאנן': 'נווה שאנן',
+    'נוה שאנן': 'נווה שאנן',        // Nominatim one-vav spelling
     'neve shaanan haifa': 'נווה שאנן',
     'קריית חיים': 'קריית חיים',
+    'קרית חיים': 'קריית חיים',     // without yud (Nominatim/OSM form)
     'kiryat haim': 'קריית חיים',
     'קריית שמואל': 'קריית שמואל',
     'kiryat shmuel': 'קריית שמואל',
@@ -334,6 +359,10 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'שמבור': 'שמבור',
     'רמת אלמוגי': 'רמת אלמוגי',
     'ramat almogi': 'רמת אלמוגי',
+    'יזרעאליה': 'יזרעאליה',         // Jezreelia — OSM/Nominatim name
+    'נווה נחל': 'נווה נחל',
+    'ואדי סאליב': 'ואדי סאליב',     // historic neighbourhood, lower city
+    'המושבה הגרמנית': 'המושבה הגרמנית', // Haifa's German Colony (near Wadi Salib)
   },
   'הרצליה': {
     'הרצליה פיתוח': 'הרצליה פיתוח',
@@ -373,6 +402,9 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'shikun vatikim': 'שיכון ותיקים',
     'מרכז העיר': 'מרכז העיר',
     'city center': 'מרכז העיר',
+    'ראשונים': 'ראשונים',
+    'רמת יצחק': 'רמת יצחק',
+    'מתחם נגבה': 'מתחם נגבה',
   },
   'גבעתיים': {
     'בורוכוב': 'בורוכוב',
@@ -386,6 +418,7 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'neve gan': 'נווה גן',
     'מרכז העיר': 'מרכז העיר',
     'city center': 'מרכז העיר',
+    'דרום גבעתיים': 'דרום גבעתיים',
   },
   'באר שבע': {
     'עיר העתיקה': 'עיר העתיקה',
@@ -437,6 +470,9 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
   'פתח תקווה': {
     'כפר גנים': 'כפר גנים',
     'kfar ganim': 'כפר גנים',
+    'כפר גנים ב': 'כפר גנים ב',
+    'כפר גנים ב\'': 'כפר גנים ב',  // OSM uses apostrophe
+    'כפר גנים ובת גנים': 'כפר גנים', // OSM combined name
     'עין גנים': 'עין גנים',
     'ein ganim': 'עין גנים',
     'אם המושבות': 'אם המושבות',
@@ -447,5 +483,21 @@ export const CITY_NEIGHBORHOODS: Record<string, Record<string, string>> = {
     'kiryat matalon': 'קריית מטלון',
     'הדר גנים': 'הדר גנים',
     'hadar ganim': 'הדר גנים',
+    'בת גנים': 'בת גנים',
+    'נווה גן': 'נווה גן',
+    'נווה גנים': 'נווה גנים',
+    'קריית אלון': 'קריית אלון',
+    'קרית אלון': 'קריית אלון',      // without yud (Yad2 form)
+    'יוספטל - קריית אלון - קריית אלעזר': 'קריית אלון', // OSM combined name
+    'קריית אלעזר': 'קריית אלעזר',
+    'אחדות': 'אחדות',
+    'Ahdut': 'אחדות',              // OSM English name
+    'ahdut': 'אחדות',
+    'מרכז העיר': 'מרכז העיר',
+    'city center': 'מרכז העיר',
+    'מחנה יהודה': 'מחנה יהודה',
+    'נווה מעוז': 'נווה מעוז',
+    'רמת ורבר': 'רמת ורבר',
+    'קרול': 'קרול',
   },
 };

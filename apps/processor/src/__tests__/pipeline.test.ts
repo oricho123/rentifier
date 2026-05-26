@@ -67,7 +67,7 @@ describe('processBatch with AI integration', () => {
     (mockDb.getUnprocessedRawListings as any).mockResolvedValue([rawListing]);
     (mockDb.getSourceById as any).mockResolvedValue(yad2Source);
 
-    await processBatch(mockDb as DB, 10, mockAi);
+    await processBatch(mockDb as DB, 10, { ai: mockAi });
 
     expect(mockAi.run).not.toHaveBeenCalled();
     expect(upsertedListings[0].ai_extracted).toBe(0);
@@ -112,7 +112,7 @@ describe('processBatch with AI integration', () => {
       }),
     });
 
-    await processBatch(mockDb as DB, 10, mockAi);
+    await processBatch(mockDb as DB, 10, { ai: mockAi });
 
     expect(mockAi.run).toHaveBeenCalledTimes(1);
     expect(upsertedListings[0].ai_extracted).toBe(1);
@@ -161,7 +161,7 @@ describe('processBatch with AI integration', () => {
       }),
     });
 
-    await processBatch(mockDb as DB, 10, mockAi);
+    await processBatch(mockDb as DB, 10, { ai: mockAi });
 
     expect(mockAi.run).toHaveBeenCalledTimes(1);
     expect(upsertedListings[0].ai_extracted).toBe(1);
@@ -192,7 +192,7 @@ describe('processBatch with AI integration', () => {
     (mockDb.getUnprocessedRawListings as any).mockResolvedValue([rawListing]);
     (mockDb.getSourceById as any).mockResolvedValue(fbSource);
 
-    await processBatch(mockDb as DB, 10, mockAi);
+    await processBatch(mockDb as DB, 10, { ai: mockAi });
 
     expect(mockAi.run).not.toHaveBeenCalled();
     expect(upsertedListings[0].ai_extracted).toBe(0);
@@ -239,7 +239,7 @@ describe('processBatch with AI integration', () => {
       }),
     });
 
-    const result = await processBatch(mockDb as DB, 50, mockAi);
+    const result = await processBatch(mockDb as DB, 50, { ai: mockAi });
 
     // Should call AI exactly 10 times (budget limit)
     expect(mockAi.run).toHaveBeenCalledTimes(10);
@@ -273,7 +273,7 @@ describe('processBatch with AI integration', () => {
     (mockDb.getSourceById as any).mockResolvedValue(fbSource);
     (mockAi.run as any).mockRejectedValue(new Error('AI service unavailable'));
 
-    const result = await processBatch(mockDb as DB, 10, mockAi);
+    const result = await processBatch(mockDb as DB, 10, { ai: mockAi });
 
     expect(result.processed).toBe(1);
     expect(result.failed).toBe(0);
@@ -320,7 +320,7 @@ describe('processBatch with AI integration', () => {
       }),
     });
 
-    await processBatch(mockDb as DB, 10, mockAi);
+    await processBatch(mockDb as DB, 10, { ai: mockAi });
 
     const listing = upsertedListings[0];
     // Regex extracts bedrooms from title, AI fills price and other gaps
@@ -407,7 +407,7 @@ describe('processBatch with AI integration', () => {
       }),
     });
 
-    await processBatch(mockDb as DB, 10, mockAi);
+    await processBatch(mockDb as DB, 10, { ai: mockAi });
 
     expect(upsertedListings[0].ai_extracted).toBe(1); // Facebook listing used AI
     expect(upsertedListings[1].ai_extracted).toBe(0); // Yad2 listing didn't use AI
@@ -452,7 +452,7 @@ describe('processBatch with AI integration', () => {
       }),
     });
 
-    await processBatch(mockDb as DB, 10, mockAi);
+    await processBatch(mockDb as DB, 10, { ai: mockAi });
 
     const listing = upsertedListings[0];
     expect(listing.floor).toBe(5);
