@@ -8,19 +8,24 @@ export const LOGIN_NAVIGATION_TIMEOUT_MS = 15_000;
 export const MAX_LOGIN_ATTEMPTS_PER_EPISODE = 3;
 export const LOGIN_EPISODE_WINDOW_MS = 24 * 60 * 60 * 1000;
 
+// Modern facebook.com renders nearly every interactive element as a div[role="button"]
+// with an aria-label, and uses generated class hashes that change frequently. data-testid
+// attributes are mostly gone. Selectors here favor ARIA + name attributes (which persist
+// because they are required for HTML form serialization) over class or data-testid.
 export const SELECTORS = {
   emailInput: 'input[name="email"]',
   passwordInput: 'input[name="pass"]',
-  loginSubmit: 'button[name="login"], button[type="submit"][data-testid="royal_login_button"]',
-  passwordOnlyInput: 'input[name="pass"]:not([data-testid="royal_pass"])',
+  loginSubmit:
+    'div[role="button"][aria-label="Log In" i], div[role="button"][aria-label="התחבר" i], div[role="button"][aria-label="התחברות" i], button[name="login"]',
   invalidCredentialsBanner:
-    '[data-testid="login_error"], div[role="alert"]:has-text("incorrect"), div[role="alert"]:has-text("password you entered")',
-  twoFactor: 'input[name="approvals_code"], #approvals_code, [data-testid="2fa_input"]',
+    'div[role="alert"]:has-text("incorrect"), div[role="alert"]:has-text("password you entered"), div[role="alert"]:has-text("הסיסמה")',
+  twoFactor:
+    'input[autocomplete="one-time-code"], input[name="approvals_code"], input[name="checkpoint_data"]',
   captcha: 'iframe[src*="captcha"], iframe[title*="captcha" i], img[src*="captcha"]',
   cookieConsentAccept:
-    '[data-cookiebanner="accept_button"], [data-testid="cookie-policy-manage-dialog-accept-button"]',
+    'div[role="button"][aria-label*="cookie" i], div[role="button"][aria-label*="Accept" i], div[role="button"][aria-label*="Allow" i]',
   saveLoginNotNow:
-    '[aria-label="Not Now"], [aria-label="Not now"], a[href*="/login/save-device/cancel/"]',
+    'div[role="button"][aria-label="Not Now" i], div[role="button"][aria-label="לא עכשיו" i]',
   feedRoot: '[role="feed"], [role="main"]',
 } as const;
 
@@ -150,14 +155,14 @@ function logEvent(payload: Record<string, unknown>): void {
 }
 
 async function withNavigation<T>(page: Page, action: () => Promise<T>): Promise<T> {
-  const [, result] = await Promise.all([
-    page
-      .waitForLoadState('domcontentloaded', {
-        timeout: LOGIN_NAVIGATION_TIMEOUT_MS,
-      })
-      .catch(() => undefined),
-    action(),
-  ]);
+  // Run the action FIRST, then wait for the page to settle. FB login is XHR-based
+  // and does not always trigger a full navigation, so `domcontentloaded` resolves
+  // immediately on the existing document and provides no real wait. `networkidle`
+  // waits for in-flight XHRs (the login POST + any redirects) to complete.
+  const result = await action();
+  await page
+    .waitForLoadState('networkidle', { timeout: LOGIN_NAVIGATION_TIMEOUT_MS })
+    .catch(() => undefined);
   return result;
 }
 
@@ -201,7 +206,8 @@ export async function attemptLogin(
       }
 
       const state = await classifyLoginScreen(page);
-      logEvent({ event: 'fb_login_step', step, state });
+      const url = page.url();
+      logEvent({ event: 'fb_login_step', step, state, url });
 
       if (state === 'home_feed') {
         logEvent({ event: 'fb_login_success', step });
