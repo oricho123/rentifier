@@ -71,6 +71,12 @@ function makeScriptedPage(states: {
       }),
     },
     waitForLoadState: vi.fn().mockResolvedValue(undefined),
+    // Resolving the login-redirect interstitial advances to the next scripted step,
+    // mirroring the real page navigating away from the crypted_string URL.
+    waitForURL: vi.fn().mockImplementation(async () => {
+      advance();
+    }),
+    goto: vi.fn().mockResolvedValue(undefined),
   } as unknown as Page;
 
   return { page, fillCalls, clickCalls, pressCalls };
@@ -82,6 +88,7 @@ describe('attemptLogin', () => {
   const FEED = '[role="feed"], [role="main"]';
   const HOME_URL = 'https://www.facebook.com/';
   const LOGIN_URL = 'https://www.facebook.com/login/';
+  const REDIRECT_URL = 'https://www.facebook.com/?crypted_string=AYjTOKEN&next=x';
 
   let logSpy: ReturnType<typeof vi.spyOn>;
   let captured: string[];
@@ -152,6 +159,64 @@ describe('attemptLogin', () => {
     const filled = scripted.fillCalls.map((c) => c.value);
     expect(filled).toContain('s3cret');
     expect(filled).not.toContain('user@example.com');
+  });
+
+  it('continue_as_user → redirecting → full_login → home_feed self-heals with credentials', async () => {
+    const scripted = makeScriptedPage({
+      steps: [
+        { url: LOGIN_URL, continueHits: 1 },
+        { url: REDIRECT_URL, selectors: { [FEED]: 1 } },
+        { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1 } },
+      ],
+    });
+
+    const out = await attemptLogin(scripted.page, {
+      email: 'user@example.com',
+      password: 's3cret',
+    });
+
+    expect(out).toEqual({ success: true });
+    const filled = scripted.fillCalls.map((c) => c.value);
+    expect(filled).toContain('user@example.com');
+    expect(filled).toContain('s3cret');
+  });
+
+  it('does NOT emit fb_login_success while URL still carries crypted_string', async () => {
+    const scripted = makeScriptedPage({
+      steps: [
+        { url: REDIRECT_URL, selectors: { [FEED]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1 } },
+      ],
+    });
+
+    await attemptLogin(scripted.page, { email: 'a@b.com', password: 'p' });
+
+    // The interstitial step is classified as `redirecting`, never accepted as success.
+    const interstitialStep = captured.find(
+      (l) => l.includes('fb_login_step') && l.includes('crypted_string')
+    );
+    expect(interstitialStep).toBeDefined();
+    expect(interstitialStep).toContain('"state":"redirecting"');
+    // Success is only emitted once we are off the interstitial (no crypted_string).
+    const successLogs = captured.filter((l) => l.includes('fb_login_success'));
+    expect(successLogs.length).toBeGreaterThan(0);
+    for (const line of successLogs) {
+      expect(line).not.toContain('crypted_string');
+    }
+  });
+
+  it('redirecting that never resolves → unknown_login_page (no loop)', async () => {
+    const scripted = makeScriptedPage({
+      steps: [
+        { url: REDIRECT_URL, selectors: { [FEED]: 1 } },
+        { url: REDIRECT_URL, selectors: { [FEED]: 1 } },
+      ],
+    });
+
+    const out = await attemptLogin(scripted.page, { email: 'a@b.com', password: 'p' });
+
+    expect(out).toEqual({ success: false, reason: 'unknown_login_page' });
   });
 
   it('full_login → invalid_credentials returns invalid_credentials', async () => {
