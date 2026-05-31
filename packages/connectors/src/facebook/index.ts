@@ -3,11 +3,13 @@ import type { ListingCandidate, ListingDraft } from '@rentifier/core';
 import type { DB } from '@rentifier/db';
 import type { Page } from 'playwright';
 import type {
+  FacebookAccount,
   FacebookConfig,
   FacebookCursorState,
   LoginFailureReason,
   LoginOutcome,
 } from './types';
+import { hashSeedCookies } from './cookie-hash';
 import {
   launchPersistentContext,
   closeContext,
@@ -140,6 +142,61 @@ export class FacebookConnector implements Connector {
     if (record) record.budgetAlertSent = true;
   }
 
+  /**
+   * Re-enable disabled accounts whose seed cookies changed since they were disabled.
+   * A changed FB_COOKIES_N is the operator's "I refreshed the session" signal, so we
+   * drop the account from `disabledAccounts` (and reset its login budget) and let the
+   * next scrape re-evaluate it. Accounts with no recorded baseline (disabled before
+   * this feature) are backfilled and kept disabled so the NEXT change is detectable.
+   * Returns the ids that were re-enabled.
+   */
+  private reenableOnCookieChange(
+    state: FacebookCursorState,
+    accounts: FacebookAccount[]
+  ): string[] {
+    if (state.disabledAccounts.length === 0) return [];
+
+    const hashes = (state.disabledCookieHashes ??= {});
+    const stillDisabled: string[] = [];
+    const reenabled: string[] = [];
+
+    for (const id of state.disabledAccounts) {
+      const account = accounts.find((a) => a.id === id);
+      if (!account) {
+        // Can't evaluate (secret removed) — keep disabled and preserve any baseline.
+        stillDisabled.push(id);
+        continue;
+      }
+
+      const currentHash = hashSeedCookies(account.cookies);
+      const recordedHash = hashes[id];
+
+      if (recordedHash === undefined) {
+        hashes[id] = currentHash;
+        stillDisabled.push(id);
+        continue;
+      }
+
+      if (currentHash !== recordedHash) {
+        delete hashes[id];
+        if (state.loginAttempts) delete state.loginAttempts[id];
+        reenabled.push(id);
+        console.log(
+          JSON.stringify({
+            event: 'fb_account_reenabled',
+            accountId: id,
+            reason: 'cookies_changed',
+          })
+        );
+      } else {
+        stillDisabled.push(id);
+      }
+    }
+
+    state.disabledAccounts = stillDisabled;
+    return reenabled;
+  }
+
   private async fetchGroupWithLoginRecovery(
     page: Page,
     groupId: string,
@@ -235,6 +292,16 @@ export class FacebookConnector implements Connector {
       return { candidates: [], nextCursor: JSON.stringify(state) };
     }
 
+    // Re-enable disabled accounts whose seed cookies changed (operator refreshed the
+    // secret). Runs before the circuit-breaker gate so a fresh cookie can recover an
+    // account even while the circuit is open from a prior all-disabled run.
+    const accounts = getAccounts(this.config);
+    const reenabled = this.reenableOnCookieChange(state, accounts);
+    if (reenabled.length > 0 && state.circuitOpenUntil) {
+      state.circuitOpenUntil = null;
+      state.consecutiveFailures = 0;
+    }
+
     // Circuit breaker check
     if (state.circuitOpenUntil) {
       const openUntil = new Date(state.circuitOpenUntil).getTime();
@@ -253,7 +320,6 @@ export class FacebookConnector implements Connector {
     }
 
     // Account selection
-    const accounts = getAccounts(this.config);
     const selected = selectAccount(accounts, state);
 
     if (!selected) {
@@ -333,6 +399,11 @@ export class FacebookConnector implements Connector {
               if (!state.disabledAccounts.includes(selected.account.id)) {
                 state.disabledAccounts.push(selected.account.id);
               }
+              // Record the cookie baseline so a future FB_COOKIES_N change auto re-enables it.
+              state.disabledCookieHashes ??= {};
+              state.disabledCookieHashes[selected.account.id] = hashSeedCookies(
+                selected.account.cookies
+              );
               // Clear stale profile so next run re-seeds from env var cookies
               clearProfile(selected.account.id);
               const errorMessage = error.message;
@@ -390,6 +461,7 @@ export class FacebookConnector implements Connector {
         lastGroupIndex: 0,
         lastAccountIndex: selected.nextIndex,
         disabledAccounts: state.disabledAccounts,
+        disabledCookieHashes: state.disabledCookieHashes,
         loginAttempts: state.loginAttempts,
       };
 

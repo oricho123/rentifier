@@ -73,6 +73,9 @@ export type LoginScreenState =
   | 'invalid_credentials'
   | 'save_login_prompt'
   | 'cookie_consent'
+  // FB one-time login-redirect interstitial (URL carries a `crypted_string` token);
+  // transient, must not be confused with the home feed.
+  | 'redirecting'
   | 'unknown';
 
 async function exists(page: Page, selector: string): Promise<boolean> {
@@ -96,6 +99,16 @@ async function continueButtonVisible(page: Page): Promise<boolean> {
 
 export async function classifyLoginScreen(page: Page): Promise<LoginScreenState> {
   const url = page.url();
+
+  // Priority 0: login-redirect interstitial. After a saved-session "Continue as"
+  // click, FB bounces through https://www.facebook.com/?crypted_string=...&next=...
+  // which briefly renders a [role="main"] shell with no login form. That URL is not
+  // /login, so the home_feed heuristic below would falsely accept it as a logged-in
+  // feed. Treat it as transient so attemptLogin waits for the redirect to settle and
+  // re-classifies (logged-out sessions then resolve to the email/password form).
+  if (url.includes('crypted_string')) {
+    return 'redirecting';
+  }
 
   // Priority 1: home / feed
   if (
@@ -251,6 +264,23 @@ export async function attemptLogin(
         await withNavigation(page, async () => {
           await clickFirstAvailable(continueAsLocators(page));
         });
+        continue;
+      }
+
+      if (state === 'redirecting') {
+        // Wait for the one-time login redirect to leave the interstitial. A passive
+        // networkidle wait is insufficient (it fires mid-redirect), so wait for the
+        // URL to drop the crypted_string token; if it stalls, force a settled page.
+        await page
+          .waitForURL((u) => !u.toString().includes('crypted_string'), {
+            timeout: LOGIN_NAVIGATION_TIMEOUT_MS,
+          })
+          .catch(() => undefined);
+        if (page.url().includes('crypted_string')) {
+          await page
+            .goto('https://www.facebook.com/', { waitUntil: 'domcontentloaded' })
+            .catch(() => undefined);
+        }
         continue;
       }
 

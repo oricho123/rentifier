@@ -1,8 +1,8 @@
-import { createHash } from 'node:crypto';
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright';
 import * as fs from 'fs';
 import type { FacebookPost, LoginOutcome } from './types';
 import { parseCookieString } from './accounts';
+import { hashSeedCookies } from './cookie-hash';
 import {
   BROWSER_TIMEOUT_MS,
   FEED_WAIT_TIMEOUT_MS,
@@ -18,10 +18,6 @@ const DEFAULT_PROFILE_BASE = '.browser-profiles';
 
 /** Tracks which env cookie string was last applied — avoids re-applying unchanged secrets */
 const SEED_COOKIE_HASH_FILE = '.rentifier-seed-cookie-sha256';
-
-function hashSeedCookies(seedCookies: string): string {
-  return createHash('sha256').update(seedCookies.trim(), 'utf8').digest('hex');
-}
 
 function readStoredSeedHash(profileDir: string): string | null {
   try {

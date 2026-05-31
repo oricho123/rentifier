@@ -74,6 +74,22 @@ describe('classifyLoginScreen', () => {
     expect(await classifyLoginScreen(page)).toBe('checkpoint');
   });
 
+  it('returns redirecting for the crypted_string interstitial even with feed/main present', async () => {
+    const page = makePage({
+      url: 'https://www.facebook.com/?crypted_string=AYjabc%7Cdef&next=https%3A%2F%2Fwww.facebook.com%2Fgroups%2F123',
+      selectors: { [FEED]: 1 },
+    });
+    expect(await classifyLoginScreen(page)).toBe('redirecting');
+  });
+
+  it('priority: redirecting (crypted_string) wins over home_feed', async () => {
+    const page = makePage({
+      url: 'https://www.facebook.com/?crypted_string=TOKEN',
+      selectors: { [FEED]: 1, [EMAIL]: 0 },
+    });
+    expect(await classifyLoginScreen(page)).toBe('redirecting');
+  });
+
   it('returns captcha when captcha selector matches', async () => {
     const page = makePage({ url: LOGIN_URL, selectors: { [CAPTCHA]: 1 } });
     expect(await classifyLoginScreen(page)).toBe('captcha');
