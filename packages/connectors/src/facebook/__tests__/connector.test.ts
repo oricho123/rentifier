@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { FacebookConnector } from '../index';
+import { hashSeedCookies } from '../cookie-hash';
 import type { ListingCandidate } from '@rentifier/core';
 
 // Mock the client to avoid real browser launches
@@ -295,6 +296,123 @@ describe('FacebookConnector', () => {
 
       expect(launchPersistentContext).toHaveBeenCalledOnce();
       expect(closeContext).toHaveBeenCalledOnce();
+    });
+
+    it('records the cookie hash when an account is disabled', async () => {
+      const { fetchGroupWithRetry, FacebookClientError } = await import('../client');
+      vi.mocked(fetchGroupWithRetry).mockRejectedValueOnce(
+        new FacebookClientError('Auth expired', 'auth_expired', false)
+      );
+
+      const mockDb = {} as any;
+      const result = await connector.fetchNew(null, mockDb);
+      const cursor = JSON.parse(result.nextCursor!);
+
+      expect(cursor.disabledAccounts).toContain('1');
+      expect(cursor.disabledCookieHashes['1']).toBe(hashSeedCookies('test_cookie'));
+    });
+
+    it('re-enables a disabled account when its cookies changed', async () => {
+      const { fetchGroupWithRetry } = await import('../client');
+      vi.mocked(fetchGroupWithRetry).mockResolvedValueOnce([]);
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      // getAccounts returns cookies 'test_cookie'; baseline recorded a different hash.
+      const cursor = JSON.stringify({
+        lastFetchedAt: null,
+        knownPostIds: [],
+        consecutiveFailures: 0,
+        circuitOpenUntil: null,
+        lastGroupIndex: 0,
+        lastAccountIndex: 0,
+        disabledAccounts: ['1'],
+        disabledCookieHashes: { '1': hashSeedCookies('stale_cookie') },
+        loginAttempts: { '1': { count: 3, firstAttemptAt: 'x', lastAttemptAt: 'x' } },
+      });
+
+      const result = await connector.fetchNew(cursor, {} as any);
+      const next = JSON.parse(result.nextCursor!);
+
+      expect(next.disabledAccounts).not.toContain('1');
+      expect(next.disabledCookieHashes['1']).toBeUndefined();
+      expect(next.loginAttempts['1']).toBeUndefined();
+      const logs = logSpy.mock.calls.map((c) => String(c[0]));
+      expect(logs.some((l) => l.includes('fb_account_reenabled'))).toBe(true);
+
+      logSpy.mockRestore();
+    });
+
+    it('clears an open circuit breaker when re-enabling on cookie change', async () => {
+      const { fetchGroupWithRetry } = await import('../client');
+      vi.mocked(fetchGroupWithRetry).mockResolvedValueOnce([]);
+
+      const cursor = JSON.stringify({
+        lastFetchedAt: null,
+        knownPostIds: [],
+        consecutiveFailures: 5,
+        circuitOpenUntil: new Date(Date.now() + 60 * 60 * 1000).toISOString(),
+        lastGroupIndex: 0,
+        lastAccountIndex: 0,
+        disabledAccounts: ['1'],
+        disabledCookieHashes: { '1': hashSeedCookies('stale_cookie') },
+      });
+
+      const result = await connector.fetchNew(cursor, {} as any);
+      const next = JSON.parse(result.nextCursor!);
+
+      // Circuit cleared and collection proceeded (not blocked by fb_circuit_open).
+      expect(next.circuitOpenUntil).toBeNull();
+      expect(next.disabledAccounts).not.toContain('1');
+    });
+
+    it('keeps an account disabled when cookies are unchanged', async () => {
+      const { selectAccount } = await import('../accounts');
+      vi.mocked(selectAccount).mockReturnValueOnce(null);
+
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => {});
+
+      const cursor = JSON.stringify({
+        lastFetchedAt: null,
+        knownPostIds: [],
+        consecutiveFailures: 0,
+        circuitOpenUntil: null,
+        lastGroupIndex: 0,
+        lastAccountIndex: 0,
+        disabledAccounts: ['1'],
+        disabledCookieHashes: { '1': hashSeedCookies('test_cookie') },
+      });
+
+      const result = await connector.fetchNew(cursor, {} as any);
+      const next = JSON.parse(result.nextCursor!);
+
+      expect(next.disabledAccounts).toContain('1');
+      const logs = logSpy.mock.calls.map((c) => String(c[0]));
+      expect(logs.some((l) => l.includes('fb_account_reenabled'))).toBe(false);
+
+      logSpy.mockRestore();
+    });
+
+    it('backfills the baseline hash for a legacy disable and keeps it disabled', async () => {
+      const { selectAccount } = await import('../accounts');
+      vi.mocked(selectAccount).mockReturnValueOnce(null);
+
+      // No disabledCookieHashes at all (disabled before this feature shipped).
+      const cursor = JSON.stringify({
+        lastFetchedAt: null,
+        knownPostIds: [],
+        consecutiveFailures: 0,
+        circuitOpenUntil: null,
+        lastGroupIndex: 0,
+        lastAccountIndex: 0,
+        disabledAccounts: ['1'],
+      });
+
+      const result = await connector.fetchNew(cursor, {} as any);
+      const next = JSON.parse(result.nextCursor!);
+
+      expect(next.disabledAccounts).toContain('1');
+      expect(next.disabledCookieHashes['1']).toBe(hashSeedCookies('test_cookie'));
     });
   });
 });

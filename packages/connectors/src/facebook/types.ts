@@ -55,6 +55,12 @@ export interface FacebookCursorState {
   lastGroupIndex: number;
   lastAccountIndex: number;
   disabledAccounts: string[];
+  /**
+   * Optional, additive: SHA-256 of the seed cookies captured when each account was
+   * disabled. On a later run, a changed FB_COOKIES_N (operator refreshed the secret)
+   * auto re-enables the account. Keyed by account id.
+   */
+  disabledCookieHashes?: Record<string, string>;
   /** Optional, additive: per-account login-attempt budget for auto-login. */
   loginAttempts?: Record<string, LoginAttemptRecord>;
 }
