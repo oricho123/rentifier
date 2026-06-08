@@ -129,3 +129,85 @@ export type LoginScreenState =
 | Resolve interstitial by | active `waitForURL` off `crypted_string` + deterministic `goto('/')` fallback | Observed `networkidle` fires *during* the redirect; a passive wait re-reads the same interstitial. Active URL wait + goto guarantees a settled page |
 | New outcome reason? | No | Keep `LoginOutcome` stable; `redirecting` is internal — failures still map to existing `unknown_login_page`/`checkpoint` reasons |
 | Reorder `continue_as_user` vs credential priority? | No | After the interstitial settles to the logged-out homepage, the existing `full_login` handler fills credentials; no priority change needed (lower risk to happy path) |
+
+---
+
+## Addendum (2026-06-08): P3/P4/P5 — close the post-interstitial false-positive
+
+The original P1/P2 fix demoted the interstitial *while* `crypted_string` was in the URL. Production run 2026-06-07 showed a deeper variant: by the time the URL settled to `https://www.facebook.com/`, the page was the logged-out marketing splash, but its server-rendered `[role="main"]` shell + the React-hydration delay on the inline login form satisfied the existing `home_feed` heuristic (no `/login`, has `feedRoot`, no email input *yet*). `attemptLogin` returned `success: true`; the next group nav redirected to `/login` and the account was disabled.
+
+### Architecture delta
+
+- `classifyLoginScreen` adds a *positive* logged-in signal to its `home_feed` branch — a feed/main shell alone is no longer sufficient.
+- `attemptLogin` gains a recovery branch for the saved-session fakeout: when an iteration following `continue_as_user` or `redirecting` resolves to `unknown`, force the credential URL so the next iteration reaches the password form.
+- A new diagnostics module emits a structured fingerprint at every login step and on the auth-expired-after-login retry path so future regressions are debuggable from logs alone.
+
+```mermaid
+graph TD
+    C{classifyLoginScreen}
+    C -->|"feedRoot + loggedInChrome + no email/pass (TIGHTENED)"| S["return success: true"]
+    C -->|"feedRoot only, no chrome, no inputs"| U["unknown"]
+    U -->|"prev was continue_as_user / redirecting (NEW)"| F["goto FORCE_CREDENTIAL_LOGIN_URL → continue"]
+    F --> C
+    C -->|"full_login / password_only"| E["fill FB_EMAIL/FB_PASSWORD"]
+    E --> C
+```
+
+### Components (delta)
+
+#### `SELECTORS.loggedInChrome` (new constant in `login.ts`)
+
+- **Purpose**: Positive signal that the page is the logged-in feed, not the logged-out splash.
+- **Selector**: top-bar Facebook search input (en + he) OR notifications button (en + he) OR `[role="banner"] a[aria-label="Home" i]`. Each variant is locale-resilient and only present on authed pages.
+
+#### `FORCE_CREDENTIAL_LOGIN_URL` (new constant in `login.ts`)
+
+- **Value**: `https://www.facebook.com/login/?login_attempt=1&lwv=110`
+- **Purpose**: Clean credential-login URL that bypasses the saved-session UI and exposes the email + password form deterministically.
+
+#### `classifyLoginScreen()` (modify — Priority 1)
+
+- **Before**: `home_feed` if URL is non-`/login` AND `feedRoot` present AND no `emailInput`.
+- **After**: `home_feed` if URL is non-`/login` AND `feedRoot` present AND `loggedInChrome` present AND neither `emailInput` nor `passwordInput` is visible.
+- **Effect**: the logged-out marketing splash (with email + pass on the inline form) now classifies as `full_login`; a hydrating splash with neither chrome nor inputs classifies as `unknown` (handled by the recovery branch in `attemptLogin`).
+
+#### `attemptLogin()` (modify — saved-session recovery)
+
+- Snapshot `previousIterationState` *before* the no-progress update so handlers can branch on "what got us here" without polluting the no-progress guard.
+- New branch before the generic `unknown` fall-through:
+  ```ts
+  if (state === 'unknown' &&
+      (previousIterationState === 'continue_as_user' || previousIterationState === 'redirecting')) {
+    logEvent({ event: 'fb_saved_session_invalidated', step, url });
+    await page.goto(FORCE_CREDENTIAL_LOGIN_URL, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
+    await page.waitForLoadState('networkidle', { timeout: LOGIN_NAVIGATION_TIMEOUT_MS }).catch(() => undefined);
+    continue;
+  }
+  ```
+- Loop safety: if the recovery navigation produces another `unknown`, the existing `prevState === state` guard bails on the next iteration → `unknown_login_page`.
+
+#### `diagnostics.ts` (new module)
+
+- **Exports**:
+  - `interface FacebookPageFingerprint { url, title, hasFeed, hasMain, hasBanner, hasEmailInput, hasPasswordInput, hasSearchBar, hasNotifications, hasContinueAsUser, hasLoginAnotherAccountLink, htmlLen, cookieNames, hasCUserCookie, hasXsCookie }`
+  - `pageFingerprint(page: Page): Promise<FacebookPageFingerprint>` — every selector probe is wrapped in a 1.5s `Promise.race` timeout so a stalled page can never block the caller; missing data falls back to `false` / `null` / `0`.
+  - `logPageFingerprint(page: Page, event: string, extra?: Record<string, unknown>): Promise<void>` — emits a single JSON log line; failures during capture are swallowed (diagnostics MUST NEVER break a run).
+- **Privacy**: cookie *names* only — values would be a credential leak. `hasCUserCookie` / `hasXsCookie` are convenience flags computed from the names.
+
+#### `FacebookConnector.fetchGroupWithLoginRecovery()` (modify — single emit)
+
+After `attemptLogin` returns success, the post-login retry already exists. The catch arm now also emits `fb_auth_expired_after_login` with the page fingerprint when `errorType` is `auth_expired` or `banned` — this is the single "smoking-gun" log that proves a false-positive `home_feed` slipped through, even when log-line ordering is reordered by the runtime.
+
+### Data Models (delta)
+
+No `LoginScreenState` / `LoginOutcome` / cursor changes — the whole addendum is selector + control-flow + logging. `FacebookPageFingerprint` is a new logging interface only; it is never persisted.
+
+### Tech Decisions (delta)
+
+| Decision | Choice | Rationale |
+| -------- | ------ | --------- |
+| Tighten `home_feed` by adding | `loggedInChrome` (positive) AND no `passwordInput` (negative) | Single positive signal can be locale-fragile; pairing with the absent-pass-input check makes the rule robust to either variant of the splash |
+| Recovery URL | `/login/?login_attempt=1&lwv=110` | The `login_attempt` query param suppresses FB's saved-session shortcut and forces the email/password form; `lwv` is a stable layout-version flag observed across recent FB rollouts |
+| Where to capture the fingerprint | `login.ts` (per-step) + `index.ts` (post-login retry catch) | Keeps `attemptLogin` self-contained for the step events; emitting the smoking-gun event from the connector keeps it adjacent to the `auth_expired` it was masking |
+| Fingerprint timeout | 1.5s per probe | Diagnostics must never extend run time materially; 1.5s × 12 probes (parallel) ≈ one Promise.all bucket capped at 1.5s wall-clock |
+| Save HTML / screenshots | No (deferred) | Selector flags + cookie names + html length cover the diagnosable space without disk pressure or new privacy surface; revisit if a future regression isn't reachable from these flags |

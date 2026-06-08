@@ -51,7 +51,8 @@ function makePage(opts: {
 }
 
 describe('classifyLoginScreen', () => {
-  const FEED = '[role="feed"], [role="main"]';
+  const FEED = SELECTORS.feedRoot;
+  const CHROME = SELECTORS.loggedInChrome;
   const EMAIL = 'input[name="email"]';
   const PASSWORD = 'input[name="pass"]';
   const CHECKPOINT_URL = 'https://www.facebook.com/checkpoint/123/';
@@ -64,9 +65,28 @@ describe('classifyLoginScreen', () => {
   const COOKIE = SELECTORS.cookieConsentAccept;
   const INVALID = SELECTORS.invalidCredentialsBanner;
 
-  it('returns home_feed when on home and feed root present', async () => {
-    const page = makePage({ url: HOME_URL, selectors: { [FEED]: 1 } });
+  it('returns home_feed when on home with feed root AND logged-in chrome', async () => {
+    const page = makePage({ url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } });
     expect(await classifyLoginScreen(page)).toBe('home_feed');
+  });
+
+  it('does NOT return home_feed when only feed root is present (no logged-in chrome)', async () => {
+    // Smoking-gun case from production: the logged-out marketing splash has
+    // [role="main"] but lacks the search bar / notifications / banner-home link.
+    // Previously this falsely passed as home_feed. Now it must fall through to
+    // other priorities — here `unknown`, since email/pass haven't hydrated yet.
+    const page = makePage({ url: HOME_URL, selectors: { [FEED]: 1 } });
+    expect(await classifyLoginScreen(page)).toBe('unknown');
+  });
+
+  it('does NOT return home_feed when feed root + chrome are present but a password input is also visible', async () => {
+    // Some logged-out splashes render the marketing chrome alongside the inline
+    // login form. The pass input is the giveaway that we are NOT actually authed.
+    const page = makePage({
+      url: HOME_URL,
+      selectors: { [FEED]: 1, [CHROME]: 1, [EMAIL]: 1, [PASSWORD]: 1 },
+    });
+    expect(await classifyLoginScreen(page)).toBe('full_login');
   });
 
   it('returns checkpoint when URL contains /checkpoint/', async () => {
@@ -149,7 +169,7 @@ describe('classifyLoginScreen', () => {
   it('priority: home_feed wins over cookie_consent', async () => {
     const page = makePage({
       url: HOME_URL,
-      selectors: { [FEED]: 1, [COOKIE]: 1 },
+      selectors: { [FEED]: 1, [CHROME]: 1, [COOKIE]: 1 },
     });
     expect(await classifyLoginScreen(page)).toBe('home_feed');
   });

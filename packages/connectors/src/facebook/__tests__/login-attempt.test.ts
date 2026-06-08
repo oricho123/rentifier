@@ -76,16 +76,21 @@ function makeScriptedPage(states: {
     waitForURL: vi.fn().mockImplementation(async () => {
       advance();
     }),
-    goto: vi.fn().mockResolvedValue(undefined),
+    // A real navigation also advances steps — used by saved-session recovery
+    // (force-navigate to the credential-login URL) and the redirecting fallback.
+    goto: vi.fn().mockImplementation(async () => {
+      advance();
+    }),
   } as unknown as Page;
 
   return { page, fillCalls, clickCalls, pressCalls };
 }
 
 describe('attemptLogin', () => {
-  const EMAIL_SEL = 'input[name="email"]';
-  const PASSWORD_SEL = 'input[name="pass"]';
-  const FEED = '[role="feed"], [role="main"]';
+  const EMAIL_SEL = SELECTORS.emailInput;
+  const PASSWORD_SEL = SELECTORS.passwordInput;
+  const FEED = SELECTORS.feedRoot;
+  const CHROME = SELECTORS.loggedInChrome;
   const HOME_URL = 'https://www.facebook.com/';
   const LOGIN_URL = 'https://www.facebook.com/login/';
   const REDIRECT_URL = 'https://www.facebook.com/?crypted_string=AYjTOKEN&next=x';
@@ -108,7 +113,7 @@ describe('attemptLogin', () => {
     const scripted = makeScriptedPage({
       steps: [
         { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
-        { url: HOME_URL, selectors: { [FEED]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
       ],
     });
 
@@ -127,7 +132,7 @@ describe('attemptLogin', () => {
     const scripted = makeScriptedPage({
       steps: [
         { url: LOGIN_URL, continueHits: 1 },
-        { url: HOME_URL, selectors: { [FEED]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
       ],
     });
 
@@ -146,7 +151,7 @@ describe('attemptLogin', () => {
       steps: [
         { url: LOGIN_URL, continueHits: 1 },
         { url: LOGIN_URL, selectors: { [PASSWORD_SEL]: 1 } },
-        { url: HOME_URL, selectors: { [FEED]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
       ],
     });
 
@@ -167,7 +172,7 @@ describe('attemptLogin', () => {
         { url: LOGIN_URL, continueHits: 1 },
         { url: REDIRECT_URL, selectors: { [FEED]: 1 } },
         { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
-        { url: HOME_URL, selectors: { [FEED]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
       ],
     });
 
@@ -186,7 +191,7 @@ describe('attemptLogin', () => {
     const scripted = makeScriptedPage({
       steps: [
         { url: REDIRECT_URL, selectors: { [FEED]: 1 } },
-        { url: HOME_URL, selectors: { [FEED]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
       ],
     });
 
@@ -309,11 +314,41 @@ describe('attemptLogin', () => {
     if (!out.success) expect(out.reason).toBe('unknown_login_page');
   });
 
+  it('saved-session fakeout: continue_as_user → unknown landing page → recovers via force-credential URL → home_feed', async () => {
+    // Reproduces the production failure: "Continue as <user>" click on a dead
+    // server-side session bounces through crypted_string and lands on a page
+    // with feed root but no logged-in chrome (logged-out splash before email/
+    // pass hydrate, or a partial-auth shell). Classifier returns `unknown` —
+    // attemptLogin should force-navigate to the clean credential URL and the
+    // existing full_login handler then takes over.
+    const scripted = makeScriptedPage({
+      steps: [
+        { url: LOGIN_URL, continueHits: 1 },
+        // Ambiguous landing: feed root present, no logged-in chrome, no inputs yet.
+        { url: HOME_URL, selectors: { [FEED]: 1 } },
+        // After force-navigate to FORCE_CREDENTIAL_LOGIN_URL, full_login is exposed.
+        { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
+      ],
+    });
+
+    const out = await attemptLogin(scripted.page, {
+      email: 'user@example.com',
+      password: 's3cret',
+    });
+
+    expect(out).toEqual({ success: true });
+    expect(captured.some((l) => l.includes('fb_saved_session_invalidated'))).toBe(true);
+    const filled = scripted.fillCalls.map((c) => c.value);
+    expect(filled).toContain('user@example.com');
+    expect(filled).toContain('s3cret');
+  });
+
   it('credential-leak guard: no console.log call contains the email or password', async () => {
     const scripted = makeScriptedPage({
       steps: [
         { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
-        { url: HOME_URL, selectors: { [FEED]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
       ],
     });
 

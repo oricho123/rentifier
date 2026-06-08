@@ -1,6 +1,7 @@
 import type { Locator, Page } from 'playwright';
 import type { FacebookCredentials } from './credentials';
 import type { LoginOutcome } from './types';
+import { logPageFingerprint } from './diagnostics';
 
 export const MAX_LOGIN_STEPS = 5;
 export const LOGIN_TIMEOUT_MS = 60_000;
@@ -27,7 +28,16 @@ export const SELECTORS = {
   saveLoginNotNow:
     'div[role="button"][aria-label="Not Now" i], div[role="button"][aria-label="לא עכשיו" i]',
   feedRoot: '[role="feed"], [role="main"]',
+  // Logged-in-only chrome. Required (in addition to feedRoot) before declaring
+  // home_feed — `[role="main"]` alone is also present on the logged-out marketing
+  // splash, which during hydration looks identical to a feed and previously
+  // produced false-positive login_success.
+  loggedInChrome:
+    'input[aria-label="Search Facebook" i], input[aria-label="חיפוש בפייסבוק" i], input[placeholder="Search Facebook" i], input[placeholder="חיפוש בפייסבוק" i], div[role="button"][aria-label*="Notifications" i], div[role="button"][aria-label*="התראות" i], div[role="banner"] a[aria-label="Home" i]',
 } as const;
+
+/** Clean credential-login URL — bypasses saved-session UI and exposes email+pass. */
+export const FORCE_CREDENTIAL_LOGIN_URL = 'https://www.facebook.com/login/?login_attempt=1&lwv=110';
 
 export const CONTINUE_LOCALES = [
   'Continue',
@@ -110,7 +120,12 @@ export async function classifyLoginScreen(page: Page): Promise<LoginScreenState>
     return 'redirecting';
   }
 
-  // Priority 1: home / feed
+  // Priority 1: home / feed.
+  // Require both a feed/main shell AND a logged-in chrome signal (search bar /
+  // notifications / banner-home link). `[role="main"]` alone is also rendered
+  // on the *logged-out* marketing splash; combining it with absent login inputs
+  // produced false-positive `home_feed` after a saved-session "Continue as"
+  // click silently failed to authenticate.
   if (
     !url.includes('/login') &&
     !url.includes('login.php') &&
@@ -118,8 +133,10 @@ export async function classifyLoginScreen(page: Page): Promise<LoginScreenState>
     !url.includes('/two_step_verification') &&
     (await exists(page, SELECTORS.feedRoot))
   ) {
-    const onLoginForm = await exists(page, SELECTORS.emailInput);
-    if (!onLoginForm) return 'home_feed';
+    const onLoginForm =
+      (await exists(page, SELECTORS.emailInput)) || (await exists(page, SELECTORS.passwordInput));
+    const hasLoggedInChrome = await exists(page, SELECTORS.loggedInChrome);
+    if (!onLoginForm && hasLoggedInChrome) return 'home_feed';
   }
 
   // Priority 2: checkpoint
@@ -221,6 +238,10 @@ export async function attemptLogin(
       const state = await classifyLoginScreen(page);
       const url = page.url();
       logEvent({ event: 'fb_login_step', step, state, url });
+      // Per-step fingerprint: structured probe of the page so post-mortems of
+      // false-positive `home_feed` (or any classification regression) have the
+      // raw selector signals to reason about. Best-effort, never throws.
+      await logPageFingerprint(page, 'fb_page_fingerprint', { phase: 'login_step', step, state });
 
       if (state === 'home_feed') {
         logEvent({ event: 'fb_login_success', step });
@@ -247,6 +268,11 @@ export async function attemptLogin(
         });
         return { success: false, reason: 'invalid_credentials' };
       }
+
+      // Snapshot previous-iteration state BEFORE updating prevState, so handlers
+      // below can branch on "what got us here" (e.g. an `unknown` page after a
+      // saved-session click is a fakeout, not just a slow render).
+      const previousIterationState = prevState;
 
       // No-progress detection: same non-terminal state twice → bail
       if (prevState === state) {
@@ -323,6 +349,27 @@ export async function attemptLogin(
             await accept.click({ timeout: LOGIN_NAVIGATION_TIMEOUT_MS });
           }
         });
+        continue;
+      }
+
+      // Saved-session fakeout: we just clicked "Continue as <user>" (or settled
+      // out of the crypted_string interstitial) and landed on a page that has
+      // neither the logged-in chrome (so it's not a real feed) nor the email/
+      // password form (so we can't classify as full_login yet). The server-side
+      // session is dead — saved-session UI cannot recover it. Force-navigate to
+      // a clean credential-login URL so the next iteration sees `full_login`
+      // and the existing password handler takes over.
+      if (
+        state === 'unknown' &&
+        (previousIterationState === 'continue_as_user' || previousIterationState === 'redirecting')
+      ) {
+        logEvent({ event: 'fb_saved_session_invalidated', step, url });
+        await page
+          .goto(FORCE_CREDENTIAL_LOGIN_URL, { waitUntil: 'domcontentloaded' })
+          .catch(() => undefined);
+        await page
+          .waitForLoadState('networkidle', { timeout: LOGIN_NAVIGATION_TIMEOUT_MS })
+          .catch(() => undefined);
         continue;
       }
 
