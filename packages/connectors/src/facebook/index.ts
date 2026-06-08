@@ -17,6 +17,7 @@ import {
   fetchGroupWithRetry,
   FacebookClientError,
 } from './client';
+import { logPageFingerprint } from './diagnostics';
 import { getAccounts, selectAccount } from './accounts';
 import { extractTitle } from './normalize';
 import { FacebookNormalizer } from './normalize';
@@ -274,6 +275,18 @@ export class FacebookConnector implements Connector {
         return await fetchGroupWithRetry(page, groupId);
       } catch (retryErr) {
         if (retryErr instanceof FacebookClientError) {
+          // Smoking-gun case: attemptLogin reported success, yet retry navigation
+          // hit auth_expired/banned. Emit a structured fingerprint so future runs
+          // have the page-level signals (selectors, cookie names, html length) to
+          // diagnose whether home_feed was a false positive vs. a real session
+          // that got revoked between the success check and the next navigation.
+          if (retryErr.errorType === 'auth_expired' || retryErr.errorType === 'banned') {
+            await logPageFingerprint(page, 'fb_auth_expired_after_login', {
+              accountId,
+              groupId,
+              errorType: retryErr.errorType,
+            });
+          }
           throw new FacebookClientError(retryErr.message, retryErr.errorType, retryErr.retryable, {
             success: true,
           });
