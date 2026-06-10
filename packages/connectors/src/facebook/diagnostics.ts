@@ -23,7 +23,32 @@ export interface FacebookPageFingerprint {
   cookieNames: string[];
   hasCUserCookie: boolean;
   hasXsCookie: boolean;
+  /**
+   * aria-labels of every `[role="button"]` on the page (capped + truncated).
+   * Catches CTA / SSO sibling buttons that confused the classifier — e.g. on
+   * the 2026-06-10 incident this would have surfaced
+   * `["Continue with Google","Continue with Apple",...]` and made the SSO
+   * false-positive obvious without re-running the failure. UI strings only;
+   * never element values, innerText, or user content.
+   */
+  buttonLabels: string[];
+  /**
+   * Static attributes (`name`, `aria-label`, `placeholder`, `type`) of every
+   * `<input>` on the page (capped). Lets us spot a renamed login field or a
+   * 2FA variant from logs alone. Element `.value` is deliberately excluded —
+   * it can carry the typed password.
+   */
+  inputAttrs: Array<{
+    name: string | null;
+    ariaLabel: string | null;
+    placeholder: string | null;
+    type: string | null;
+  }>;
 }
+
+const MAX_BUTTON_LABELS = 30;
+const MAX_LABEL_LEN = 80;
+const MAX_INPUT_ATTRS = 12;
 
 const FINGERPRINT_TIMEOUT_MS = 1500;
 
@@ -63,6 +88,8 @@ export async function pageFingerprint(page: Page): Promise<FacebookPageFingerpri
     loginAnotherCount,
     htmlLen,
     cookies,
+    buttonLabels,
+    inputAttrs,
   ] = await Promise.all([
     withTimeout(
       page.title().catch(() => ''),
@@ -111,6 +138,71 @@ export async function pageFingerprint(page: Page): Promise<FacebookPageFingerpri
         .catch(() => []),
       [] as Array<{ name: string }>
     ),
+    withTimeout(
+      page
+        .evaluate(
+          `(() => {
+            try {
+              var els = Array.from(document.querySelectorAll('[role="button"]'));
+              var labels = [];
+              for (var i = 0; i < els.length; i++) {
+                var al = els[i].getAttribute('aria-label');
+                if (al && al.trim().length > 0) {
+                  labels.push(al.trim().slice(0, ${MAX_LABEL_LEN}));
+                  if (labels.length >= ${MAX_BUTTON_LABELS}) break;
+                }
+              }
+              return labels;
+            } catch (e) { return []; }
+          })()`
+        )
+        .catch(() => [] as string[]) as Promise<string[]>,
+      [] as string[]
+    ),
+    withTimeout(
+      page
+        .evaluate(
+          // Static input attributes only — never `.value` (would leak the
+          // typed password into logs).
+          `(() => {
+            try {
+              var els = Array.from(document.querySelectorAll('input')).slice(0, ${MAX_INPUT_ATTRS});
+              return els.map(function (i) {
+                var al = i.getAttribute('aria-label') || '';
+                var pl = i.getAttribute('placeholder') || '';
+                return {
+                  name: i.getAttribute('name'),
+                  ariaLabel: al ? al.slice(0, ${MAX_LABEL_LEN}) : null,
+                  placeholder: pl ? pl.slice(0, ${MAX_LABEL_LEN}) : null,
+                  type: i.getAttribute('type'),
+                };
+              });
+            } catch (e) { return []; }
+          })()`
+        )
+        .catch(
+          () =>
+            [] as Array<{
+              name: string | null;
+              ariaLabel: string | null;
+              placeholder: string | null;
+              type: string | null;
+            }>
+        ) as Promise<
+        Array<{
+          name: string | null;
+          ariaLabel: string | null;
+          placeholder: string | null;
+          type: string | null;
+        }>
+      >,
+      [] as Array<{
+        name: string | null;
+        ariaLabel: string | null;
+        placeholder: string | null;
+        type: string | null;
+      }>
+    ),
   ]);
 
   const cookieNames = cookies.map((c) => c.name).sort();
@@ -131,6 +223,8 @@ export async function pageFingerprint(page: Page): Promise<FacebookPageFingerpri
     cookieNames,
     hasCUserCookie: cookieNames.includes('c_user'),
     hasXsCookie: cookieNames.includes('xs'),
+    buttonLabels,
+    inputAttrs,
   };
 }
 
