@@ -131,6 +131,44 @@ fb_account_disabled accountId:1
 
 ---
 
+### P6: Reject false-positive `continue_as_user` from SSO buttons & recover from no-progress ⭐ ADDENDUM (2026-06-10)
+
+**User Story**: As the operator, when the *fully* logged-out `/login` page is served (no `c_user`/`xs` cookies — `FB_COOKIES_N` is stale or expired), I want classification to refuse to call the page `continue_as_user` based on adjacent SSO buttons (`Continue with Google`, `Continue with Apple`), and — if the classifier ever does land on `continue_as_user` and the click fails to advance the page — `attemptLogin` to force the credential URL on the *first* repeat instead of bailing as `unknown_login_page`.
+
+**Why P6 (and not P1/P2/P3/P4)**: The 2026-06-10 production run showed a deeper regression than P3/P4 ever covered:
+
+```
+fb_login_step step:0 state:continue_as_user url:.../login/?next=...
+fb_page_fingerprint hasContinueAsUser:false hasEmailInput:false hasPasswordInput:false
+                    hasCUserCookie:false hasXsCookie:false cookieNames:[datr,dpr,fr,ps_l,ps_n,sb,wd]
+fb_login_step step:1 state:continue_as_user url:.../login/?next=...   # SAME state, SAME URL
+fb_page_fingerprint hasContinueAsUser:false ...                        # smoking gun
+fb_login_failed reason:unknown_login_page step:1 detail:no_progress
+fb_account_disabled
+```
+
+Two compounding bugs:
+
+1. **Classifier-fingerprint disagreement**: `classifyLoginScreen` returned `continue_as_user`, but the diagnostic probe for `a[href*="login_redirect"]` returned `false`. The cause: the old `continueAsLocators` matched the accessible name with a permissive `^(?:Continue|המשך|...)\b\s+\S+` regex via `getByRole('button', { name: CONTINUE_RE })`. That regex matched `Continue with Google` / `Continue with Apple` (the SSO buttons FB renders alongside the email+pass form on the logged-out splash). Diagnostics, scoped to the saved-session anchor only, correctly reported no continue button — proving the classifier was firing on an SSO false positive.
+2. **Recovery never engaged**: P4's recovery only triggers from `unknown` after `continue_as_user`/`redirecting`. Here the classifier kept saying `continue_as_user` after each (no-op) click, so the no-progress guard bailed before any recovery branch could run.
+
+**Acceptance Criteria**:
+
+1. WHEN `classifyLoginScreen` evaluates `continue_as_user` THEN it SHALL match ONLY (a) `div[role="button"][aria-label^="Continue as" i]` (and locale equivalents — `המשך בתור`, `המשך כ`, `Continuar como`, `Continuer en tant que`, `Weiter als`), or (b) `a[href*="login_redirect"]`. The broad accessible-name regex (`Continue\b\s+\S+`) and the `div[role="button"]` + `span:hasText("Continue")` chain SHALL be removed — they matched SSO buttons.
+2. WHEN the page presents SSO buttons such as "Continue with Google" / "Continue with Apple" but no real saved-session button THEN classification SHALL NOT return `continue_as_user`. Combined with no email/pass hydrated and no logged-in chrome → `unknown` (P4 then engages on the next iteration).
+3. WHEN `attemptLogin`'s loop sees `state === 'continue_as_user'` AND `prevState === 'continue_as_user'` AND the new one-shot `didForceCredentialRecovery` flag is unset THEN it SHALL `goto(FORCE_CREDENTIAL_LOGIN_URL)`, `waitForLoadState('networkidle')`, set the flag, and `continue` — placing this branch BEFORE the no-progress guard so the recovery fires instead of the bail.
+4. WHEN the recovery is taken THEN `fb_saved_session_invalidated` SHALL be logged with `{ step, url, detail: 'no_progress_on_continue_as_user' }` so the recovery cause is greppable in production logs.
+5. WHEN the recovery itself returns to `continue_as_user` (the credential URL bounced back) THEN the one-shot flag SHALL prevent a second recovery attempt and the existing no-progress guard SHALL bail with `unknown_login_page` on the next iteration — no loop.
+6. WHEN `classifyLoginScreen`'s `continue_as_user` selectors and `pageFingerprint`'s `hasContinueAsUser` probe disagree THEN it SHALL be considered a regression — the two MUST share the same selector definition (the fingerprint already uses `a[href*="login_redirect"]`; the classifier now matches the same anchor plus the aria-label set, so a missing `hasContinueAsUser` and a `state === 'continue_as_user'` cannot both appear in the same step's logs).
+
+**Independent Test**:
+
+- `classifyLoginScreen`: with `continueButtonHits: 0` (no aria-label match, no login_redirect href) on `LOGIN_URL`, return `unknown` (regression guard for SSO false positive).
+- `attemptLogin`: scripted sequence `continue_as_user(LOGIN_URL) → continue_as_user(LOGIN_URL) → full_login → home_feed(loggedInChrome)` ⇒ `fb_saved_session_invalidated` emitted with `detail:'no_progress_on_continue_as_user'`, both email + password filled, outcome `{ success: true }`.
+- `attemptLogin`: `continue_as_user × 4` (recovery lands back on continue_as_user) ⇒ `{ success: false, reason: 'unknown_login_page' }` (one-shot flag + no-progress bail).
+
+---
+
 ## Edge Cases
 
 - WHEN the session is only *soft*-expired and "Continue as" genuinely revives it (lands on a verified feed with no `crypted_string`) THEN that SHALL still count as success (don't force a needless password entry if a real feed is reached).
@@ -140,6 +178,8 @@ fb_account_disabled accountId:1
 - WHEN `FB_COOKIES_N` secret is stale but `FB_PASSWORD_N` is valid THEN successive runs SHALL self-heal: re-seed stale cookies → reactive login now reaches credentials → fresh session persisted in `.browser-profiles`.
 - WHEN the post-redirect page is `facebook.com/` with `[role="main"]` but neither logged-in chrome nor an email input has hydrated yet THEN classification SHALL return `unknown` (P3) and the saved-session recovery (P4) SHALL force the credential URL — the no-progress guard remains the upper bound on iterations.
 - WHEN `FB_AUTO_LOGIN_ENABLED=false` OR credentials are absent THEN P3/P4 SHALL still apply at the classification level (no false-positive `home_feed`), and the existing gate SHALL surface `fb_login_skip{_no_credentials}` as before — the recovery navigation runs only inside `attemptLogin`, which only runs when the gate allows it.
+- WHEN the logged-out `/login` page renders SSO buttons (`Continue with Google`, `Continue with Apple`) alongside the email+pass form THEN classification SHALL NOT return `continue_as_user` (P6) — only an `aria-label^="Continue as"` button or an `a[href*="login_redirect"]` anchor counts as a saved-session entry.
+- WHEN `c_user`/`xs` cookies are both absent AND `continue_as_user` repeats with no progress THEN P6's force-credential recovery SHALL fire on the first repeat (before the no-progress bail) and the one-shot flag SHALL bound subsequent recovery attempts to one — a second `continue_as_user` repeat hits the normal no-progress guard.
 
 ---
 
@@ -152,3 +192,5 @@ fb_account_disabled accountId:1
 - [ ] All existing Facebook connector tests pass; new unit tests cover the interstitial rejection (P1), the continue→credential progression (P2), the tightened `home_feed` (P3), the saved-session recovery (P4), and the credential-leak guard for the new fingerprint events (P5).
 - [ ] Every login step emits `fb_page_fingerprint` (P5#1); every auth_expired-after-login retry emits `fb_auth_expired_after_login` (P5#2). Both events are present in production logs after deploy.
 - [ ] Passwords/cookies never logged (unchanged invariant) — fingerprint includes cookie *names* only.
+- [ ] No `state:"continue_as_user"` log line appears on a step whose fingerprint reports `hasContinueAsUser:false` (P6 — closes the 2026-06-10 SSO false-positive regression). Classifier and fingerprint share the same saved-session selector definition.
+- [ ] When `continue_as_user` repeats with no progress, the next log line is `fb_saved_session_invalidated detail:no_progress_on_continue_as_user` (the P6 force-credential recovery), not `fb_login_failed reason:unknown_login_page detail:no_progress`.

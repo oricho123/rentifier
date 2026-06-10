@@ -36,7 +36,7 @@ function makePage(opts: {
       if (selector === 'div[role="button"]' || selector === 'span') {
         return filterableLocator;
       }
-      if (selector === 'a[role="button"][href*="login_redirect"]') {
+      if (selector === SELECTORS.continueAsButton || selector === SELECTORS.savedSessionShortcut) {
         return continueLocator;
       }
       return {
@@ -44,7 +44,10 @@ function makePage(opts: {
         first: vi.fn().mockReturnThis(),
       };
     }),
-    getByRole: vi.fn(() => continueLocator),
+    getByRole: vi.fn(() => ({
+      count: vi.fn().mockResolvedValue(0),
+      first: vi.fn().mockReturnThis(),
+    })),
   } as unknown as Page;
 
   return page;
@@ -128,6 +131,20 @@ describe('classifyLoginScreen', () => {
   it('returns continue_as_user when continue button visible', async () => {
     const page = makePage({ url: LOGIN_URL, continueButtonHits: 1 });
     expect(await classifyLoginScreen(page)).toBe('continue_as_user');
+  });
+
+  it('does NOT return continue_as_user on a logged-out /login page with no saved-session button', async () => {
+    // Smoking-gun regression from production 2026-06-08: classifier returned
+    // `continue_as_user` on `/login/?next=...` while the fingerprint showed
+    // hasContinueAsUser=false and no c_user/xs cookies. Cause: the old broad
+    // `getByRole('button', { name: /^Continue\b\s+\S+/ })` matcher caught the
+    // SSO buttons ("Continue with Google" / "Continue with Apple") rendered
+    // alongside the email+pass form. The tightened selectors require either an
+    // aria-label="Continue as <Name>" prefix or an `href*="login_redirect"`
+    // anchor — neither is satisfied on the logged-out splash, even when SSO
+    // buttons are visible.
+    const page = makePage({ url: LOGIN_URL, continueButtonHits: 0 });
+    expect(await classifyLoginScreen(page)).toBe('unknown');
   });
 
   it('returns password_only when only password input present', async () => {

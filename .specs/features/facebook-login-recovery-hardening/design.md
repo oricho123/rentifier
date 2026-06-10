@@ -211,3 +211,90 @@ No `LoginScreenState` / `LoginOutcome` / cursor changes — the whole addendum i
 | Where to capture the fingerprint | `login.ts` (per-step) + `index.ts` (post-login retry catch) | Keeps `attemptLogin` self-contained for the step events; emitting the smoking-gun event from the connector keeps it adjacent to the `auth_expired` it was masking |
 | Fingerprint timeout | 1.5s per probe | Diagnostics must never extend run time materially; 1.5s × 12 probes (parallel) ≈ one Promise.all bucket capped at 1.5s wall-clock |
 | Save HTML / screenshots | No (deferred) | Selector flags + cookie names + html length cover the diagnosable space without disk pressure or new privacy surface; revisit if a future regression isn't reachable from these flags |
+
+---
+
+## Addendum (2026-06-10): P6 — kill the SSO false-positive `continue_as_user` and recover from no-progress
+
+The 2026-06-08 fix demoted *bad* `home_feed` and added a recovery from `continue_as_user → unknown`. The 2026-06-10 incident exposed a third path: a fully-revoked session served `/login/?next=...` with the email+pass form alongside SSO buttons. The old `continueAsLocators` matched those SSO buttons via a permissive accessible-name regex, so the classifier reported `continue_as_user` for two iterations in a row. Each click was a no-op (the SSO buttons either open OAuth popups or do nothing under Playwright). The no-progress guard fired *before* P4's recovery (which gates on `state === 'unknown'`), so the run terminated with `unknown_login_page`.
+
+### Architecture delta
+
+- `continueAsLocators` is rewritten to match ONLY (a) `aria-label^="Continue as <Name>"` (and locale equivalents) or (b) `a[href*="login_redirect"]`. The broad `getByRole('button', { name: /^(?:Continue|...)\b\s+\S+/ })` and `div[role="button"]` + `span:hasText("Continue")` chain are removed.
+- `attemptLogin` gains a one-shot `didForceCredentialRecovery` flag and a new branch placed BEFORE the no-progress guard: when `state === 'continue_as_user'` AND `prevState === 'continue_as_user'` AND the flag is unset, force the credential URL and `continue`.
+- Classifier and diagnostics now share their saved-session anchor selector. The selector is also exposed as `SELECTORS.continueAsButton` / `SELECTORS.savedSessionShortcut` so future drift between the classifier and the fingerprint can't recur silently.
+
+```mermaid
+graph TD
+    C{classifyLoginScreen}
+    C -->|"aria-label^='Continue as' / login_redirect anchor (TIGHTENED)"| CAU[continue_as_user]
+    C -->|"SSO buttons only (no aria-label, no anchor)"| U[unknown]
+    CAU --> Click[click first locator]
+    Click --> C2{classifyLoginScreen}
+    C2 -->|"continue_as_user AGAIN → no-progress (NEW P6)"| FCR["goto FORCE_CREDENTIAL_LOGIN_URL → set one-shot flag → continue"]
+    FCR --> C
+    C -->|"full_login / password_only"| E[fill creds]
+```
+
+### Components (delta)
+
+#### `SELECTORS.continueAsButton` (new constant in `login.ts`)
+
+- **Selector**: aria-label prefix match — `Continue as`, `המשך בתור`, `המשך כ`, `Continuar como`, `Continuer en tant que`, `Weiter als`. Locale-resilient because every saved-session UI sets the aria-label deterministically; prefix match avoids `Continue with X` SSO sibling buttons.
+
+#### `SELECTORS.savedSessionShortcut` (new constant in `login.ts`)
+
+- **Selector**: `a[role="button"][href*="login_redirect"], a[href*="login_redirect"]` — the same selector the diagnostics fingerprint already uses. Sharing the definition is the *invariant* that makes a future classifier-vs-fingerprint disagreement impossible to ship silently.
+
+#### `continueAsLocators(page)` (rewrite)
+
+```ts
+return [page.locator(SELECTORS.continueAsButton), page.locator(SELECTORS.savedSessionShortcut)];
+```
+
+- Replaces the prior 3-locator list (regex-on-name + filtered text + login_redirect anchor) which was the SSO false-positive source.
+- `CONTINUE_LOCALES`, `CONTINUE_RE`, `CONTINUE_EXACT_RE`, and the local `escapeRegex` helper are deleted as unused.
+
+#### `attemptLogin()` (modify — continue-as-user no-progress recovery)
+
+- New `let didForceCredentialRecovery = false;` declared once per call.
+- New branch placed BEFORE the existing `if (prevState === state)` no-progress guard:
+
+  ```ts
+  if (
+    state === 'continue_as_user' &&
+    prevState === 'continue_as_user' &&
+    !didForceCredentialRecovery
+  ) {
+    didForceCredentialRecovery = true;
+    logEvent({
+      event: 'fb_saved_session_invalidated',
+      step,
+      url,
+      detail: 'no_progress_on_continue_as_user',
+    });
+    await page
+      .goto(FORCE_CREDENTIAL_LOGIN_URL, { waitUntil: 'domcontentloaded' })
+      .catch(() => undefined);
+    await page
+      .waitForLoadState('networkidle', { timeout: LOGIN_NAVIGATION_TIMEOUT_MS })
+      .catch(() => undefined);
+    prevState = state;
+    continue;
+  }
+  ```
+
+- Loop safety: if the recovery navigation lands back on `continue_as_user` (FB redirected away from `/login/?login_attempt=1`), the one-shot flag is already set on the next iteration, so the existing `prevState === state` guard fires and bails — no recovery loop.
+
+### Data Models (delta)
+
+No `LoginScreenState` / `LoginOutcome` / fingerprint changes. The new `SELECTORS.continueAsButton` / `SELECTORS.savedSessionShortcut` are string constants only.
+
+### Tech Decisions (delta)
+
+| Decision | Choice | Rationale |
+| -------- | ------ | --------- |
+| Tighten saved-session detection by | aria-label prefix match + login_redirect href | Avoids the broad "Continue\b\s+\S+" regex that hit SSO buttons; aria-label is set deterministically by FB on the saved-session UI in every locale we've observed |
+| Place recovery branch | BEFORE the no-progress guard | The existing P4 unknown-recovery couldn't catch this — `continue_as_user → continue_as_user` never went through `unknown`, so the no-progress bail won the race. Branch order, not branch content, is the bug |
+| One-shot flag vs unbounded retries | One-shot | Bounds the recovery to ≤1 force-navigate per `attemptLogin` call; if the credential URL bounces back to the saved-session UI the next no-progress cycle bails normally. Avoids burning the step cap on re-recovery |
+| Single source of truth for saved-session selector | Yes — `SELECTORS.savedSessionShortcut` shared by classifier + fingerprint | The 2026-06-10 incident was diagnosable because they happened to disagree; making them agree by construction prevents the same silent false-positive shape from recurring |

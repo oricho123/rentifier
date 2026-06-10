@@ -149,6 +149,9 @@ T4, T5 → T6
 | T9: diagnostics module | 1 file | ✅ Granular |
 | T10: smoking-gun emit | 1 catch arm | ✅ Granular |
 | T11: addendum tests + regression | 2 files | ✅ Granular |
+| T12: continueAsLocators rewrite | 1 function | ✅ Granular |
+| T13: continue_as_user no-progress recovery | 1 branch | ✅ Granular |
+| T14: P6 tests + regression | 2 files | ✅ Granular |
 
 ---
 
@@ -260,3 +263,66 @@ T7, T8, T9, T10 → T11
 - [x] All existing `home_feed` step transitions in `login-attempt` updated to set `[CHROME]: 1`.
 - [x] Credential-leak guard test still passes (no email/password in any captured log line).
 - [x] Full repo `pnpm test` green (397 tests) and `pnpm typecheck` clean.
+
+---
+
+## Addendum (2026-06-10): P6 — shipped in branch `fix/fb-continue-as-user-false-positive`
+
+### Phase D: Selector tightening + recovery (Sequential)
+
+```
+T12 → T13 → T14
+```
+
+---
+
+### T12: Rewrite `continueAsLocators` to drop SSO false-positive matchers ✅ DONE
+
+**What**: Replace the broad `getByRole('button', { name: CONTINUE_RE })` + `div[role="button"]` filtered text matchers with two narrow selectors: `SELECTORS.continueAsButton` (aria-label prefix `"Continue as" / "המשך בתור" / ...`) and `SELECTORS.savedSessionShortcut` (`a[href*="login_redirect"]`). Delete `CONTINUE_LOCALES`, `CONTINUE_RE`, `CONTINUE_EXACT_RE`, and the local `escapeRegex` helper.
+**Where**: `packages/connectors/src/facebook/login.ts` (`SELECTORS`, `continueAsLocators`, top-level constants).
+**Depends on**: T7–T11 (P3/P4/P5 baseline).
+**Reuses**: existing `clickFirstAvailable` flow, `SELECTORS` shape, diagnostics' anchor selector definition.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [x] `SELECTORS.continueAsButton` and `SELECTORS.savedSessionShortcut` constants added; `savedSessionShortcut` matches the diagnostics fingerprint probe verbatim.
+- [x] `continueAsLocators` returns exactly those two locators.
+- [x] `CONTINUE_LOCALES` / `CONTINUE_RE` / `CONTINUE_EXACT_RE` / `escapeRegex` removed; no consumers outside `login.ts` (`grep` clean).
+- [x] An `/login` page presenting only "Continue with Google" / "Continue with Apple" SSO buttons (no aria-label match, no login_redirect anchor) does not classify as `continue_as_user`.
+- [x] `pnpm typecheck` clean.
+
+---
+
+### T13: `continue_as_user` no-progress recovery in `attemptLogin` ✅ DONE
+
+**What**: Declare `let didForceCredentialRecovery = false;` once per call. Add a branch BEFORE the existing `prevState === state` no-progress guard: when `state === 'continue_as_user' && prevState === 'continue_as_user' && !didForceCredentialRecovery`, set the flag, log `fb_saved_session_invalidated` with `detail: 'no_progress_on_continue_as_user'`, `goto(FORCE_CREDENTIAL_LOGIN_URL)`, `waitForLoadState('networkidle')`, set `prevState = state`, and `continue`.
+**Where**: `packages/connectors/src/facebook/login.ts` (`attemptLogin`).
+**Depends on**: T12.
+**Reuses**: `FORCE_CREDENTIAL_LOGIN_URL`, `LOGIN_NAVIGATION_TIMEOUT_MS`, existing `continue` semantics, no-progress guard.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [x] Recovery branch placed BEFORE the no-progress bail (branch order matters — P4's recovery couldn't catch this because it gated on `state === 'unknown'`).
+- [x] One-shot flag prevents the recovery from looping if the credential URL bounces back to `continue_as_user` — second repeat hits the normal no-progress bail.
+- [x] `fb_saved_session_invalidated` log line carries `detail: 'no_progress_on_continue_as_user'` so the recovery cause is greppable.
+- [x] No new fields containing cookies/credentials.
+
+---
+
+### T14: P6 tests + regression ✅ DONE
+
+**What**: Update test mocks in both classify + attempt suites to recognize `SELECTORS.continueAsButton` / `SELECTORS.savedSessionShortcut` (and stop relying on the removed `getByRole`-based detection). Add 1 classifier regression test (SSO-only `/login` → `unknown`), 1 attempt success test (`continue_as_user × 2 → recovery → full_login → home_feed`), and 1 attempt one-shot guard test (`continue_as_user × 4 → unknown_login_page`).
+**Where**: `packages/connectors/src/facebook/__tests__/login-classify.test.ts` + `__tests__/login-attempt.test.ts`.
+**Depends on**: T12, T13.
+**Reuses**: `makePage`, `makeScriptedPage` (no shape changes — just selector routing in the mock).
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [x] `login-classify` mock routes `SELECTORS.continueAsButton` and `SELECTORS.savedSessionShortcut` through the existing `continueLocator`; old legacy paths (`a[role="button"][href*="login_redirect"]` literal, `getByRole`) no longer feed `continueButtonHits`.
+- [x] `login-classify`: regression test "logged-out /login page with no saved-session button → unknown" added.
+- [x] `login-attempt`: success test asserts `fb_saved_session_invalidated` with `no_progress_on_continue_as_user` detail and `{ success: true }` outcome with creds filled.
+- [x] `login-attempt`: one-shot guard test asserts `{ success: false, reason: 'unknown_login_page' }` after recovery itself returns to `continue_as_user`.
+- [x] Existing 16 attempt tests + 19 classify tests still pass; full repo `pnpm test` → 400 green, `pnpm -C packages/connectors exec tsc --noEmit` clean.
