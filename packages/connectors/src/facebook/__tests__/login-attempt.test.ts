@@ -54,16 +54,15 @@ function makeScriptedPage(states: {
   const page = {
     url: () => current().url,
     locator: vi.fn((selector: string) => {
-      if (
-        selector === 'div[role="button"]' ||
-        selector === 'span' ||
-        selector === 'a[role="button"][href*="login_redirect"]'
-      ) {
+      if (selector === SELECTORS.continueAsButton || selector === SELECTORS.savedSessionShortcut) {
         return continueLocator;
       }
       return makeLocator(selector);
     }),
-    getByRole: vi.fn(() => continueLocator),
+    getByRole: vi.fn(() => ({
+      count: vi.fn().mockResolvedValue(0),
+      first: vi.fn().mockReturnThis(),
+    })),
     keyboard: {
       press: vi.fn().mockImplementation(async (key: string) => {
         pressCalls.push(key);
@@ -342,6 +341,65 @@ describe('attemptLogin', () => {
     const filled = scripted.fillCalls.map((c) => c.value);
     expect(filled).toContain('user@example.com');
     expect(filled).toContain('s3cret');
+  });
+
+  it('continue_as_user no-progress (click is a no-op) → recovers via force-credential URL → home_feed', async () => {
+    // Reproduces the production 2026-06-08 failure: classifier returned
+    // continue_as_user on a fully logged-out /login page (the SSO buttons
+    // tripped the old broad regex), the click did nothing, the page stayed on
+    // the same continue_as_user classification, and the no-progress guard
+    // bailed with `unknown_login_page` before any recovery could fire. The
+    // P6 recovery branch force-navigates to the credential URL on the second
+    // continue_as_user in a row, so the existing full_login handler runs.
+    const scripted = makeScriptedPage({
+      steps: [
+        // Step 0: classifier sees continue_as_user; clicking the matched
+        // locator advances the mock — but step 1 ALSO presents as
+        // continue_as_user, so from attemptLogin's perspective the click was
+        // a no-op (same state twice).
+        { url: LOGIN_URL, continueHits: 1 },
+        { url: LOGIN_URL, continueHits: 1 },
+        // After the recovery goto(FORCE_CREDENTIAL_LOGIN_URL), the credential
+        // form is exposed and the existing full_login handler types creds.
+        { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
+      ],
+    });
+
+    const out = await attemptLogin(scripted.page, {
+      email: 'user@example.com',
+      password: 's3cret',
+    });
+
+    expect(out).toEqual({ success: true });
+    const recoveryLog = captured.find((l) => l.includes('fb_saved_session_invalidated'));
+    expect(recoveryLog).toBeDefined();
+    expect(recoveryLog).toContain('no_progress_on_continue_as_user');
+    const filled = scripted.fillCalls.map((c) => c.value);
+    expect(filled).toContain('user@example.com');
+    expect(filled).toContain('s3cret');
+  });
+
+  it('continue_as_user no-progress recovery is one-shot — second failure bails as unknown_login_page', async () => {
+    // If the force-credential recovery itself lands back on continue_as_user
+    // (e.g. FB redirected the credential URL right back to the saved-session
+    // chooser), the one-shot flag prevents a recovery loop and the normal
+    // no-progress guard bails on the next iteration.
+    const scripted = makeScriptedPage({
+      steps: [
+        { url: LOGIN_URL, continueHits: 1 },
+        { url: LOGIN_URL, continueHits: 1 },
+        { url: LOGIN_URL, continueHits: 1 },
+        { url: LOGIN_URL, continueHits: 1 },
+      ],
+    });
+
+    const out = await attemptLogin(scripted.page, {
+      email: 'a@b.com',
+      password: 'p',
+    });
+
+    expect(out).toEqual({ success: false, reason: 'unknown_login_page' });
   });
 
   it('credential-leak guard: no console.log call contains the email or password', async () => {

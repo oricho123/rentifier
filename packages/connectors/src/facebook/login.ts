@@ -34,42 +34,24 @@ export const SELECTORS = {
   // produced false-positive login_success.
   loggedInChrome:
     'input[aria-label="Search Facebook" i], input[aria-label="חיפוש בפייסבוק" i], input[placeholder="Search Facebook" i], input[placeholder="חיפוש בפייסבוק" i], div[role="button"][aria-label*="Notifications" i], div[role="button"][aria-label*="התראות" i], div[role="banner"] a[aria-label="Home" i]',
+  // Saved-session "Continue as <Name>" button. aria-label prefix-match keeps
+  // this tight — matching the accessible name with a generic "Continue\b\s+\S+"
+  // regex also hit SSO buttons like "Continue with Google" / "Continue with
+  // Apple" present on the logged-out login splash, falsely classifying it as
+  // continue_as_user and looping until the step cap fired.
+  continueAsButton:
+    'div[role="button"][aria-label^="Continue as" i], div[role="button"][aria-label^="המשך בתור" i], div[role="button"][aria-label^="המשך כ" i], div[role="button"][aria-label^="Continuar como" i], div[role="button"][aria-label^="Continuer en tant que" i], div[role="button"][aria-label^="Weiter als" i]',
+  // Saved-account login-redirect shortcut anchor. Same selector as the
+  // diagnostics fingerprint probe so classifier and fingerprint can never
+  // disagree on whether the saved-session UI is present.
+  savedSessionShortcut: 'a[role="button"][href*="login_redirect"], a[href*="login_redirect"]',
 } as const;
 
 /** Clean credential-login URL — bypasses saved-session UI and exposes email+pass. */
 export const FORCE_CREDENTIAL_LOGIN_URL = 'https://www.facebook.com/login/?login_attempt=1&lwv=110';
 
-export const CONTINUE_LOCALES = [
-  'Continue',
-  'המשך',
-  'Continuar',
-  'Continuer',
-  'Weiter',
-  'Продолжить',
-  '继续',
-  '繼續',
-  '続ける',
-  '계속',
-] as const;
-
-function escapeRegex(s: string): string {
-  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-}
-
-export const CONTINUE_RE = new RegExp(
-  `^(?:${CONTINUE_LOCALES.map(escapeRegex).join('|')})\\b\\s+\\S+`
-);
-
-const CONTINUE_EXACT_RE = new RegExp(`^(?:${CONTINUE_LOCALES.map(escapeRegex).join('|')})$`);
-
 export function continueAsLocators(page: Page): Locator[] {
-  return [
-    page.getByRole('button', { name: CONTINUE_RE }),
-    page.locator('div[role="button"]').filter({
-      has: page.locator('span').filter({ hasText: CONTINUE_EXACT_RE }),
-    }),
-    page.locator('a[role="button"][href*="login_redirect"]'),
-  ];
+  return [page.locator(SELECTORS.continueAsButton), page.locator(SELECTORS.savedSessionShortcut)];
 }
 
 export type LoginScreenState =
@@ -227,6 +209,11 @@ export async function attemptLogin(
   logEvent({ event: 'fb_login_attempt' });
 
   let prevState: LoginScreenState | null = null;
+  // One-shot guard so the continue_as_user no-progress recovery (force-navigate
+  // to the credential URL) cannot loop on a misclassified page. If recovery
+  // does not break out of continue_as_user, the next iteration falls through
+  // to the normal no-progress bail.
+  let didForceCredentialRecovery = false;
 
   try {
     for (let step = 0; step < maxSteps; step++) {
@@ -273,6 +260,36 @@ export async function attemptLogin(
       // below can branch on "what got us here" (e.g. an `unknown` page after a
       // saved-session click is a fakeout, not just a slow render).
       const previousIterationState = prevState;
+
+      // continue_as_user no-progress recovery: classifier returned
+      // continue_as_user twice in a row, meaning our click did not advance the
+      // page. Either the saved-session UI is stale (server-side session fully
+      // revoked, no real "Continue as <Name>" button to click) or a sibling
+      // SSO button slipped past the selector. Force-navigate to the clean
+      // credential URL so the next iteration sees the password form. Gated by
+      // a one-shot flag so a second failure falls through to the normal
+      // no-progress bail instead of looping until the step cap.
+      if (
+        state === 'continue_as_user' &&
+        prevState === 'continue_as_user' &&
+        !didForceCredentialRecovery
+      ) {
+        didForceCredentialRecovery = true;
+        logEvent({
+          event: 'fb_saved_session_invalidated',
+          step,
+          url,
+          detail: 'no_progress_on_continue_as_user',
+        });
+        await page
+          .goto(FORCE_CREDENTIAL_LOGIN_URL, { waitUntil: 'domcontentloaded' })
+          .catch(() => undefined);
+        await page
+          .waitForLoadState('networkidle', { timeout: LOGIN_NAVIGATION_TIMEOUT_MS })
+          .catch(() => undefined);
+        prevState = state;
+        continue;
+      }
 
       // No-progress detection: same non-terminal state twice → bail
       if (prevState === state) {
