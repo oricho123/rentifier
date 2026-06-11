@@ -402,6 +402,59 @@ describe('attemptLogin', () => {
     expect(out).toEqual({ success: false, reason: 'unknown_login_page' });
   });
 
+  it('AYMH-style chooser: first-iteration unknown on /login → force-credential recovery → full_login → home_feed', async () => {
+    // Reproduces the production 2026-06-11 failure: FB served the AYMH
+    // ("Are You My Human?") multi-profile chooser on /login/?next=... — every
+    // form input is hidden (crypted_string, lsd, jazoest, aymh_*) and the
+    // visible buttons ("Continue <Name>", "Use another profile", "Remove
+    // profiles from this browser") don't match the tightened
+    // `aria-label^="Continue as"` saved-session selector. Classifier
+    // correctly returns `unknown` on step 0 — no false positive — but the
+    // pre-P7 recovery only fired after `continue_as_user`/`redirecting`, so
+    // step 0 bailed as `unknown_login_page` with no recovery attempt. P7
+    // extends the recovery to fire on first-iteration `unknown` whenever the
+    // URL is a /login URL.
+    const scripted = makeScriptedPage({
+      steps: [
+        // AYMH chooser: no email/pass input, no continue_as_user button match.
+        { url: LOGIN_URL },
+        { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
+      ],
+    });
+
+    const out = await attemptLogin(scripted.page, {
+      email: 'user@example.com',
+      password: 's3cret',
+    });
+
+    expect(out).toEqual({ success: true });
+    const recoveryLog = captured.find((l) => l.includes('fb_saved_session_invalidated'));
+    expect(recoveryLog).toBeDefined();
+    expect(recoveryLog).toContain('unknown_on_login_url');
+    const filled = scripted.fillCalls.map((c) => c.value);
+    expect(filled).toContain('user@example.com');
+    expect(filled).toContain('s3cret');
+  });
+
+  it('first-iteration unknown on a non-/login URL → bails with no recovery', async () => {
+    // Defense: the P7 recovery is gated on `/login\b` so we don't blindly
+    // force-navigate from random pages. An unknown classification on, e.g.,
+    // facebook.com/somewhere/ with no prior saved-session state should bail
+    // through the existing fall-through, not invoke recovery.
+    const scripted = makeScriptedPage({
+      steps: [{ url: 'https://www.facebook.com/somewhere/' }],
+    });
+
+    const out = await attemptLogin(scripted.page, {
+      email: 'a@b.com',
+      password: 'p',
+    });
+
+    expect(out).toEqual({ success: false, reason: 'unknown_login_page' });
+    expect(captured.some((l) => l.includes('fb_saved_session_invalidated'))).toBe(false);
+  });
+
   it('credential-leak guard: no console.log call contains the email or password', async () => {
     const scripted = makeScriptedPage({
       steps: [
