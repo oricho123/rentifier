@@ -152,6 +152,7 @@ T4, T5 → T6
 | T12: continueAsLocators rewrite | 1 function | ✅ Granular |
 | T13: continue_as_user no-progress recovery | 1 branch | ✅ Granular |
 | T14: P6 tests + regression | 2 files | ✅ Granular |
+| T15: extend unknown-recovery to /login URLs + tests | 1 branch + 1 file | ✅ Granular |
 
 ---
 
@@ -326,3 +327,32 @@ T12 → T13 → T14
 - [x] `login-attempt`: success test asserts `fb_saved_session_invalidated` with `no_progress_on_continue_as_user` detail and `{ success: true }` outcome with creds filled.
 - [x] `login-attempt`: one-shot guard test asserts `{ success: false, reason: 'unknown_login_page' }` after recovery itself returns to `continue_as_user`.
 - [x] Existing 16 attempt tests + 19 classify tests still pass; full repo `pnpm test` → 400 green, `pnpm -C packages/connectors exec tsc --noEmit` clean.
+
+---
+
+## Addendum (2026-06-11): P7 — shipped in branch `fix/fb-unknown-on-login-recovery`
+
+### Phase E: Recovery extension (Sequential)
+
+```
+T15
+```
+
+---
+
+### T15: Extend unknown-recovery to fire on first-iteration `/login` URLs ✅ DONE
+
+**What**: Broaden the `state === 'unknown'` recovery branch in `attemptLogin` to also fire when the page URL contains `/login\b`, regardless of `previousIterationState`. Share the existing one-shot `didForceCredentialRecovery` flag across P4, P6, and P7 — at most one force-credential per call. Add a `detail` field on the `fb_saved_session_invalidated` log line so the three trigger paths are distinguishable in production logs (`'unknown_on_login_url'`, `'unknown_after_saved_session'`, or `'no_progress_on_continue_as_user'`).
+**Where**: `packages/connectors/src/facebook/login.ts` (`attemptLogin` recovery branch); `packages/connectors/src/facebook/__tests__/login-attempt.test.ts` (2 new scripted tests).
+**Depends on**: T13 (P6 one-shot flag — reused).
+**Reuses**: `FORCE_CREDENTIAL_LOGIN_URL`, `LOGIN_NAVIGATION_TIMEOUT_MS`, the shared `didForceCredentialRecovery` flag.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [x] Recovery condition expanded to `(isLoginUrl || prev was continue_as_user/redirecting)`, gated by `!didForceCredentialRecovery`.
+- [x] `detail` field added to `fb_saved_session_invalidated` and varies by trigger path so log greps can isolate which path fired.
+- [x] Defense test: `unknown` on a non-`/login` URL with no prior saved-session state → `unknown_login_page` AND `fb_saved_session_invalidated` is NOT emitted (no over-eager recovery).
+- [x] Success test: `unknown(LOGIN_URL) → full_login → home_feed` with a `fb_saved_session_invalidated detail:'unknown_on_login_url'` log line and credentials filled.
+- [x] Existing P4 / P6 tests still pass (the shared flag does not disturb either path).
+- [x] Full repo `pnpm test` → 402 green; `pnpm -C packages/connectors exec tsc --noEmit` clean.

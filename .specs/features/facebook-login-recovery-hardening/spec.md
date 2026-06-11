@@ -169,6 +169,41 @@ Two compounding bugs:
 
 ---
 
+### P7: Recover from first-iteration `unknown` on a `/login` URL (AYMH chooser & friends) ⭐ ADDENDUM (2026-06-11)
+
+**User Story**: As the operator, when Facebook serves a saved-session UI variant we don't recognize (e.g. the AYMH multi-profile chooser) on a `/login/?next=...` URL and the classifier correctly returns `unknown` because no actionable selector matches, I want `attemptLogin` to force-navigate to the credential URL on the *first* iteration instead of bailing immediately as `unknown_login_page`.
+
+**Why P7**: The 2026-06-10 P6 fix correctly stopped classifying SSO buttons as `continue_as_user`. The 2026-06-11 production log confirmed P6 works — classifier returned `unknown` on the AYMH chooser page rather than a false-positive `continue_as_user`. But the recovery branch (added in P4, refined in P6) only fired when `previousIterationState ∈ {continue_as_user, redirecting}`. On the first iteration `previousIterationState` is `null`, so AYMH-style variants bail with no recovery attempt:
+
+```
+fb_login_step step:0 state:unknown url:/login/?next=...groups/...
+fb_page_fingerprint hasContinueAsUser:false hasEmailInput:false
+                    hasCUserCookie:false hasXsCookie:false
+                    buttonLabels:["Remove profiles from this browser",
+                                  "Continue אורי לאל",
+                                  "Use another profile"]
+                    inputAttrs:[12 hidden form fields, no email/pass]
+fb_login_failed reason:unknown_login_page step:0     # bailed before any recovery
+fb_account_disabled
+```
+
+The P5 buttonLabels + inputAttrs additions made this incident diagnosable from a single log line — `Continue <Name>` (no `as` connector) plus 12 hidden inputs is the unambiguous AYMH signature.
+
+**Acceptance Criteria**:
+
+1. WHEN `attemptLogin`'s loop encounters `state === 'unknown'` AND the page URL contains `/login\b` AND the one-shot `didForceCredentialRecovery` flag is unset THEN it SHALL set the flag, log `fb_saved_session_invalidated` with `detail: 'unknown_on_login_url'`, `goto(FORCE_CREDENTIAL_LOGIN_URL)`, `waitForLoadState('networkidle')`, and `continue` — placing this branch at the same point as the existing P4 `unknown`-after-saved-session recovery (they share the flag).
+2. WHEN the recovery is taken from a prior `continue_as_user`/`redirecting` state THEN the log line SHALL carry `detail: 'unknown_after_saved_session'` (preserved P4 behaviour, just renamed for symmetry).
+3. WHEN `state === 'unknown'` on a *non-`/login`* URL AND no prior `continue_as_user`/`redirecting` was seen THEN the loop SHALL fall through to the existing `unknown_login_page` bail (no over-eager recovery).
+4. WHEN the recovery fires AND the next iteration classifies the credential form THEN the existing `full_login`/`password_only` handler SHALL fill credentials and reach `home_feed` for `{ success: true }`.
+5. WHEN the recovery fires AND the next iteration is also `unknown` THEN the one-shot flag SHALL prevent a second recovery attempt and the existing no-progress guard SHALL bail with `unknown_login_page`.
+
+**Independent Test**:
+
+- `attemptLogin`: scripted sequence `unknown(LOGIN_URL) → full_login(LOGIN_URL) → home_feed(loggedInChrome)` ⇒ `fb_saved_session_invalidated` emitted with `detail:'unknown_on_login_url'`, both email + password filled, outcome `{ success: true }`.
+- `attemptLogin`: `unknown` on `https://www.facebook.com/somewhere/` ⇒ `{ success: false, reason: 'unknown_login_page' }` AND `fb_saved_session_invalidated` is NOT emitted (defense against blanket recovery on arbitrary URLs).
+
+---
+
 ## Edge Cases
 
 - WHEN the session is only *soft*-expired and "Continue as" genuinely revives it (lands on a verified feed with no `crypted_string`) THEN that SHALL still count as success (don't force a needless password entry if a real feed is reached).

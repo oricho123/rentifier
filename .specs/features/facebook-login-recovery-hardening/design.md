@@ -298,3 +298,71 @@ No `LoginScreenState` / `LoginOutcome` / fingerprint changes. The new `SELECTORS
 | Place recovery branch | BEFORE the no-progress guard | The existing P4 unknown-recovery couldn't catch this — `continue_as_user → continue_as_user` never went through `unknown`, so the no-progress bail won the race. Branch order, not branch content, is the bug |
 | One-shot flag vs unbounded retries | One-shot | Bounds the recovery to ≤1 force-navigate per `attemptLogin` call; if the credential URL bounces back to the saved-session UI the next no-progress cycle bails normally. Avoids burning the step cap on re-recovery |
 | Single source of truth for saved-session selector | Yes — `SELECTORS.savedSessionShortcut` shared by classifier + fingerprint | The 2026-06-10 incident was diagnosable because they happened to disagree; making them agree by construction prevents the same silent false-positive shape from recurring |
+
+---
+
+## Addendum (2026-06-11): P7 — recover from first-iteration `unknown` on a `/login` URL
+
+The 2026-06-11 production run confirmed P6 works (no SSO false positive — classifier returned `unknown`) but exposed a new escape gap: Facebook served the **AYMH** ("Are You My Human?") multi-profile chooser on `/login/?next=...`. Every form input is hidden (`crypted_string`, `lsd`, `jazoest`, `aymh_profile_loaded_count`, …) and the only visible buttons are `Continue <Name>` (no `as` connector — different from the saved-session UI we hardened in P6), `Use another profile`, and `Remove profiles from this browser`. None match `SELECTORS.continueAsButton` (which requires `aria-label^="Continue as"`), so classification is correctly `unknown` — but with no prior `continue_as_user`/`redirecting` state to trigger P4, the loop bailed at step 0.
+
+The P5 buttonLabels + inputAttrs additions made this incident diagnosable from a single log line. The fix is to extend the existing recovery branch — not to chase yet another saved-session UI variant.
+
+### Architecture delta
+
+- The `state === 'unknown'` recovery branch (P4 / extended in P6) is broadened to also fire when the URL contains `/login\b`, regardless of `previousIterationState`. The credential URL is the deterministic escape regardless of which saved-session UI variant FB is serving today.
+- The shared one-shot `didForceCredentialRecovery` flag now gates this path too — at most one force-credential per `attemptLogin` call across all recovery triggers.
+- The recovery log line carries a `detail` so production logs disambiguate the trigger: `'unknown_after_saved_session'` (prior P4 path) vs `'unknown_on_login_url'` (new P7 path) vs `'no_progress_on_continue_as_user'` (P6 path).
+
+```mermaid
+graph TD
+    C{classifyLoginScreen}
+    C -->|"unknown on /login URL (NEW P7)"| R7["goto FORCE_CREDENTIAL_LOGIN_URL → set one-shot → continue"]
+    C -->|"unknown after continue_as_user / redirecting (P4)"| R4["goto FORCE_CREDENTIAL_LOGIN_URL → set one-shot → continue"]
+    C -->|"continue_as_user × 2 (P6)"| R6["goto FORCE_CREDENTIAL_LOGIN_URL → set one-shot → continue"]
+    C -->|"unknown on non-/login, no prior saved-session"| BAIL["unknown_login_page"]
+    R7 --> C
+    R4 --> C
+    R6 --> C
+```
+
+### Components (delta)
+
+#### `attemptLogin()` (modify — broaden the unknown recovery)
+
+```ts
+const isLoginUrl = /\/login\b/.test(url);
+if (
+  state === 'unknown' &&
+  !didForceCredentialRecovery &&
+  (isLoginUrl ||
+    previousIterationState === 'continue_as_user' ||
+    previousIterationState === 'redirecting')
+) {
+  didForceCredentialRecovery = true;
+  const detail =
+    previousIterationState === 'continue_as_user' ||
+    previousIterationState === 'redirecting'
+      ? 'unknown_after_saved_session'
+      : 'unknown_on_login_url';
+  logEvent({ event: 'fb_saved_session_invalidated', step, url, detail });
+  await page.goto(FORCE_CREDENTIAL_LOGIN_URL, { waitUntil: 'domcontentloaded' }).catch(() => undefined);
+  await page.waitForLoadState('networkidle', { timeout: LOGIN_NAVIGATION_TIMEOUT_MS }).catch(() => undefined);
+  continue;
+}
+```
+
+- Loop safety: the shared `didForceCredentialRecovery` flag guarantees at most one force-credential per call. If the recovery itself lands back on `unknown` (or on `continue_as_user`), the existing no-progress guard or P6 branch handles the bail.
+- Defense: the `/login\b` regex prevents the recovery from firing on arbitrary `unknown` pages elsewhere in the flow — only login-shaped URLs qualify for an unprompted force-navigate.
+
+### Data Models (delta)
+
+No type / state / fingerprint changes. The recovery now writes a `detail` field on `fb_saved_session_invalidated` (a string-literal union of three values, all greppable).
+
+### Tech Decisions (delta)
+
+| Decision | Choice | Rationale |
+| -------- | ------ | --------- |
+| First-iteration unknown on /login | Recover via FORCE_CREDENTIAL_LOGIN_URL | The credential URL bypasses *every* saved-session UI variant deterministically. Trying to detect and click each variant chases a moving target — FB's AYMH chooser uses `Continue <Name>` (no `as` connector); the next variant will use something else again. The credential URL is the universal escape |
+| Extend existing branch vs new state | Extend | Adding `'aymh_chooser'` to `LoginScreenState` requires a new handler and percolates through the type union for one variant we don't expect to see again unchanged. The existing recovery already does the right thing — it just wasn't being reached |
+| Share `didForceCredentialRecovery` across P4 / P6 / P7 | Yes — single flag | At most one force-credential per `attemptLogin` call. If recovery from path X didn't reach the credential form, recovery from path Y won't either — bail instead of looping |
+| URL gate (`/login\b`) | Yes | Without the gate, an `unknown` mid-feed-load would force-navigate away. With the gate, only login-shaped URLs (`/login/`, `/login.php`) qualify — the canonical FB login URLs |

@@ -369,18 +369,32 @@ export async function attemptLogin(
         continue;
       }
 
-      // Saved-session fakeout: we just clicked "Continue as <user>" (or settled
-      // out of the crypted_string interstitial) and landed on a page that has
-      // neither the logged-in chrome (so it's not a real feed) nor the email/
-      // password form (so we can't classify as full_login yet). The server-side
-      // session is dead — saved-session UI cannot recover it. Force-navigate to
-      // a clean credential-login URL so the next iteration sees `full_login`
-      // and the existing password handler takes over.
+      // Saved-session fakeout / first-iteration AYMH dead-end: we either
+      // (a) just clicked "Continue as <user>" / settled out of the
+      // crypted_string interstitial and landed on a page with neither the
+      // logged-in chrome nor the email/password form, OR
+      // (b) opened on a /login URL that the classifier cannot resolve — e.g.
+      // the AYMH multi-profile chooser, where every actionable input is a
+      // hidden form field and the only buttons are "Continue <Name>" /
+      // "Use another profile" (no aria-label match for the tightened
+      // saved-session selector). In both cases the credential URL is the
+      // best escape — it bypasses the saved-session UI deterministically.
+      // One-shot: a second unresolved iteration falls through to the normal
+      // no-progress / unknown_login_page bail instead of looping.
+      const isLoginUrl = /\/login\b/.test(url);
       if (
         state === 'unknown' &&
-        (previousIterationState === 'continue_as_user' || previousIterationState === 'redirecting')
+        !didForceCredentialRecovery &&
+        (isLoginUrl ||
+          previousIterationState === 'continue_as_user' ||
+          previousIterationState === 'redirecting')
       ) {
-        logEvent({ event: 'fb_saved_session_invalidated', step, url });
+        didForceCredentialRecovery = true;
+        const detail =
+          previousIterationState === 'continue_as_user' || previousIterationState === 'redirecting'
+            ? 'unknown_after_saved_session'
+            : 'unknown_on_login_url';
+        logEvent({ event: 'fb_saved_session_invalidated', step, url, detail });
         await page
           .goto(FORCE_CREDENTIAL_LOGIN_URL, { waitUntil: 'domcontentloaded' })
           .catch(() => undefined);
