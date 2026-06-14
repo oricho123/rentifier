@@ -460,3 +460,72 @@ Recovery escape paths are not interchangeable:
 | `FORCE_CREDENTIAL_LOGIN_URL` (`/login/?login_attempt=1&lwv=110`) | `continue_as_user` (revoked-session shell), `redirecting` interstitial fakeout, generic `unknown` on `/login` | AYMH multi-profile chooser (device cookies pin profile) |
 | Click `useAnotherProfile` (P8) | AYMH chooser → exposes `full_login` | (only available when AYMH is present) |
 | Click `continueAsLocators` (saved-session entry) | (only available when continue_as_user is present) | revoked sessions where the click is a no-op (P6 falls back to URL nav) |
+
+---
+
+## Addendum (2026-06-14b): P9 — type credentials with keystroke events to defeat silent bot rejection
+
+The 2026-06-14 production run after PR #56 (P8) confirmed AYMH escape works — `state:aymh_chooser → state:full_login` with email+pass form visible. But the credential submit was silently rejected: two `full_login` iterations on the same URL, htmlLen growing by 2KB between them (form re-rendered), "Show password" button appearing in step 2's buttonLabels (proving the password field had content), no `invalid_credentials` banner, no navigation. The no-progress guard then bailed.
+
+Root cause: `locator.fill()` inserts text into form fields *instantaneously* without emitting per-character keystroke events. Modern FB login flows fingerprint that input behaviour (especially on AYMH-flow forms where bot suspicion is already elevated) and silently re-render the same form instead of either accepting the login or showing a rejection banner.
+
+The fix replaces `fill()` with `pressSequentially({ delay: 50ms })` and adds a brief pause (`waitForTimeout(250ms)`) between completing the password and clicking submit. Both changes target the input-fingerprint vector without altering the loop shape or adding retries.
+
+### Architecture delta
+
+- New constants: `HUMAN_TYPE_DELAY_MS = 50` and `HUMAN_PAUSE_BEFORE_SUBMIT_MS = 250` (exported for future tunability if FB tightens detection).
+- `attemptLogin`'s `full_login` and `password_only` arms switch from `fill()` to `pressSequentially()` with the per-keystroke delay.
+- A `waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS)` is awaited *after* credential entry and *before* the submit click — outside `withNavigation` so it's a true pause, not a navigation race.
+
+```mermaid
+graph TD
+    F["full_login / password_only"]
+    F -->|pressSequentially email + pass| T1["waitForTimeout 250ms"]
+    T1 --> S["submit click / Enter"]
+    S --> N["networkidle wait"]
+    N --> C["classifyLoginScreen"]
+```
+
+### Components (delta)
+
+#### `attemptLogin()` — `full_login` arm (modify)
+
+```ts
+if (state === 'full_login') {
+  await page
+    .locator(SELECTORS.emailInput)
+    .first()
+    .pressSequentially(creds.email, { delay: HUMAN_TYPE_DELAY_MS });
+  await page
+    .locator(SELECTORS.passwordInput)
+    .first()
+    .pressSequentially(creds.password, { delay: HUMAN_TYPE_DELAY_MS });
+  await page.waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS);
+  await withNavigation(page, async () => {
+    const submit = page.locator(SELECTORS.loginSubmit).first();
+    if ((await submit.count()) > 0) {
+      await submit.click({ timeout: LOGIN_NAVIGATION_TIMEOUT_MS });
+    } else {
+      await page.keyboard.press('Enter');
+    }
+  });
+  continue;
+}
+```
+
+(`password_only` receives the same treatment — `pressSequentially` + `waitForTimeout` before Enter.)
+
+### Data Models (delta)
+
+No type / state / fingerprint / log-event changes. Two new exported constants only.
+
+### Tech Decisions (delta)
+
+| Decision | Choice | Rationale |
+| -------- | ------ | --------- |
+| Diagnose silent rejection vs. retry full_login | Type cadence, not retry | Retrying full_login on no-progress risks lockout when creds are actually wrong (silent rejection looks identical to a 4th-attempt brute-force). Fixing the input vector first is cheaper and reversible |
+| `pressSequentially` vs `type` | `pressSequentially` | `type` is deprecated in modern Playwright; `pressSequentially` is the keystroke-emitting replacement and accepts a per-character `delay` option |
+| Keystroke delay | 50ms (default) | Below this, real users do show ~30ms median inter-keystroke for memorized passwords; above, login feels sluggish in tests. 50ms is comfortably within human distribution and adds <1s total typing for typical credentials |
+| Submit pause | 250ms | Long enough to clear instant-submit fingerprints; short enough that loop wall-clock is not noticeably worse |
+| Export the constants | Yes (`HUMAN_TYPE_DELAY_MS`, `HUMAN_PAUSE_BEFORE_SUBMIT_MS`) | Future tunability if FB tightens detection — easier to override from a single import than re-edit the handler |
+| Add a retry loop on full_login → full_login no-progress | No | Out of scope. If P9 turns out insufficient (FB still silently rejects), the next addendum can introduce retry. We don't add knobs preemptively |

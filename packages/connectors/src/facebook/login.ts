@@ -8,6 +8,17 @@ export const LOGIN_TIMEOUT_MS = 60_000;
 export const LOGIN_NAVIGATION_TIMEOUT_MS = 15_000;
 export const MAX_LOGIN_ATTEMPTS_PER_EPISODE = 3;
 export const LOGIN_EPISODE_WINDOW_MS = 24 * 60 * 60 * 1000;
+// Per-keystroke delay (ms) for credential entry. `locator.fill()` inserts text
+// instantaneously without keystroke events; modern FB login flows fingerprint
+// that as bot input and silently reject the submit (no `invalid_credentials`
+// banner — same form re-renders, the no-progress guard then bails). Using
+// `pressSequentially` with a small delay emits real keystroke events.
+export const HUMAN_TYPE_DELAY_MS = 50;
+// Brief pause between completing the password and clicking submit. Real
+// users don't post the instant the last character types; the silent-rejection
+// failure on AYMH-flow `/login/?next=...` (2026-06-14) showed `fill()` +
+// immediate submit gets discarded.
+export const HUMAN_PAUSE_BEFORE_SUBMIT_MS = 250;
 
 // Modern facebook.com renders nearly every interactive element as a div[role="button"]
 // with an aria-label, and uses generated class hashes that change frequently. data-testid
@@ -370,7 +381,11 @@ export async function attemptLogin(
       }
 
       if (state === 'password_only') {
-        await page.locator(SELECTORS.passwordInput).first().fill(creds.password);
+        await page
+          .locator(SELECTORS.passwordInput)
+          .first()
+          .pressSequentially(creds.password, { delay: HUMAN_TYPE_DELAY_MS });
+        await page.waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS);
         await withNavigation(page, async () => {
           await page.keyboard.press('Enter');
         });
@@ -378,8 +393,15 @@ export async function attemptLogin(
       }
 
       if (state === 'full_login') {
-        await page.locator(SELECTORS.emailInput).first().fill(creds.email);
-        await page.locator(SELECTORS.passwordInput).first().fill(creds.password);
+        await page
+          .locator(SELECTORS.emailInput)
+          .first()
+          .pressSequentially(creds.email, { delay: HUMAN_TYPE_DELAY_MS });
+        await page
+          .locator(SELECTORS.passwordInput)
+          .first()
+          .pressSequentially(creds.password, { delay: HUMAN_TYPE_DELAY_MS });
+        await page.waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS);
         await withNavigation(page, async () => {
           const submit = page.locator(SELECTORS.loginSubmit).first();
           if ((await submit.count()) > 0) {

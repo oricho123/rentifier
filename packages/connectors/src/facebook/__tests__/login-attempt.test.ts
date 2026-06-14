@@ -5,6 +5,8 @@ import { attemptLogin, SELECTORS } from '../login';
 interface ScriptedPage {
   page: Page;
   fillCalls: { selector: string; value: string }[];
+  /** Separate from fillCalls — tracks pressSequentially specifically so P9 tests can prove human-typing. */
+  typeCalls: { selector: string; value: string }[];
   clickCalls: string[];
   pressCalls: string[];
 }
@@ -15,6 +17,7 @@ function makeScriptedPage(states: {
 }): ScriptedPage {
   let stepIndex = 0;
   const fillCalls: { selector: string; value: string }[] = [];
+  const typeCalls: { selector: string; value: string }[] = [];
   const clickCalls: string[] = [];
   const pressCalls: string[] = [];
 
@@ -32,6 +35,13 @@ function makeScriptedPage(states: {
       first: vi.fn().mockReturnThis(),
       fill: vi.fn().mockImplementation(async (value: string) => {
         fillCalls.push({ selector, value });
+      }),
+      // Human-like keystroke entry — value lands in fillCalls (so existing
+      // success-path assertions still match) AND typeCalls (so P9 tests can
+      // prove pressSequentially was used instead of fill).
+      pressSequentially: vi.fn().mockImplementation(async (value: string) => {
+        fillCalls.push({ selector, value });
+        typeCalls.push({ selector, value });
       }),
       click: vi.fn().mockImplementation(async () => {
         clickCalls.push(selector);
@@ -70,6 +80,8 @@ function makeScriptedPage(states: {
       }),
     },
     waitForLoadState: vi.fn().mockResolvedValue(undefined),
+    // Human-like pause between password entry and submit — no-op in tests.
+    waitForTimeout: vi.fn().mockResolvedValue(undefined),
     // Resolving the login-redirect interstitial advances to the next scripted step,
     // mirroring the real page navigating away from the crypted_string URL.
     waitForURL: vi.fn().mockImplementation(async () => {
@@ -82,7 +94,7 @@ function makeScriptedPage(states: {
     }),
   } as unknown as Page;
 
-  return { page, fillCalls, clickCalls, pressCalls };
+  return { page, fillCalls, typeCalls, clickCalls, pressCalls };
 }
 
 describe('attemptLogin', () => {
@@ -504,6 +516,54 @@ describe('attemptLogin', () => {
 
     expect(out).toEqual({ success: false, reason: 'unknown_login_page' });
     expect(captured.some((l) => l.includes('fb_saved_session_invalidated'))).toBe(false);
+  });
+
+  it('full_login uses human-like keystroke entry + pause before submit (P9)', async () => {
+    // Reproduces the 2026-06-14 silent-rejection failure: P8 escaped AYMH and
+    // surfaced full_login, but `fill()` typed creds instantaneously, FB
+    // fingerprinted that as bot input and silently re-rendered the same form
+    // without a banner. The no-progress guard then bailed. P9 replaces fill()
+    // with pressSequentially() (real keystroke events) and adds a brief pause
+    // before submit.
+    const scripted = makeScriptedPage({
+      steps: [
+        { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
+      ],
+    });
+
+    const out = await attemptLogin(scripted.page, {
+      email: 'user@example.com',
+      password: 's3cret',
+    });
+
+    expect(out).toEqual({ success: true });
+    // Both creds went through pressSequentially, not fill().
+    const typed = scripted.typeCalls.map((c) => c.value);
+    expect(typed).toContain('user@example.com');
+    expect(typed).toContain('s3cret');
+    // Human pause between password entry and submit fired.
+    expect(scripted.page.waitForTimeout).toHaveBeenCalled();
+  });
+
+  it('password_only also uses human-like keystroke entry + pause (P9)', async () => {
+    const scripted = makeScriptedPage({
+      steps: [
+        { url: LOGIN_URL, selectors: { [PASSWORD_SEL]: 1 } },
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
+      ],
+    });
+
+    const out = await attemptLogin(scripted.page, {
+      email: 'user@example.com',
+      password: 's3cret',
+    });
+
+    expect(out).toEqual({ success: true });
+    const typed = scripted.typeCalls.map((c) => c.value);
+    expect(typed).toContain('s3cret');
+    expect(typed).not.toContain('user@example.com');
+    expect(scripted.page.waitForTimeout).toHaveBeenCalled();
   });
 
   it('credential-leak guard: no console.log call contains the email or password', async () => {

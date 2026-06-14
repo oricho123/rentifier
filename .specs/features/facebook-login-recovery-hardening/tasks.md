@@ -154,6 +154,7 @@ T4, T5 → T6
 | T14: P6 tests + regression | 2 files | ✅ Granular |
 | T15: extend unknown-recovery to /login URLs + tests | 1 branch + 1 file | ✅ Granular |
 | T16: aymh_chooser state + click escape + tests | 1 state + 1 branch + 2 files | ✅ Granular |
+| T17: human-like credential typing + submit pause + tests | 2 handler arms + 2 files | ✅ Granular |
 
 ---
 
@@ -390,3 +391,35 @@ T16
 - [x] Attempt test: `aymh_chooser × 2` (button missing) ⇒ `{ success: false, reason: 'unknown_login_page' }`.
 - [x] No new fields containing cookies/credentials.
 - [x] Full repo `pnpm test` → 406 green (was 402); `pnpm -C packages/connectors exec tsc --noEmit` clean.
+
+---
+
+## Addendum (2026-06-14b): P9 — shipped in branch `fix/fb-human-like-credential-entry`
+
+### Phase G: Human-like credential entry (Sequential)
+
+```
+T17
+```
+
+---
+
+### T17: Replace `fill()` with `pressSequentially()` + add submit pause ✅ DONE
+
+**What**: The post-PR-#56 production run proved P8 escapes AYMH (`state:aymh_chooser → state:full_login` with creds form visible) but the `fill()`-then-immediate-submit pattern is silently rejected by FB on AYMH-flow forms — same URL, same form re-rendered, no banner, no navigation, no-progress bail. Replace `fill()` with `pressSequentially({ delay: HUMAN_TYPE_DELAY_MS })` in both `full_login` and `password_only` arms (real keystroke events instead of instant text insertion), and add `waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS)` before the submit click (humans don't post the instant the last character types).
+**Where**: `packages/connectors/src/facebook/login.ts` (constants + `attemptLogin`'s `full_login` and `password_only` arms); tests in `__tests__/login-attempt.test.ts` (mock `pressSequentially` + `waitForTimeout`, add 2 regression tests, expose new `typeCalls` array).
+**Depends on**: T16 (P8 baseline — its AYMH escape is the entry point that exposes the vulnerable `full_login` form).
+**Reuses**: existing `withNavigation`, `LOGIN_NAVIGATION_TIMEOUT_MS`, scripted-page test mock; the existing `fillCalls` array remains for backwards-compat with prior assertions.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [x] `HUMAN_TYPE_DELAY_MS = 50` and `HUMAN_PAUSE_BEFORE_SUBMIT_MS = 250` exported from `login.ts`.
+- [x] `full_login` arm: email + password typed via `pressSequentially({ delay: HUMAN_TYPE_DELAY_MS })`, then `waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS)`, then submit (no other behaviour changes).
+- [x] `password_only` arm: password typed via `pressSequentially`, then `waitForTimeout`, then Enter.
+- [x] Mock: `pressSequentially` writes to both `fillCalls` (keeps existing assertions green) and a new `typeCalls` array (P9 tests assert on this specifically).
+- [x] Mock: `page.waitForTimeout` is a no-op vi mock so tests don't actually sleep.
+- [x] Regression test: `full_login → home_feed` ⇒ `typeCalls` contains email + password, `waitForTimeout` was called.
+- [x] Regression test: `password_only → home_feed` ⇒ `typeCalls` contains password (NOT email), `waitForTimeout` was called.
+- [x] Existing credential-leak guard test still passes (no email/password in any captured log line).
+- [x] Full repo `pnpm test` → 408 green (was 406); `pnpm -C packages/connectors exec tsc --noEmit` clean; lint clean on changed files.
