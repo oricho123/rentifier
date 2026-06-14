@@ -215,6 +215,44 @@ The P5 buttonLabels + inputAttrs additions made this incident diagnosable from a
 - WHEN `FB_AUTO_LOGIN_ENABLED=false` OR credentials are absent THEN P3/P4 SHALL still apply at the classification level (no false-positive `home_feed`), and the existing gate SHALL surface `fb_login_skip{_no_credentials}` as before — the recovery navigation runs only inside `attemptLogin`, which only runs when the gate allows it.
 - WHEN the logged-out `/login` page renders SSO buttons (`Continue with Google`, `Continue with Apple`) alongside the email+pass form THEN classification SHALL NOT return `continue_as_user` (P6) — only an `aria-label^="Continue as"` button or an `a[href*="login_redirect"]` anchor counts as a saved-session entry.
 - WHEN `c_user`/`xs` cookies are both absent AND `continue_as_user` repeats with no progress THEN P6's force-credential recovery SHALL fire on the first repeat (before the no-progress bail) and the one-shot flag SHALL bound subsequent recovery attempts to one — a second `continue_as_user` repeat hits the normal no-progress guard.
+- WHEN FB serves the AYMH multi-profile chooser (hidden `aymh_profile_loaded_count` form field, visible buttons "Continue \<Name\>" / "Use another profile" / "Remove profiles from this browser") THEN classification SHALL return `aymh_chooser` (P8) — the bare-Name "Continue" button is intentionally NOT matched by `continueAsButton` and the aymhMarker hidden field is the locale-stable detector. The handler SHALL click "Use another profile" to reach the email+password form because `FORCE_CREDENTIAL_LOGIN_URL` does NOT bypass AYMH once device cookies are pinned.
+
+---
+
+## User Story 8 (P8): Recover from the AYMH multi-profile chooser by clicking the in-UI escape
+
+**Why**: A second 2026-06-14 production failure (after PR #55 merged) showed the AYMH chooser served on BOTH the original `/login/?next=...` URL AND the P7 force-credential URL `/login/?login_attempt=1&lwv=110`. The `datr`/`sb`/`fr` device cookies are enough for FB to pin the profile and serve AYMH on every login URL — URL navigation cannot escape it. The buttonLabels diagnostic from P5 had already named the escape hatch: `"Use another profile"`.
+
+**Failure trace (2026-06-14)**:
+
+```
+fb_login_step state:unknown url:/login/?next=...
+fb_page_fingerprint hasEmailInput:false hasPasswordInput:false
+                    hasCUserCookie:false hasXsCookie:false
+                    buttonLabels:["Remove profiles from this browser",
+                                  "Continue אורי לאל",
+                                  "Use another profile"]
+                    inputAttrs:[crypted_string, lsd, jazoest, aymh_profile_loaded_count, ...]
+fb_saved_session_invalidated detail:unknown_on_login_url           # P7 fired
+fb_login_step state:unknown url:/login/?login_attempt=1&lwv=110    # AYMH STILL served
+fb_login_failed reason:unknown_login_page detail:no_progress
+fb_account_disabled
+```
+
+**Acceptance Criteria**:
+
+1. WHEN `classifyLoginScreen` runs AND `input[name="aymh_profile_loaded_count"]` is present THEN it SHALL return `'aymh_chooser'` (priority above the `unknown` fall-through and below `continue_as_user` so the simpler "Continue as \<Name\>" path wins when both signals coexist).
+2. WHEN `attemptLogin` sees `state === 'aymh_chooser'` THEN it SHALL click `SELECTORS.useAnotherProfile` inside `withNavigation` and `continue` — exposing the standard email+password form on the next iteration.
+3. WHEN the click selector is missing (count is 0) THEN the handler SHALL skip the click and fall through; the next iteration re-classifies and the existing no-progress guard SHALL bail with `unknown_login_page` (no infinite loop).
+4. WHEN P7's `unknown` recovery would otherwise have fired on an AYMH page THEN P8's earlier classification of `aymh_chooser` SHALL take precedence — P7's force-credential URL is known to NOT bypass AYMH and would waste a step.
+5. WHEN `aymh_chooser` resolves to `full_login` after the click THEN the existing `full_login` handler SHALL fill credentials and reach `home_feed` for `{ success: true }`.
+
+**Independent Test**:
+
+- `classifyLoginScreen`: page with only `SELECTORS.aymhMarker: 1` ⇒ `'aymh_chooser'`.
+- `classifyLoginScreen`: page with `continueButtonHits: 1` AND `SELECTORS.aymhMarker: 1` ⇒ `'continue_as_user'` (priority defense).
+- `attemptLogin`: scripted sequence `aymh_chooser(useAnotherProfile=1) → full_login → home_feed` ⇒ `clickCalls` contains `SELECTORS.useAnotherProfile`, both creds filled, outcome `{ success: true }`.
+- `attemptLogin`: `aymh_chooser × 2` (button missing) ⇒ `{ success: false, reason: 'unknown_login_page' }` (defense against missing escape hatch).
 
 ---
 

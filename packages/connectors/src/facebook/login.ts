@@ -45,6 +45,18 @@ export const SELECTORS = {
   // diagnostics fingerprint probe so classifier and fingerprint can never
   // disagree on whether the saved-session UI is present.
   savedSessionShortcut: 'a[role="button"][href*="login_redirect"], a[href*="login_redirect"]',
+  // AYMH ("Are You My Human?") multi-profile chooser marker. A hidden form
+  // field unique to this saved-session UI variant — present even when no
+  // profile is shown ("Remove profiles from this browser" / "Use another
+  // profile" / "Continue <Name>" button set). The Continue button uses the
+  // bare profile Name (no "as" connector), so continueAsButton's aria-label
+  // prefix can't match it. Detection via this hidden field is locale-stable.
+  aymhMarker: 'input[name="aymh_profile_loaded_count"]',
+  // AYMH escape hatch. Clicking this surfaces the standard email+password
+  // form. aria-label exact match — "Use another profile" is unique enough
+  // that no Continue-style regex is needed; locale variants added defensively.
+  useAnotherProfile:
+    'div[role="button"][aria-label="Use another profile" i], div[role="button"][aria-label="השתמש בפרופיל אחר" i], div[role="button"][aria-label="Usar otro perfil" i], div[role="button"][aria-label="Utiliser un autre profil" i], div[role="button"][aria-label="Anderes Profil verwenden" i]',
 } as const;
 
 /** Clean credential-login URL — bypasses saved-session UI and exposes email+pass. */
@@ -60,6 +72,12 @@ export type LoginScreenState =
   | 'captcha'
   | 'two_factor'
   | 'continue_as_user'
+  // AYMH multi-profile chooser — saved-session UI variant where FB lists
+  // known device profiles. Detected via the `aymh_profile_loaded_count`
+  // hidden form field (continueAsButton aria-label prefix won't match). The
+  // FORCE_CREDENTIAL_LOGIN_URL fallback does NOT bypass it once the device
+  // cookies are pinned; the only escape is clicking "Use another profile".
+  | 'aymh_chooser'
   | 'password_only'
   | 'full_login'
   | 'invalid_credentials'
@@ -134,6 +152,13 @@ export async function classifyLoginScreen(page: Page): Promise<LoginScreenState>
 
   // Priority 5: continue-as-user (saved account)
   if (await continueButtonVisible(page)) return 'continue_as_user';
+
+  // Priority 5.5: AYMH multi-profile chooser. Distinct from continue_as_user
+  // because the visible "Continue <Name>" button doesn't match the tightened
+  // aria-label prefix and the form has no email/pass — the only escape is
+  // clicking "Use another profile". Detected via a hidden form field that's
+  // locale-stable and unique to this UI.
+  if (await exists(page, SELECTORS.aymhMarker)) return 'aymh_chooser';
 
   // Priority 6: password-only re-prompt (password input but no email field)
   const hasEmail = await exists(page, SELECTORS.emailInput);
@@ -306,6 +331,23 @@ export async function attemptLogin(
       if (state === 'continue_as_user') {
         await withNavigation(page, async () => {
           await clickFirstAvailable(continueAsLocators(page));
+        });
+        continue;
+      }
+
+      if (state === 'aymh_chooser') {
+        // Click "Use another profile" — the AYMH-internal escape hatch that
+        // exposes the standard email+password form. Force-navigating to the
+        // credential URL does NOT bypass AYMH once the device cookies pin a
+        // profile (FB serves AYMH on /login/?login_attempt=1&lwv=110 too),
+        // so this click is the only reliable escape. If the button is not
+        // present (no count match), the next iteration will re-classify as
+        // aymh_chooser and the no-progress guard will bail.
+        await withNavigation(page, async () => {
+          const escape = page.locator(SELECTORS.useAnotherProfile).first();
+          if ((await escape.count()) > 0) {
+            await escape.click({ timeout: LOGIN_NAVIGATION_TIMEOUT_MS });
+          }
         });
         continue;
       }

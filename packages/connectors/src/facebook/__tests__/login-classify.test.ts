@@ -147,6 +147,30 @@ describe('classifyLoginScreen', () => {
     expect(await classifyLoginScreen(page)).toBe('unknown');
   });
 
+  it('returns aymh_chooser when aymh marker hidden field is present', async () => {
+    // AYMH multi-profile chooser detected via the locale-stable hidden form
+    // field `aymh_profile_loaded_count`. The visible "Continue <Name>" /
+    // "Use another profile" buttons don't match `continueAsButton`, so this
+    // hidden marker is the only reliable detector.
+    const page = makePage({
+      url: LOGIN_URL,
+      selectors: { [SELECTORS.aymhMarker]: 1 },
+    });
+    expect(await classifyLoginScreen(page)).toBe('aymh_chooser');
+  });
+
+  it('priority: continue_as_user wins over aymh_chooser when both present', async () => {
+    // Defense: if FB ever renders both signals, prefer the simpler
+    // "Continue as <Name>" path — clicking it is cheaper than clicking
+    // "Use another profile" + filling credentials.
+    const page = makePage({
+      url: LOGIN_URL,
+      continueButtonHits: 1,
+      selectors: { [SELECTORS.aymhMarker]: 1 },
+    });
+    expect(await classifyLoginScreen(page)).toBe('continue_as_user');
+  });
+
   it('returns password_only when only password input present', async () => {
     const page = makePage({ url: LOGIN_URL, selectors: { [PASSWORD]: 1 } });
     expect(await classifyLoginScreen(page)).toBe('password_only');

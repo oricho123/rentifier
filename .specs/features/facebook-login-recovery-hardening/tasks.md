@@ -153,6 +153,7 @@ T4, T5 → T6
 | T13: continue_as_user no-progress recovery | 1 branch | ✅ Granular |
 | T14: P6 tests + regression | 2 files | ✅ Granular |
 | T15: extend unknown-recovery to /login URLs + tests | 1 branch + 1 file | ✅ Granular |
+| T16: aymh_chooser state + click escape + tests | 1 state + 1 branch + 2 files | ✅ Granular |
 
 ---
 
@@ -356,3 +357,36 @@ T15
 - [x] Success test: `unknown(LOGIN_URL) → full_login → home_feed` with a `fb_saved_session_invalidated detail:'unknown_on_login_url'` log line and credentials filled.
 - [x] Existing P4 / P6 tests still pass (the shared flag does not disturb either path).
 - [x] Full repo `pnpm test` → 402 green; `pnpm -C packages/connectors exec tsc --noEmit` clean.
+
+---
+
+## Addendum (2026-06-14): P8 — shipped in branch `fix/fb-aymh-chooser-click-escape`
+
+### Phase F: AYMH state + click escape (Sequential)
+
+```
+T16
+```
+
+---
+
+### T16: Add `aymh_chooser` classifier state + click "Use another profile" handler ✅ DONE
+
+**What**: The 2026-06-14 production failure proved that the P7 force-credential URL does NOT bypass FB's AYMH multi-profile chooser once device cookies pin a profile — both `/login/?next=...` and `/login/?login_attempt=1&lwv=110` served AYMH on the same run. Add a real `'aymh_chooser'` `LoginScreenState` detected via the locale-stable hidden form field `input[name="aymh_profile_loaded_count"]`, and a handler that clicks the AYMH-internal escape button `Use another profile` to surface the standard email+password form. Reverses the P7 "no new state" decision specifically for this variant — confirmed-second-variant warrants a typed state.
+**Where**: `packages/connectors/src/facebook/login.ts` (`SELECTORS`, `LoginScreenState`, `classifyLoginScreen`, `attemptLogin`); tests in `__tests__/login-classify.test.ts` + `__tests__/login-attempt.test.ts`.
+**Depends on**: T15 (P7 baseline — its `unknown`-on-`/login` recovery now serves as the fallback for non-AYMH unknowns).
+**Reuses**: existing `withNavigation`, `LOGIN_NAVIGATION_TIMEOUT_MS`, `exists`, classifier priority-ladder structure, scripted-page test mocks.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [x] `SELECTORS.aymhMarker` and `SELECTORS.useAnotherProfile` added (5-locale aria-label exact match, no Continue-style regex).
+- [x] `'aymh_chooser'` added to `LoginScreenState` union with comment explaining why it's distinct from `continue_as_user`.
+- [x] Classifier branch placed between `continue_as_user` (priority 5) and `password_only` (priority 6) — `continue_as_user` wins when both signals coexist (cheaper path).
+- [x] `attemptLogin` handler clicks `useAnotherProfile` inside `withNavigation`; missing button → skip click, no-progress guard handles bail.
+- [x] Classifier test: `aymhMarker: 1` only ⇒ `'aymh_chooser'`.
+- [x] Classifier test: `continueButtonHits: 1` AND `aymhMarker: 1` ⇒ `'continue_as_user'` (priority defense).
+- [x] Attempt test: `aymh_chooser(useAnotherProfile=1) → full_login → home_feed` ⇒ `clickCalls` contains `useAnotherProfile`, creds filled, `{ success: true }`.
+- [x] Attempt test: `aymh_chooser × 2` (button missing) ⇒ `{ success: false, reason: 'unknown_login_page' }`.
+- [x] No new fields containing cookies/credentials.
+- [x] Full repo `pnpm test` → 406 green (was 402); `pnpm -C packages/connectors exec tsc --noEmit` clean.
