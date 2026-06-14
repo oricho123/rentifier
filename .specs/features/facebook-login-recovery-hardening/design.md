@@ -366,3 +366,97 @@ No type / state / fingerprint changes. The recovery now writes a `detail` field 
 | Extend existing branch vs new state | Extend | Adding `'aymh_chooser'` to `LoginScreenState` requires a new handler and percolates through the type union for one variant we don't expect to see again unchanged. The existing recovery already does the right thing — it just wasn't being reached |
 | Share `didForceCredentialRecovery` across P4 / P6 / P7 | Yes — single flag | At most one force-credential per `attemptLogin` call. If recovery from path X didn't reach the credential form, recovery from path Y won't either — bail instead of looping |
 | URL gate (`/login\b`) | Yes | Without the gate, an `unknown` mid-feed-load would force-navigate away. With the gate, only login-shaped URLs (`/login/`, `/login.php`) qualify — the canonical FB login URLs |
+
+---
+
+## Addendum (2026-06-14): P8 — recover from the AYMH chooser by clicking "Use another profile"
+
+The 2026-06-14 production run (after PR #55 merged) showed P7 firing exactly as designed — `fb_saved_session_invalidated detail:'unknown_on_login_url'` on step 0 — followed by the recovery navigation **landing on the same AYMH chooser** at `/login/?login_attempt=1&lwv=110`. The premise of P7 ("the credential URL bypasses *every* saved-session UI variant") is false: once the device cookies (`datr`, `sb`, `fr`) pin a profile, FB serves AYMH on every login URL. URL navigation cannot escape it — the only escape is the AYMH-internal "Use another profile" button.
+
+This addendum reverses the P7 "extend existing branch vs new state" decision for the AYMH case specifically: we now have a confirmed second variant of the saved-session UI that requires a click, not a navigate. A real classifier state (`aymh_chooser`) and a dedicated handler are warranted.
+
+### Architecture delta
+
+- New `LoginScreenState`: `'aymh_chooser'`. Detected via `SELECTORS.aymhMarker = 'input[name="aymh_profile_loaded_count"]'` — a hidden form field unique to this UI, locale-stable.
+- Classifier priority: between `continue_as_user` (priority 5) and `password_only` (priority 6). When both signals coexist (defensive case), `continue_as_user` wins because clicking it is cheaper than the AYMH escape + credential entry.
+- New handler in `attemptLogin`: clicks `SELECTORS.useAnotherProfile` inside `withNavigation`. If the button isn't present, the click is skipped; the next iteration re-classifies, and the existing no-progress guard bails.
+- P7's `unknown`-on-`/login` recovery is unchanged — it now serves as the fallback for *non*-AYMH unknown variants. AYMH no longer reaches that branch because it classifies earlier.
+
+```mermaid
+graph TD
+    C{classifyLoginScreen}
+    C -->|"aymh_profile_loaded_count present (NEW P8)"| H8["click 'Use another profile' → continue"]
+    C -->|"continue_as_user button (P6)"| H6["click → continue"]
+    C -->|"unknown on /login URL (P7)"| R7["goto FORCE_CREDENTIAL_LOGIN_URL"]
+    H8 -->|"surfaces email+pass form"| C
+    H6 --> C
+    R7 --> C
+```
+
+### Components (delta)
+
+#### `SELECTORS` (add two)
+
+```ts
+aymhMarker: 'input[name="aymh_profile_loaded_count"]',
+useAnotherProfile:
+  'div[role="button"][aria-label="Use another profile" i], div[role="button"][aria-label="השתמש בפרופיל אחר" i], div[role="button"][aria-label="Usar otro perfil" i], div[role="button"][aria-label="Utiliser un autre profil" i], div[role="button"][aria-label="Anderes Profil verwenden" i]',
+```
+
+#### `classifyLoginScreen()` (modify — new branch between continue_as_user and password_only)
+
+```ts
+if (await continueButtonVisible(page)) return 'continue_as_user';
+if (await exists(page, SELECTORS.aymhMarker)) return 'aymh_chooser';
+```
+
+#### `attemptLogin()` (modify — new handler arm)
+
+```ts
+if (state === 'aymh_chooser') {
+  await withNavigation(page, async () => {
+    const escape = page.locator(SELECTORS.useAnotherProfile).first();
+    if ((await escape.count()) > 0) {
+      await escape.click({ timeout: LOGIN_NAVIGATION_TIMEOUT_MS });
+    }
+  });
+  continue;
+}
+```
+
+### Data Models (delta)
+
+`LoginScreenState` gains `'aymh_chooser'`. No fingerprint or log-event additions — the existing P5 buttonLabels + inputAttrs already capture every AYMH signal we'd need for post-mortems.
+
+### Tech Decisions (delta)
+
+| Decision | Choice | Rationale |
+| -------- | ------ | --------- |
+| New state vs. extend P7 | New `aymh_chooser` state | The P7 premise (credential URL bypasses all variants) was disproven by a real run. AYMH requires interaction, not navigation. A dedicated state and handler is the right shape — the no-progress guard works correctly when the action is well-typed |
+| Detector: hidden form field vs. button text | Hidden field (`aymh_profile_loaded_count`) | Locale-stable (English regardless of `Accept-Language`), survives FB UI text changes, doesn't compete with `continueAsButton`. Button text would re-introduce the loose-regex risk we removed in P6 |
+| Click selector: aria-label exact vs. text content | aria-label exact match (5 locales) | Same pattern as `loginSubmit`, `saveLoginNotNow`. "Use another profile" is unambiguous so no regex needed; locale variants added defensively for non-English profiles |
+| Priority: above or below continue_as_user | Below | Clicking "Continue as \<Name\>" is one step + zero credential typing; "Use another profile" + full_login is two steps + credential typing. Prefer the cheaper path when both are available |
+| Reverse the P7 "no new state" decision | Yes | P7's stance was based on the credential URL being a universal escape. Once that premise broke, the cost/benefit flipped: a typed state + handler is cheaper than a chain of failing URL fallbacks |
+
+### FB Login UI Variants Catalog (cumulative — for future incident triage)
+
+When a new fingerprint shows a UI shape not in this list, that's the signal to add a variant — don't try to bend an existing handler.
+
+| Variant | Distinguishing fingerprint | Handler | Added in |
+| ------- | -------------------------- | ------- | -------- |
+| `home_feed` | `feedRoot` + `loggedInChrome`, no email/pass | success | baseline |
+| `full_login` | `emailInput` + `passwordInput` | fill creds + submit | baseline |
+| `password_only` | `passwordInput` only | fill pass | baseline |
+| `continue_as_user` (saved session) | `continueAsButton` aria-label `^="Continue as"` OR `a[href*="login_redirect"]` | click | baseline / tightened in P6 |
+| `redirecting` (login interstitial) | URL contains `crypted_string` | wait for URL drop | P1/P2 |
+| `aymh_chooser` (multi-profile) | hidden `input[name="aymh_profile_loaded_count"]` | click `useAnotherProfile` | P8 |
+| `checkpoint`, `captcha`, `two_factor`, `invalid_credentials`, `save_login_prompt`, `cookie_consent` | URL or selector match | dismiss / fail | baseline |
+| `unknown` (catch-all) | nothing else matched | P4/P6/P7 recovery → no-progress bail | baseline / P3+P4 |
+
+Recovery escape paths are not interchangeable:
+
+| Escape | Bypasses | Does NOT bypass |
+| ------ | -------- | --------------- |
+| `FORCE_CREDENTIAL_LOGIN_URL` (`/login/?login_attempt=1&lwv=110`) | `continue_as_user` (revoked-session shell), `redirecting` interstitial fakeout, generic `unknown` on `/login` | AYMH multi-profile chooser (device cookies pin profile) |
+| Click `useAnotherProfile` (P8) | AYMH chooser → exposes `full_login` | (only available when AYMH is present) |
+| Click `continueAsLocators` (saved-session entry) | (only available when continue_as_user is present) | revoked sessions where the click is a no-op (P6 falls back to URL nav) |
