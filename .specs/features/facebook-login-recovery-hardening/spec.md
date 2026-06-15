@@ -256,6 +256,42 @@ fb_account_disabled
 
 ---
 
+## User Story 9 (P9): Type credentials with human-like keystroke cadence to defeat silent bot rejection
+
+**Why**: After P8 shipped (PR #56), the next 2026-06-14 production run progressed past AYMH (`state:aymh_chooser` → click "Use another profile" → `state:full_login`) but failed at credential submit. Two consecutive `full_login` iterations with identical email/pass selectors, identical URL, htmlLen growing by 2KB, and "Show password" button appearing in step 2's buttonLabels (proving password DID type) — but no navigation, no `invalid_credentials` banner. The no-progress guard then bailed.
+
+The fingerprint shape — same form re-rendered, no banner, no navigation, all on a fully-revoked-session profile (`hasCUserCookie:false`, `hasXsCookie:false`) — is consistent with **silent bot rejection**: FB's login flow fingerprints input behaviour, and `locator.fill()` inserts text instantaneously without keystroke events. The fix is to type credentials with realistic per-character delays.
+
+**Failure trace (2026-06-14, post-PR #56)**:
+
+```
+fb_login_step state:aymh_chooser url:/login/?next=...     # P8 ✅
+fb_login_step state:full_login   url:/login/?next=...     # AYMH escaped, creds form visible
+                buttonLabels:["Back to account switcher","Log In"]
+                inputAttrs:[email, pass, submit]
+fb_login_step state:full_login   url:/login/?next=...     # SAME URL, SAME state, htmlLen+2KB
+                buttonLabels:["Back to account switcher","Show password","Log In"]
+                                                          # ↑ "Show password" — pass DID type
+fb_login_failed reason:unknown_login_page detail:no_progress
+fb_account_disabled
+```
+
+**Acceptance Criteria**:
+
+1. WHEN `attemptLogin` handles `state === 'full_login'` THEN it SHALL type the email via `locator.pressSequentially(email, { delay: HUMAN_TYPE_DELAY_MS })` and the password via `locator.pressSequentially(password, { delay: HUMAN_TYPE_DELAY_MS })` — NOT via `locator.fill()`.
+2. WHEN `attemptLogin` handles `state === 'password_only'` THEN it SHALL type the password via `pressSequentially` with the same delay.
+3. WHEN credentials have been entered AND the submit click/Enter is about to fire THEN `attemptLogin` SHALL `await page.waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS)` first — humans don't post the instant the last character types.
+4. WHEN credentials have been entered THEN no part of the email or password SHALL appear in any log payload (the existing credential-leak guard test continues to pass — `pressSequentially` does not expose the value through diagnostics).
+5. WHEN `HUMAN_TYPE_DELAY_MS` and `HUMAN_PAUSE_BEFORE_SUBMIT_MS` are exported constants THEN they SHALL be tunable from production env if FB tightens detection further (left as a constant for now; env-knob is a follow-up if needed).
+
+**Independent Test**:
+
+- `attemptLogin`: `full_login → home_feed` ⇒ `pressSequentially` called for both email + password (tracked via the new `typeCalls` array on the scripted-page mock), `waitForTimeout` called at least once, outcome `{ success: true }`.
+- `attemptLogin`: `password_only → home_feed` ⇒ `pressSequentially` called for password only, `waitForTimeout` called, outcome `{ success: true }`.
+- Existing credential-leak guard test still passes (no email/password in any captured log line).
+
+---
+
 ## Success Criteria
 
 - [ ] No `fb_login_success` is emitted while the page URL still contains `crypted_string=`.
