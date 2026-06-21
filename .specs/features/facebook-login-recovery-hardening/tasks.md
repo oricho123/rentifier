@@ -423,3 +423,54 @@ T17
 - [x] Regression test: `password_only → home_feed` ⇒ `typeCalls` contains password (NOT email), `waitForTimeout` was called.
 - [x] Existing credential-leak guard test still passes (no email/password in any captured log line).
 - [x] Full repo `pnpm test` → 408 green (was 406); `pnpm -C packages/connectors exec tsc --noEmit` clean; lint clean on changed files.
+
+---
+
+## Addendum (2026-06-21): P10 + P11 — shipped in branch `fix/fb-aymh-remove-profiles-escape`
+
+### Phase H: AYMH escape — "Remove profiles from this browser" + workflow-failure exit code
+
+```
+T18 → T19
+```
+
+---
+
+### T18: Replace AYMH escape with "Remove profiles from this browser" click ✅ DONE
+
+**What**: The 2026-06-21 production run proved P8's "Use another profile" click is NOT an AYMH escape — clicking it just submits the AYMH form with `aymh_profile_loaded_count+1` and FB re-serves AYMH because device cookies (`datr`, `sb`, `fr`, `dpr`, `wd`, `ps_l`, `ps_n`) still pin the profile (two consecutive `state:aymh_chooser` steps with same URL, identical `buttonLabels`, htmlLen growing by 3.6KB). The real escape — visible in every AYMH `buttonLabels` fingerprint we've collected — is **"Remove profiles from this browser"**, the AYMH-internal action that clears the device-pinned profile fingerprint and exposes the bare credential form. Same anchoring-failure mode that the PLAYBOOK warned about (`P7`→`P8`): when AYMH renders unchanged on a second iteration, the escape's premise was wrong — switch escape, don't loop.
+**Where**: `packages/connectors/src/facebook/login.ts` (replace `useAnotherProfile` SELECTOR with `removeProfilesFromBrowser`; update `LoginScreenState` AYMH comment; update `aymh_chooser` handler); tests in `__tests__/login-attempt.test.ts` (rename existing P8 happy-path test, swap selector references). Classifier tests need no change — detection is still keyed on the hidden `aymh_profile_loaded_count` field.
+**Depends on**: T16 (P8 baseline — same handler arm, same `withNavigation` wrapper, same "click best-effort, let no-progress guard bail otherwise" semantics).
+**Reuses**: existing `withNavigation`, `LOGIN_NAVIGATION_TIMEOUT_MS`, multi-locale aria-label pattern from `useAnotherProfile`/`continueAsButton`, P9 typing cadence for the subsequent `full_login` step.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [x] `SELECTORS.removeProfilesFromBrowser` exported with English + Hebrew (masculine + feminine) + Spanish + French + German aria-label exact-matches.
+- [x] `SELECTORS.useAnotherProfile` removed (P8's escape replaced — no dead reference left behind).
+- [x] `aymh_chooser` handler clicks `removeProfilesFromBrowser` inside `withNavigation`; missing button → skip click, no-progress guard handles bail.
+- [x] `LoginScreenState` AYMH comment block reflects the new escape mechanism and explicitly references the 2026-06-21 disproof of "Use another profile".
+- [x] Attempt test renamed to reflect the new click target; asserts `clickCalls` contains `removeProfilesFromBrowser`.
+- [x] Attempt defense test (escape button missing) still passes: `aymh_chooser × 2` ⇒ `{ success: false, reason: 'unknown_login_page' }`, no loop.
+- [x] Classifier tests for `aymh_chooser` unchanged and green.
+- [x] No new fields containing cookies/credentials.
+- [x] Full repo `pnpm test` green; `pnpm -C packages/connectors exec tsc --noEmit` clean.
+
+---
+
+### T19: Exit non-zero from collect-facebook.ts when all accounts are disabled ✅ DONE
+
+**What**: The 2026-06-21 incident showed every right signal (`fb_account_disabled`, `fb_admin_notify_sent`) but GitHub Actions still showed the cron tick as ✅ green because the connector returned `{ candidates: [], nextCursor }` cleanly (it broke out of the per-account loop on `auth_expired`, persisted `disabledAccounts`, and returned), so `collect_fetched`/`collect_complete` fired and `process.exit(1)` never ran. Surface the failure in run history by exiting non-zero when the final cursor's `disabledAccounts.length` equals `getAccounts().length`. Partial collection (1+ account still working) stays green.
+**Where**: `scripts/collect-facebook.ts` (import `getAccounts`, parse final cursor's `disabledAccounts`, compare counts, log `collect_failed_all_accounts_disabled`, `process.exit(1)` after `cleanup()`).
+**Depends on**: none — pure observability glue, independent of the login.ts P10 change.
+**Reuses**: existing `getAccounts()` helper, existing `JSON.parse(nextCursor)` pattern from the admin-notify block above it.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [x] After `collect_complete` + `cleanup()`, the script checks `totalAccounts = getAccounts().length` and `disabledAccounts.length` from the final cursor.
+- [x] When all accounts are disabled, logs `collect_failed_all_accounts_disabled` with `{ totalAccounts, disabledCount }` and `process.exit(1)`.
+- [x] When at least one account remains usable, the script exits 0 (no behaviour change for partial-success cron ticks).
+- [x] Cursor-parse failure falls through to the existing success path (no false-negative failure from malformed JSON).
+- [x] No new admin notification — the per-account `notifyAdminCookieExpiry` calls already informed the operator; the workflow-failure signal is for GitHub Actions surfacing only.
+- [x] `pnpm -C packages/connectors exec tsc --noEmit` clean (no new types needed); manual code-read confirms the exit path is downstream of `cleanup()`.
