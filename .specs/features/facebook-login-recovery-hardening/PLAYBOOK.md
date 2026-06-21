@@ -52,7 +52,8 @@ When adding a variant:
 
 The matrix in `design.md` says which escape bypasses which variant. Some highlights:
 
-- `FORCE_CREDENTIAL_LOGIN_URL` does **NOT** bypass AYMH (device cookies pin the profile). Click `useAnotherProfile` instead.
+- `FORCE_CREDENTIAL_LOGIN_URL` does **NOT** bypass AYMH (device cookies pin the profile).
+- `useAnotherProfile` does **NOT** bypass AYMH either — clicking it just submits the AYMH form with `aymh_profile_loaded_count+1` and FB re-serves AYMH (disproved 2026-06-21, P10). Click `removeProfilesFromBrowser` instead — that's the AYMH-internal action that clears the device-pinned profile fingerprint.
 - Clicking a saved-session button on a fully-revoked session is a no-op — P6 falls back to URL nav after a same-state repeat.
 - `pressSequentially` (P9) is the credential-entry path, not `fill()` — FB fingerprints instant text insertion.
 
@@ -104,3 +105,4 @@ These are non-negotiable. A fix that violates one of these is wrong even if the 
 - **Per-variant `unknown` recovery branches.** P4/P6/P7 share one `didForceCredentialRecovery` flag for a reason: at most one force-credential per `attemptLogin` call regardless of trigger path. New recovery branches must respect that one-shot semantics or add their own.
 - **DOM dumps in fingerprints.** Considered and rejected: 535KB × N steps overflows GH Actions logs, and post/group text in user-content would leak. The structured fingerprint already exposes every signal we've needed.
 - **Retry loops on `full_login` no-progress.** Looks like a fix, actually a lockout vector — silent rejection is indistinguishable from a wrong-credentials brute-force from FB's side. Fix the input fingerprint first (P9), revisit only if insufficient.
+- **Silent green cron ticks when accounts get disabled.** Pre-P11, `collect-facebook.ts` only exited non-zero on `connector.fetchNew()` throws; with AYMH-flow failures the connector returned `{ candidates: [], nextCursor }` cleanly so `process.exit(1)` never ran. Telegram fired but GitHub Actions stayed green and the incident was invisible in run history. P11 adds a post-`collect_complete` check: if `disabledAccounts.length === getAccounts().length`, log `collect_failed_all_accounts_disabled` and `process.exit(1)`. Per-account notifications aren't enough — the workflow run history needs to surface the failure too.

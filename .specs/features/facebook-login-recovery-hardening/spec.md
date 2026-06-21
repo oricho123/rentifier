@@ -292,6 +292,60 @@ fb_account_disabled
 
 ---
 
+## User Story 10 (P10): Click "Remove profiles from this browser" to truly escape AYMH
+
+**Why**: After P8 shipped, P10's 2026-06-21 production trace showed two consecutive `state:aymh_chooser` steps — the P8 click on "Use another profile" *did* fire (htmlLen 536437 → 540120, page re-rendered) but FB served AYMH again. The fingerprint's `buttonLabels` made the actual escape obvious in retrospect: `["Remove profiles from this browser","Continue אורי לאל","Use another profile"]`. Clicking "Use another profile" merely submits the AYMH form with `aymh_profile_loaded_count+1`; the device cookies (`datr`, `sb`, `fr`, `dpr`, `wd`, `ps_l`, `ps_n`) still pin the profile so FB renders AYMH again. The AYMH-internal action that actually clears the device-pinned fingerprint and exposes the bare credential form is "Remove profiles from this browser".
+
+This is the same anchoring failure mode that the PLAYBOOK already warned about: P7 trusted `FORCE_CREDENTIAL_LOGIN_URL` as a universal escape; P8 trusted "Use another profile". When the next AYMH step renders unchanged, the escape's premise was wrong — switch escape, don't loop.
+
+**Failure trace (2026-06-21, post-PR #57)**:
+
+```
+fb_login_step step:0 state:aymh_chooser
+                buttonLabels:["Remove profiles from this browser","Continue אורי לאל","Use another profile"]
+                cookieNames:["datr","dpr","fr","ps_l","ps_n","sb","wd"]  hasCUserCookie:false hasXsCookie:false
+                htmlLen:536437
+fb_login_step step:1 state:aymh_chooser   # SAME URL, SAME state — "Use another profile" click was a no-op escape
+                buttonLabels:["Remove profiles from this browser","Continue אורי לאל","Use another profile"]
+                htmlLen:540120                                            # +3.6KB, FB re-rendered AYMH
+fb_login_failed reason:unknown_login_page detail:no_progress
+fb_account_disabled
+```
+
+**Acceptance Criteria**:
+
+1. WHEN `attemptLogin` handles `state === 'aymh_chooser'` THEN it SHALL click the `removeProfilesFromBrowser` selector (multi-locale exact aria-label match), NOT `useAnotherProfile`.
+2. WHEN the `removeProfilesFromBrowser` selector matches zero elements (locale variant we haven't covered, FB UI change) THEN the handler SHALL skip the click and let the no-progress guard bail on the next iteration — it MUST NOT loop.
+3. WHEN the click succeeds AND FB exposes the bare credential form THEN the next `classifyLoginScreen` iteration SHALL return `full_login`, and the existing P9 typing cadence handles the rest.
+4. WHEN the `useAnotherProfile` selector is removed from `SELECTORS` THEN no other handler/test SHALL reference it (P8's escape is fully replaced — keeping it would invite re-introduction of the broken click).
+5. WHEN locale variants exist for "Remove profiles from this browser" THEN at minimum English + Hebrew (masculine + feminine) + Spanish + French + German aria-label exact-matches SHALL be present, matching the locale set of `continueAsButton` and the prior `useAnotherProfile`.
+
+**Independent Test**:
+
+- `attemptLogin`: `aymh_chooser` (with `removeProfilesFromBrowser` present) → `full_login` → `home_feed` ⇒ `removeProfilesFromBrowser` selector clicked, credentials typed via `pressSequentially`, outcome `{ success: true }`.
+- `attemptLogin`: `aymh_chooser × 2` (escape button absent) ⇒ outcome `{ success: false, reason: 'unknown_login_page' }`, no infinite loop.
+- Classifier tests for `aymh_chooser` continue to pass — detection is unchanged (still keyed on the hidden `aymh_profile_loaded_count` field).
+
+---
+
+## User Story 11 (P11): Exit the GitHub Actions run non-zero when all accounts get disabled
+
+**Why**: The 2026-06-21 incident showed the right log signal (`fb_account_disabled` + `fb_admin_notify_sent`) but the workflow run was reported as ✅ green because `scripts/collect-facebook.ts` only calls `process.exit(1)` when `connector.fetchNew(...)` *throws*. With the AYMH P10-failure path the connector returned `{ candidates: [], nextCursor }` cleanly (it broke out of the per-account loop on the auth_expired classification, persisted `disabledAccounts`, and returned), so `collect_fetched`/`collect_complete` fired, the script exited 0, and the GitHub Actions UI showed a successful cron tick. The admin received the Telegram alert but the run history hid the failure — a silent ⚠️→✅ regression in observability.
+
+**Acceptance Criteria**:
+
+1. WHEN the final cursor's `disabledAccounts.length` equals `getAccounts().length` (every configured FB_COOKIES_N is disabled) THEN `collect-facebook.ts` SHALL `process.exit(1)` after logging a structured `collect_failed_all_accounts_disabled` event with `{ totalAccounts, disabledCount }`.
+2. WHEN at least one account remains usable (`disabledAccounts.length < getAccounts().length`) THEN the script SHALL continue to exit 0 even if a per-account `fb_admin_notify_sent` fired — partial collection success stays green.
+3. WHEN the cursor cannot be parsed THEN the script SHALL fall through to the existing successful-exit path (no false-negative failure from a malformed cursor).
+4. The non-zero exit SHALL happen AFTER `collect_complete` and AFTER `cleanup()` so the D1 state and Wrangler lock are already released.
+5. No new admin notification SHALL be emitted on the exit — the per-account `notifyAdminCookieExpiry` calls already informed the operator; the workflow-failure signal is for GitHub Actions surfacing, not for the human.
+
+**Independent Test**:
+
+- This is glue between `collect-facebook.ts` and `getAccounts()`; verification is by manual cron simulation (or future targeted unit test on the exit-decision helper).
+
+---
+
 ## Success Criteria
 
 - [ ] No `fb_login_success` is emitted while the page URL still contains `crypted_string=`.
