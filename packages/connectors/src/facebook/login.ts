@@ -63,11 +63,15 @@ export const SELECTORS = {
   // bare profile Name (no "as" connector), so continueAsButton's aria-label
   // prefix can't match it. Detection via this hidden field is locale-stable.
   aymhMarker: 'input[name="aymh_profile_loaded_count"]',
-  // AYMH escape hatch. Clicking this surfaces the standard email+password
-  // form. aria-label exact match — "Use another profile" is unique enough
-  // that no Continue-style regex is needed; locale variants added defensively.
-  useAnotherProfile:
-    'div[role="button"][aria-label="Use another profile" i], div[role="button"][aria-label="השתמש בפרופיל אחר" i], div[role="button"][aria-label="Usar otro perfil" i], div[role="button"][aria-label="Utiliser un autre profil" i], div[role="button"][aria-label="Anderes Profil verwenden" i]',
+  // AYMH escape hatch — the *real* one. Production 2026-06-21 proved that
+  // clicking "Use another profile" submits the AYMH form with
+  // `aymh_profile_loaded_count+1` and FB just re-serves AYMH because the
+  // device cookies (datr, sb, fr, dpr, wd, ps_l, ps_n) still pin the profile.
+  // "Remove profiles from this browser" is the AYMH-internal action that
+  // clears the device-pinned profile fingerprint and exposes the bare
+  // credential form. aria-label exact match; locale variants added defensively.
+  removeProfilesFromBrowser:
+    'div[role="button"][aria-label="Remove profiles from this browser" i], div[role="button"][aria-label="הסר פרופילים מדפדפן זה" i], div[role="button"][aria-label="הסירי פרופילים מדפדפן זה" i], div[role="button"][aria-label="Eliminar perfiles de este navegador" i], div[role="button"][aria-label="Supprimer les profils de ce navigateur" i], div[role="button"][aria-label="Profile aus diesem Browser entfernen" i]',
 } as const;
 
 /** Clean credential-login URL — bypasses saved-session UI and exposes email+pass. */
@@ -87,7 +91,10 @@ export type LoginScreenState =
   // known device profiles. Detected via the `aymh_profile_loaded_count`
   // hidden form field (continueAsButton aria-label prefix won't match). The
   // FORCE_CREDENTIAL_LOGIN_URL fallback does NOT bypass it once the device
-  // cookies are pinned; the only escape is clicking "Use another profile".
+  // cookies are pinned, and neither does "Use another profile" (production
+  // 2026-06-21 showed FB re-serves AYMH on `aymh_profile_loaded_count+1`).
+  // The reliable escape is clicking "Remove profiles from this browser",
+  // which clears the device-pinned profile fingerprint.
   | 'aymh_chooser'
   | 'password_only'
   | 'full_login'
@@ -347,15 +354,17 @@ export async function attemptLogin(
       }
 
       if (state === 'aymh_chooser') {
-        // Click "Use another profile" — the AYMH-internal escape hatch that
-        // exposes the standard email+password form. Force-navigating to the
-        // credential URL does NOT bypass AYMH once the device cookies pin a
-        // profile (FB serves AYMH on /login/?login_attempt=1&lwv=110 too),
-        // so this click is the only reliable escape. If the button is not
-        // present (no count match), the next iteration will re-classify as
-        // aymh_chooser and the no-progress guard will bail.
+        // Click "Remove profiles from this browser" — the AYMH-internal
+        // action that clears the device-pinned profile fingerprint and
+        // exposes the bare credential form. Force-navigating to the
+        // credential URL does NOT bypass AYMH once device cookies pin a
+        // profile, and clicking "Use another profile" just submits the
+        // AYMH form with `aymh_profile_loaded_count+1` so FB re-serves
+        // AYMH (production 2026-06-21). If the button is not present, the
+        // next iteration re-classifies as aymh_chooser and the no-progress
+        // guard will bail.
         await withNavigation(page, async () => {
-          const escape = page.locator(SELECTORS.useAnotherProfile).first();
+          const escape = page.locator(SELECTORS.removeProfilesFromBrowser).first();
           if ((await escape.count()) > 0) {
             await escape.click({ timeout: LOGIN_NAVIGATION_TIMEOUT_MS });
           }

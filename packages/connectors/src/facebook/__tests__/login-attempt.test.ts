@@ -449,19 +449,18 @@ describe('attemptLogin', () => {
     expect(filled).toContain('s3cret');
   });
 
-  it('aymh_chooser → click Use another profile → full_login → home_feed', async () => {
-    // Reproduces the production 2026-06-14 failure: FB served the AYMH
-    // ("Are You My Human?") chooser on /login/?next=... and the P7
-    // force-credential URL (login_attempt=1&lwv=110) ALSO returned AYMH
-    // because the device cookies were enough to pin the profile. The only
-    // reliable escape is clicking the AYMH-internal "Use another profile"
-    // button to surface the standard email+password form. The new
-    // aymh_chooser state and handler do exactly that.
+  it('aymh_chooser → click Remove profiles from this browser → full_login → home_feed', async () => {
+    // Reproduces the production 2026-06-21 failure (P10): the prior P8
+    // escape — clicking "Use another profile" — re-served AYMH because FB
+    // treats it as another form submission with the device cookies still
+    // pinning the profile. The only AYMH-internal action that clears the
+    // device-pinned profile fingerprint is "Remove profiles from this
+    // browser". The aymh_chooser handler clicks that button instead.
     const scripted = makeScriptedPage({
       steps: [
         {
           url: LOGIN_URL,
-          selectors: { [SELECTORS.aymhMarker]: 1, [SELECTORS.useAnotherProfile]: 1 },
+          selectors: { [SELECTORS.aymhMarker]: 1, [SELECTORS.removeProfilesFromBrowser]: 1 },
         },
         { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
         { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
@@ -474,14 +473,14 @@ describe('attemptLogin', () => {
     });
 
     expect(out).toEqual({ success: true });
-    expect(scripted.clickCalls).toContain(SELECTORS.useAnotherProfile);
+    expect(scripted.clickCalls).toContain(SELECTORS.removeProfilesFromBrowser);
     const filled = scripted.fillCalls.map((c) => c.value);
     expect(filled).toContain('user@example.com');
     expect(filled).toContain('s3cret');
   });
 
   it('aymh_chooser persists (escape button missing) → no-progress bail', async () => {
-    // Defense: if FB renders AYMH but the "Use another profile" button is
+    // Defense: if FB renders AYMH but the "Remove profiles" button is
     // absent (or the click is a no-op), the handler skips the click, the
     // next iteration re-classifies as aymh_chooser, and the standard
     // no-progress guard bails with `unknown_login_page`. We do NOT loop.
