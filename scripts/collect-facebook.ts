@@ -20,6 +20,7 @@
  */
 
 import { FacebookConnector } from '@rentifier/connectors/src/facebook';
+import { getAccounts } from '@rentifier/connectors/src/facebook/accounts';
 import type { LoginFailureReason, LoginOutcome } from '@rentifier/connectors/src/facebook/types';
 import { createRestDBFromEnv } from '@rentifier/db';
 import type { DB } from '@rentifier/db';
@@ -246,6 +247,33 @@ async function main() {
   );
 
   if (cleanup) await cleanup();
+
+  // If every configured account is disabled the cron tick produced no usable
+  // collection AND the operator has already been admin-notified per account.
+  // Surface that as a workflow-run failure so GitHub Actions stops reporting
+  // green on completely-broken cron ticks. Per-account notifications are not
+  // enough — the run history needs to show the failure too.
+  const totalAccounts = getAccounts().length;
+  const disabledAccounts: string[] = (() => {
+    if (!nextCursor) return [];
+    try {
+      const parsed = JSON.parse(nextCursor) as { disabledAccounts?: string[] };
+      return parsed.disabledAccounts ?? [];
+    } catch {
+      return [];
+    }
+  })();
+  if (totalAccounts > 0 && disabledAccounts.length >= totalAccounts) {
+    console.error(
+      JSON.stringify({
+        event: 'collect_failed_all_accounts_disabled',
+        source: 'facebook',
+        totalAccounts,
+        disabledCount: disabledAccounts.length,
+      })
+    );
+    process.exit(1);
+  }
 }
 
 main().catch((err) => {
