@@ -449,13 +449,12 @@ describe('attemptLogin', () => {
     expect(filled).toContain('s3cret');
   });
 
-  it('aymh_chooser → click Remove profiles from this browser → full_login → home_feed', async () => {
-    // Reproduces the production 2026-06-21 failure (P10): the prior P8
-    // escape — clicking "Use another profile" — re-served AYMH because FB
-    // treats it as another form submission with the device cookies still
-    // pinning the profile. The only AYMH-internal action that clears the
-    // device-pinned profile fingerprint is "Remove profiles from this
-    // browser". The aymh_chooser handler clicks that button instead.
+  it('aymh_chooser → click Remove profiles from this browser → full_login → home_feed (no-modal variant)', async () => {
+    // Single-click variant: some AYMH flows skip the confirmation modal
+    // and the page button directly clears the device fingerprint. The new
+    // P12 handler clicks the page button, then probes for the in-dialog
+    // confirm — finds nothing here (count=0) and continues. The existing
+    // test still passes after P12's two-click change.
     const scripted = makeScriptedPage({
       steps: [
         {
@@ -479,11 +478,56 @@ describe('attemptLogin', () => {
     expect(filled).toContain('s3cret');
   });
 
+  it('aymh_chooser → click page button → click in-dialog confirm → full_login → home_feed (modal variant, P12)', async () => {
+    // Reproduces the production 2026-06-28 failure: clicking the AYMH
+    // page-level "Remove profiles from this browser" button opens a
+    // [role="dialog"] confirmation modal (proven by step 1's
+    // buttonLabels including "Close" and htmlLen +51KB). The in-dialog
+    // primary CTA shares the same aria-label but lives inside the dialog
+    // — the P12 handler clicks the page button, waits briefly for the
+    // modal to render, then clicks the in-dialog confirm explicitly.
+    const scripted = makeScriptedPage({
+      steps: [
+        // Step 0: AYMH page, page button visible.
+        {
+          url: LOGIN_URL,
+          selectors: { [SELECTORS.aymhMarker]: 1, [SELECTORS.removeProfilesFromBrowser]: 1 },
+        },
+        // Step 1: confirmation modal open. Page button is occluded; the
+        // in-dialog CTA is the new actionable target.
+        {
+          url: LOGIN_URL,
+          selectors: {
+            [SELECTORS.aymhMarker]: 1,
+            [SELECTORS.removeProfilesConfirmInDialog]: 1,
+          },
+        },
+        // Step 2: device fingerprint cleared → bare credential form.
+        { url: LOGIN_URL, selectors: { [EMAIL_SEL]: 1, [PASSWORD_SEL]: 1 } },
+        // Step 3: logged-in feed.
+        { url: HOME_URL, selectors: { [FEED]: 1, [CHROME]: 1 } },
+      ],
+    });
+
+    const out = await attemptLogin(scripted.page, {
+      email: 'user@example.com',
+      password: 's3cret',
+    });
+
+    expect(out).toEqual({ success: true });
+    expect(scripted.clickCalls).toContain(SELECTORS.removeProfilesFromBrowser);
+    expect(scripted.clickCalls).toContain(SELECTORS.removeProfilesConfirmInDialog);
+    const filled = scripted.fillCalls.map((c) => c.value);
+    expect(filled).toContain('user@example.com');
+    expect(filled).toContain('s3cret');
+  });
+
   it('aymh_chooser persists (escape button missing) → no-progress bail', async () => {
-    // Defense: if FB renders AYMH but the "Remove profiles" button is
-    // absent (or the click is a no-op), the handler skips the click, the
-    // next iteration re-classifies as aymh_chooser, and the standard
-    // no-progress guard bails with `unknown_login_page`. We do NOT loop.
+    // Defense: if FB renders AYMH but neither the page button nor the
+    // in-dialog confirm is present (or both clicks are no-ops), the
+    // handler skips both, the next iteration re-classifies as
+    // aymh_chooser, and the standard no-progress guard bails with
+    // `unknown_login_page`. We do NOT loop.
     const scripted = makeScriptedPage({
       steps: [
         { url: LOGIN_URL, selectors: { [SELECTORS.aymhMarker]: 1 } },

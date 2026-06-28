@@ -346,6 +346,45 @@ fb_account_disabled
 
 ---
 
+## User Story 12 (P12): Confirm the AYMH "Remove profiles" flow in its confirmation modal
+
+**Why**: After P10 shipped (PR #58), the 2026-06-28 production trace showed P10's click *did* fire — and FB responded with a confirmation modal layered over the AYMH page, not by clearing the device fingerprint. Step 0 → click → step 1: same `aymh_chooser` state, same URL, but htmlLen +51KB (538968 → 590381) and `buttonLabels` gained a `"Close"` entry. The "Close" cancel button is the modal's tell — `"Remove profiles from this browser"` is a TWO-STEP flow, not the single-click action P10 assumed. The in-modal primary CTA shares the same aria-label as the page button, so a second click on the same selector — scoped to `[role="dialog"]` to avoid racing the now-occluded page button — performs the actual fingerprint clear.
+
+Same anchoring failure mode the PLAYBOOK has warned about three times now (P7→P8→P10→P12): each escape worked for one UI shape, broke on the next subtlety. The lesson holds: when AYMH renders unchanged after a click, the escape's premise was wrong — switch behaviour, don't loop.
+
+**Failure trace (2026-06-28, post-PR #58)**:
+
+```
+fb_login_step step:0 state:aymh_chooser
+                buttonLabels:["Remove profiles from this browser","Continue אורי לאל","Use another profile"]
+                cookieNames:["datr","fr","ps_l","ps_n","sb","wd"]   # no dpr yet
+                htmlLen:538968
+fb_login_step step:1 state:aymh_chooser    # same state, same URL — but…
+                buttonLabels:["Remove profiles from this browser","Continue אורי לאל","Use another profile","Close"]
+                                                                    # ↑ "Close" — confirmation modal opened
+                cookieNames:["datr","dpr","fr","ps_l","ps_n","sb","wd"]
+                htmlLen:590381                                       # +51KB, modal layer added
+fb_login_failed reason:unknown_login_page detail:no_progress
+fb_account_disabled
+collect_failed_all_accounts_disabled                                # P11 exited 1 — workflow correctly red
+```
+
+**Acceptance Criteria**:
+
+1. WHEN `attemptLogin` handles `state === 'aymh_chooser'` THEN it SHALL click the page-level `removeProfilesFromBrowser` button, then `await page.waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS)` (modal-render pause), then click the `removeProfilesConfirmInDialog` selector — all inside the existing `withNavigation` wrapper, all in one handler invocation.
+2. WHEN either click finds zero matching elements (no-modal FB variant, button absent, locale variant we haven't covered) THEN the handler SHALL skip that click and let the no-progress guard bail on the next iteration. The handler MUST NOT loop or retry.
+3. WHEN the `removeProfilesConfirmInDialog` selector is added to `SELECTORS` THEN it SHALL scope to `[role="dialog"]` descendants only — clicking an aria-label-matching element outside a dialog risks re-clicking the occluded page button (now under the modal scrim, no longer the actionable target).
+4. WHEN locale variants exist for the in-dialog CTA THEN they SHALL mirror the locale set of `removeProfilesFromBrowser` (English + Hebrew masc/fem + Spanish + French + German).
+5. The HUMAN_PAUSE_BEFORE_SUBMIT_MS constant SHALL be reused (no new constant) — semantically the same pause: give FB UI time to render before the next interaction.
+
+**Independent Test**:
+
+- `attemptLogin`: `aymh_chooser` (page button) → `aymh_chooser` (modal open with in-dialog confirm) → `full_login` → `home_feed` ⇒ `clickCalls` contains BOTH `removeProfilesFromBrowser` and `removeProfilesConfirmInDialog`, credentials typed, outcome `{ success: true }`.
+- Existing single-click P10 test continues to pass — when no modal renders, the second-find returns count=0 and the click is skipped; flow advances to `full_login` after the first click.
+- `aymh_chooser × 2` (both buttons absent) defense test still passes — no loop, bail with `unknown_login_page`.
+
+---
+
 ## Success Criteria
 
 - [ ] No `fb_login_success` is emitted while the page URL still contains `crypted_string=`.

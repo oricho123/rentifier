@@ -474,3 +474,34 @@ T18 → T19
 - [x] Cursor-parse failure falls through to the existing success path (no false-negative failure from malformed JSON).
 - [x] No new admin notification — the per-account `notifyAdminCookieExpiry` calls already informed the operator; the workflow-failure signal is for GitHub Actions surfacing only.
 - [x] `pnpm -C packages/connectors exec tsc --noEmit` clean (no new types needed); manual code-read confirms the exit path is downstream of `cleanup()`.
+
+---
+
+## Addendum (2026-06-28): P12 — shipped in branch `fix/fb-aymh-remove-profiles-modal-confirm`
+
+### Phase I: AYMH escape — modal confirmation
+
+```
+T20
+```
+
+---
+
+### T20: Confirm the AYMH "Remove profiles" flow inside its confirmation modal ✅ DONE
+
+**What**: The 2026-06-28 production trace proved P10's "Remove profiles from this browser" click is the FIRST step of a two-step FB flow — clicking it opens a `[role="dialog"]` confirmation modal (step 0→1: same aymh state, htmlLen +51KB, new "Close" button in buttonLabels). The actual device-fingerprint clear requires a second click on the in-dialog CTA (same aria-label, different DOM location). Sequence both clicks in one `aymh_chooser` handler invocation, separated by `waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS)` for modal render. Scope the second click to `[role="dialog"]` descendants to avoid racing the now-occluded page button.
+**Where**: `packages/connectors/src/facebook/login.ts` (add `SELECTORS.removeProfilesConfirmInDialog`, multi-locale aria-label exact-match scoped to `[role="dialog"]`; update `aymh_chooser` handler to do trigger.click → wait → confirm.click); `LoginScreenState` AYMH comment updated to describe the two-step flow. Tests in `__tests__/login-attempt.test.ts` — update existing single-click test comment to reflect the no-modal variant; add new modal-confirm regression test with 4-step mock (page button → modal open → login form → home feed).
+**Depends on**: T18 (P10 — same handler arm, same `withNavigation` wrapper, reuses `removeProfilesFromBrowser` selector unchanged).
+**Reuses**: `withNavigation`, `LOGIN_NAVIGATION_TIMEOUT_MS`, `HUMAN_PAUSE_BEFORE_SUBMIT_MS` (semantically the same pause — give FB UI time to render), multi-locale aria-label pattern.
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [x] `SELECTORS.removeProfilesConfirmInDialog` exported with English + Hebrew (masculine + feminine) + Spanish + French + German aria-label exact-matches, all scoped to `[role="dialog"]` descendants.
+- [x] `aymh_chooser` handler invokes: trigger click (page button) → `waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS)` → confirm click (in-dialog CTA). Each click guarded by `count > 0`; missing element → skip.
+- [x] `LoginScreenState` AYMH comment block describes the two-step flow and references the 2026-06-28 disproof of the single-click assumption.
+- [x] New attempt test asserts `clickCalls` contains BOTH `removeProfilesFromBrowser` AND `removeProfilesConfirmInDialog`, ends in `{ success: true }`.
+- [x] Existing single-click P10 test still passes (no-modal variant — second find returns count=0, skip, advance to `full_login`).
+- [x] Defense test `aymh_chooser × 2` (both buttons absent) still passes — no loop, bail with `unknown_login_page`.
+- [x] No new fields containing cookies/credentials in fingerprint payloads.
+- [x] Full `pnpm exec vitest run` green; `pnpm typecheck` clean.

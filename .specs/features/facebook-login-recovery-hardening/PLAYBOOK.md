@@ -53,7 +53,8 @@ When adding a variant:
 The matrix in `design.md` says which escape bypasses which variant. Some highlights:
 
 - `FORCE_CREDENTIAL_LOGIN_URL` does **NOT** bypass AYMH (device cookies pin the profile).
-- `useAnotherProfile` does **NOT** bypass AYMH either — clicking it just submits the AYMH form with `aymh_profile_loaded_count+1` and FB re-serves AYMH (disproved 2026-06-21, P10). Click `removeProfilesFromBrowser` instead — that's the AYMH-internal action that clears the device-pinned profile fingerprint.
+- `useAnotherProfile` does **NOT** bypass AYMH either — clicking it just submits the AYMH form with `aymh_profile_loaded_count+1` and FB re-serves AYMH (disproved 2026-06-21, P10).
+- `removeProfilesFromBrowser` is a **TWO-STEP** flow, not one click (disproved 2026-06-28, P12). The page button opens a `[role="dialog"]` confirmation modal; the actual fingerprint clear requires a second click on the in-dialog CTA (same aria-label, scoped to `[role="dialog"]` so we don't race the occluded page button). Signal that distinguishes single-click from two-step: a `"Close"` button appearing in `buttonLabels` between steps + htmlLen jumping >10KB. The handler sequences both clicks in one invocation with `HUMAN_PAUSE_BEFORE_SUBMIT_MS` between them.
 - Clicking a saved-session button on a fully-revoked session is a no-op — P6 falls back to URL nav after a same-state repeat.
 - `pressSequentially` (P9) is the credential-entry path, not `fill()` — FB fingerprints instant text insertion.
 
