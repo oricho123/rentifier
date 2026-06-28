@@ -328,21 +328,23 @@ fb_account_disabled
 
 ---
 
-## User Story 11 (P11): Exit the GitHub Actions run non-zero when all accounts get disabled
+## User Story 11 (P11): Exit the GitHub Actions run non-zero on the cron tick that newly disables an account
 
 **Why**: The 2026-06-21 incident showed the right log signal (`fb_account_disabled` + `fb_admin_notify_sent`) but the workflow run was reported as ✅ green because `scripts/collect-facebook.ts` only calls `process.exit(1)` when `connector.fetchNew(...)` *throws*. With the AYMH P10-failure path the connector returned `{ candidates: [], nextCursor }` cleanly (it broke out of the per-account loop on the auth_expired classification, persisted `disabledAccounts`, and returned), so `collect_fetched`/`collect_complete` fired, the script exited 0, and the GitHub Actions UI showed a successful cron tick. The admin received the Telegram alert but the run history hid the failure — a silent ⚠️→✅ regression in observability.
 
+Surface the failure on the *transition* (cron tick where a previously-good account flips to disabled), not on every subsequent tick of the already-disabled set. Otherwise the workflow stays red forever until the operator resets the cursor, and the run history loses its signal-to-noise. One disable event ⇒ one red tick ⇒ all-quiet until the next signal.
+
 **Acceptance Criteria**:
 
-1. WHEN the final cursor's `disabledAccounts.length` equals `getAccounts().length` (every configured FB_COOKIES_N is disabled) THEN `collect-facebook.ts` SHALL `process.exit(1)` after logging a structured `collect_failed_all_accounts_disabled` event with `{ totalAccounts, disabledCount }`.
-2. WHEN at least one account remains usable (`disabledAccounts.length < getAccounts().length`) THEN the script SHALL continue to exit 0 even if a per-account `fb_admin_notify_sent` fired — partial collection success stays green.
+1. WHEN the cron tick newly disabled one or more accounts (i.e., `state.disabledAccounts` includes an id that was NOT in the previous cursor's `disabledAccounts`) THEN `collect-facebook.ts` SHALL `process.exit(1)` after logging a structured `collect_failed_newly_disabled_accounts` event with `{ newlyDisabledCount }`.
+2. WHEN no account was newly disabled this tick (the disabled-account set is unchanged from the previous cursor, or empty) THEN the script SHALL exit 0 — even if the disabled set is non-empty (i.e., subsequent ticks of an already-broken state are green; one disable event surfaces once, then quiets).
 3. WHEN the cursor cannot be parsed THEN the script SHALL fall through to the existing successful-exit path (no false-negative failure from a malformed cursor).
 4. The non-zero exit SHALL happen AFTER `collect_complete` and AFTER `cleanup()` so the D1 state and Wrangler lock are already released.
-5. No new admin notification SHALL be emitted on the exit — the per-account `notifyAdminCookieExpiry` calls already informed the operator; the workflow-failure signal is for GitHub Actions surfacing, not for the human.
+5. No new admin notification SHALL be emitted on the exit — the per-account `notifyAdminCookieExpiry` calls already informed the operator; the workflow-failure signal is for GitHub Actions surfacing only.
 
 **Independent Test**:
 
-- This is glue between `collect-facebook.ts` and `getAccounts()`; verification is by manual cron simulation (or future targeted unit test on the exit-decision helper).
+- This is glue between the existing `newlyDisabled` detection block (already used to drive `notifyAdminCookieExpiry`) and the process exit code; verification is by manual cron simulation (or future targeted unit test on the exit-decision helper).
 
 ---
 
