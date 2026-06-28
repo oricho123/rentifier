@@ -72,6 +72,14 @@ export const SELECTORS = {
   // credential form. aria-label exact match; locale variants added defensively.
   removeProfilesFromBrowser:
     'div[role="button"][aria-label="Remove profiles from this browser" i], div[role="button"][aria-label="הסר פרופילים מדפדפן זה" i], div[role="button"][aria-label="הסירי פרופילים מדפדפן זה" i], div[role="button"][aria-label="Eliminar perfiles de este navegador" i], div[role="button"][aria-label="Supprimer les profils de ce navigateur" i], div[role="button"][aria-label="Profile aus diesem Browser entfernen" i]',
+  // AYMH "Remove profiles" is a two-step flow (proven 2026-06-28): the
+  // page button above opens a [role="dialog"] confirmation modal whose
+  // primary CTA also bears aria-label="Remove profiles from this browser".
+  // Scoping the second click to [role="dialog"] descendants avoids racing
+  // the now-occluded page button under the modal scrim (Playwright would
+  // click the page button which is no longer the actionable element).
+  removeProfilesConfirmInDialog:
+    '[role="dialog"] div[role="button"][aria-label="Remove profiles from this browser" i], [role="dialog"] div[role="button"][aria-label="הסר פרופילים מדפדפן זה" i], [role="dialog"] div[role="button"][aria-label="הסירי פרופילים מדפדפן זה" i], [role="dialog"] div[role="button"][aria-label="Eliminar perfiles de este navegador" i], [role="dialog"] div[role="button"][aria-label="Supprimer les profils de ce navigateur" i], [role="dialog"] div[role="button"][aria-label="Profile aus diesem Browser entfernen" i]',
 } as const;
 
 /** Clean credential-login URL — bypasses saved-session UI and exposes email+pass. */
@@ -93,8 +101,11 @@ export type LoginScreenState =
   // FORCE_CREDENTIAL_LOGIN_URL fallback does NOT bypass it once the device
   // cookies are pinned, and neither does "Use another profile" (production
   // 2026-06-21 showed FB re-serves AYMH on `aymh_profile_loaded_count+1`).
-  // The reliable escape is clicking "Remove profiles from this browser",
-  // which clears the device-pinned profile fingerprint.
+  // The reliable escape is the TWO-STEP "Remove profiles from this browser"
+  // flow (production 2026-06-28): clicking the page button opens a
+  // [role="dialog"] confirmation modal; the in-dialog CTA (same aria-label)
+  // performs the actual device-fingerprint clear and exposes the bare
+  // credential form.
   | 'aymh_chooser'
   | 'password_only'
   | 'full_login'
@@ -354,19 +365,29 @@ export async function attemptLogin(
       }
 
       if (state === 'aymh_chooser') {
-        // Click "Remove profiles from this browser" — the AYMH-internal
-        // action that clears the device-pinned profile fingerprint and
-        // exposes the bare credential form. Force-navigating to the
-        // credential URL does NOT bypass AYMH once device cookies pin a
-        // profile, and clicking "Use another profile" just submits the
-        // AYMH form with `aymh_profile_loaded_count+1` so FB re-serves
-        // AYMH (production 2026-06-21). If the button is not present, the
-        // next iteration re-classifies as aymh_chooser and the no-progress
-        // guard will bail.
+        // AYMH "Remove profiles from this browser" is a TWO-STEP flow
+        // (proven 2026-06-28): clicking the page button opens a
+        // [role="dialog"] confirmation modal whose primary CTA shares the
+        // same aria-label; the actual fingerprint-clearing action requires
+        // the second click. Sequenced in one handler invocation: click the
+        // page button → wait briefly for the modal to render → click the
+        // in-dialog confirm. If either click finds no matching element
+        // (no-modal FB variant, button absent), it skips and the
+        // no-progress guard handles bail on the next iteration.
+        //
+        // Force-navigating to the credential URL does NOT bypass AYMH once
+        // device cookies pin a profile, and clicking "Use another profile"
+        // just submits the AYMH form with `aymh_profile_loaded_count+1`
+        // so FB re-serves AYMH (production 2026-06-21).
         await withNavigation(page, async () => {
-          const escape = page.locator(SELECTORS.removeProfilesFromBrowser).first();
-          if ((await escape.count()) > 0) {
-            await escape.click({ timeout: LOGIN_NAVIGATION_TIMEOUT_MS });
+          const trigger = page.locator(SELECTORS.removeProfilesFromBrowser).first();
+          if ((await trigger.count()) > 0) {
+            await trigger.click({ timeout: LOGIN_NAVIGATION_TIMEOUT_MS });
+          }
+          await page.waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS);
+          const confirm = page.locator(SELECTORS.removeProfilesConfirmInDialog).first();
+          if ((await confirm.count()) > 0) {
+            await confirm.click({ timeout: LOGIN_NAVIGATION_TIMEOUT_MS });
           }
         });
         continue;
