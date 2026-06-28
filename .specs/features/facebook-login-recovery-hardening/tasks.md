@@ -458,19 +458,19 @@ T18 → T19
 
 ---
 
-### T19: Exit non-zero from collect-facebook.ts when all accounts are disabled ✅ DONE
+### T19: Exit non-zero from collect-facebook.ts on the tick that newly disables an account ✅ DONE
 
-**What**: The 2026-06-21 incident showed every right signal (`fb_account_disabled`, `fb_admin_notify_sent`) but GitHub Actions still showed the cron tick as ✅ green because the connector returned `{ candidates: [], nextCursor }` cleanly (it broke out of the per-account loop on `auth_expired`, persisted `disabledAccounts`, and returned), so `collect_fetched`/`collect_complete` fired and `process.exit(1)` never ran. Surface the failure in run history by exiting non-zero when the final cursor's `disabledAccounts.length` equals `getAccounts().length`. Partial collection (1+ account still working) stays green.
-**Where**: `scripts/collect-facebook.ts` (import `getAccounts`, parse final cursor's `disabledAccounts`, compare counts, log `collect_failed_all_accounts_disabled`, `process.exit(1)` after `cleanup()`).
+**What**: The 2026-06-21 incident showed every right signal (`fb_account_disabled`, `fb_admin_notify_sent`) but GitHub Actions still showed the cron tick as ✅ green because the connector returned `{ candidates: [], nextCursor }` cleanly (it broke out of the per-account loop on `auth_expired`, persisted `disabledAccounts`, and returned), so `collect_fetched`/`collect_complete` fired and `process.exit(1)` never ran. Surface the failure in run history by exiting non-zero on the *transition* tick (one or more accounts newly added to `disabledAccounts` this run vs. the previous cursor). Subsequent ticks of the same disabled set stay green — one disable event ⇒ one red tick ⇒ quiet until the next signal. Reuse the existing `newlyDisabled` detection block that already drives `notifyAdminCookieExpiry`.
+**Where**: `scripts/collect-facebook.ts` (lift `newlyDisabled.length` from the admin-notify block into an outer `newlyDisabledCount` counter; after `collect_complete`+`cleanup()`, if `newlyDisabledCount > 0` log `collect_failed_newly_disabled_accounts` and `process.exit(1)`).
 **Depends on**: none — pure observability glue, independent of the login.ts P10 change.
-**Reuses**: existing `getAccounts()` helper, existing `JSON.parse(nextCursor)` pattern from the admin-notify block above it.
+**Reuses**: existing `newlyDisabled` array + `JSON.parse(nextCursor)` pattern in the admin-notify block above it.
 
 **Tools**: MCP: NONE · Skill: NONE
 
 **Done when**:
-- [x] After `collect_complete` + `cleanup()`, the script checks `totalAccounts = getAccounts().length` and `disabledAccounts.length` from the final cursor.
-- [x] When all accounts are disabled, logs `collect_failed_all_accounts_disabled` with `{ totalAccounts, disabledCount }` and `process.exit(1)`.
-- [x] When at least one account remains usable, the script exits 0 (no behaviour change for partial-success cron ticks).
+- [x] After `collect_complete` + `cleanup()`, the script checks `newlyDisabledCount` (already computed earlier for admin notification).
+- [x] When `newlyDisabledCount > 0`, logs `collect_failed_newly_disabled_accounts` with `{ newlyDisabledCount }` and `process.exit(1)`.
+- [x] When no account was newly disabled this tick, the script exits 0 (even if the disabled set is non-empty — subsequent ticks of an already-broken state stay green so the workflow doesn't get stuck red until manual reset).
 - [x] Cursor-parse failure falls through to the existing success path (no false-negative failure from malformed JSON).
 - [x] No new admin notification — the per-account `notifyAdminCookieExpiry` calls already informed the operator; the workflow-failure signal is for GitHub Actions surfacing only.
 - [x] `pnpm -C packages/connectors exec tsc --noEmit` clean (no new types needed); manual code-read confirms the exit path is downstream of `cleanup()`.
