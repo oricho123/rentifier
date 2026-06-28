@@ -20,7 +20,6 @@
  */
 
 import { FacebookConnector } from '@rentifier/connectors/src/facebook';
-import { getAccounts } from '@rentifier/connectors/src/facebook/accounts';
 import type { LoginFailureReason, LoginOutcome } from '@rentifier/connectors/src/facebook/types';
 import { createRestDBFromEnv } from '@rentifier/db';
 import type { DB } from '@rentifier/db';
@@ -189,6 +188,7 @@ async function main() {
   }
 
   // Check cursor for newly disabled accounts and notify admin
+  let newlyDisabledCount = 0;
   if (nextCursor) {
     try {
       const state = JSON.parse(nextCursor);
@@ -196,6 +196,7 @@ async function main() {
       const newlyDisabled = (state.disabledAccounts || []).filter(
         (id: string) => !(prevState.disabledAccounts || []).includes(id)
       );
+      newlyDisabledCount = newlyDisabled.length;
       for (const accountId of newlyDisabled) {
         const lastReason = state.loginAttempts?.[accountId]?.lastReason as
           | LoginFailureReason
@@ -248,28 +249,19 @@ async function main() {
 
   if (cleanup) await cleanup();
 
-  // If every configured account is disabled the cron tick produced no usable
-  // collection AND the operator has already been admin-notified per account.
-  // Surface that as a workflow-run failure so GitHub Actions stops reporting
-  // green on completely-broken cron ticks. Per-account notifications are not
-  // enough — the run history needs to show the failure too.
-  const totalAccounts = getAccounts().length;
-  const disabledAccounts: string[] = (() => {
-    if (!nextCursor) return [];
-    try {
-      const parsed = JSON.parse(nextCursor) as { disabledAccounts?: string[] };
-      return parsed.disabledAccounts ?? [];
-    } catch {
-      return [];
-    }
-  })();
-  if (totalAccounts > 0 && disabledAccounts.length >= totalAccounts) {
+  // If THIS cron tick newly disabled one or more accounts, exit non-zero so
+  // GitHub Actions surfaces the transition in run history. Subsequent ticks
+  // on the same already-disabled set stay green — we only need to alarm once
+  // per disable event, not on every tick after, otherwise the run history
+  // turns red forever until the operator resets the cursor. The per-account
+  // Telegram notification above already informed the operator; this exit is
+  // the GH Actions surfacing channel.
+  if (newlyDisabledCount > 0) {
     console.error(
       JSON.stringify({
-        event: 'collect_failed_all_accounts_disabled',
+        event: 'collect_failed_newly_disabled_accounts',
         source: 'facebook',
-        totalAccounts,
-        disabledCount: disabledAccounts.length,
+        newlyDisabledCount,
       })
     );
     process.exit(1);
