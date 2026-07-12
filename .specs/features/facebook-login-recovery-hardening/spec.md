@@ -387,6 +387,49 @@ collect_failed_all_accounts_disabled                                # P11 exited
 
 ---
 
+## User Story 13 (P13): Escape AYMH by clearing device-pinning cookies
+
+**Why**: The 2026-06-28 production trace *after* P12 shipped (PR #60) showed the two-step click still failed. Step 0 clicked the page button (htmlLen 539746 → 590787, `"Close"` appeared in buttonLabels ⇒ modal opened as P12 predicted), but the second `[role="dialog"] div[role="button"][aria-label="Remove profiles from this browser" i]` selector never matched — step 1 still classified as `aymh_chooser` with the modal open. Root cause: the diagnostics fingerprint only queried `[role="button"]` elements, but FB modal confirm CTAs are native `<button>` elements. Our fingerprint had no visibility into the dialog's actual button, and the selector guessed wrong. The click-based approach has now failed three times (P8, P10, P12) — each incident proving a different UI subtlety that couldn't be verified from the fingerprint. It's time to escape via the underlying mechanism instead of the UI.
+
+AYMH is entirely driven by device-pinning cookies (`datr`, `sb`, `fr`, `dpr`, `wd`, `ps_l`, `ps_n`) — FB's server maps them to the previously-known profile even after `c_user`/`xs` (the auth session) expire. Clearing them de-pins the profile, and the next navigation to `FORCE_CREDENTIAL_LOGIN_URL` renders the bare credential form. No click chain, no dialog, no locale variance.
+
+**Failure trace (2026-06-28, post-PR #60)**:
+
+```
+fb_login_step step:0 state:aymh_chooser
+                buttonLabels:["Remove profiles from this browser","Continue אורי לאל","Use another profile"]
+                cookieNames:["datr","fr","ps_l","ps_n","sb","wd"]
+                htmlLen:539746
+fb_login_step step:1 state:aymh_chooser              # same state, same URL
+                buttonLabels:["Remove profiles from this browser","Continue אורי לאל","Use another profile","Close"]
+                                                     # ↑ "Close" — modal opened, but…
+                                                     # ↑ the modal's confirm CTA is NOT in the list —
+                                                     #   it's a native <button> and our fingerprint only
+                                                     #   captured [role="button"] elements
+                cookieNames:["datr","dpr","fr","ps_l","ps_n","sb","wd"]
+                htmlLen:590787
+fb_login_failed reason:unknown_login_page detail:no_progress
+fb_account_disabled
+collect_failed_newly_disabled_accounts               # P11 correctly surfaced the failure
+```
+
+**Acceptance Criteria**:
+
+1. WHEN `attemptLogin` handles `state === 'aymh_chooser'` for the first time in an attempt THEN it SHALL call `page.context().clearCookies({ name })` once per name in `AYMH_DEVICE_COOKIE_NAMES` (`datr`, `sb`, `fr`, `dpr`, `wd`, `ps_l`, `ps_n`) THEN `page.goto(FORCE_CREDENTIAL_LOGIN_URL, { waitUntil: 'domcontentloaded' })` THEN `page.waitForLoadState('networkidle', { timeout: LOGIN_NAVIGATION_TIMEOUT_MS })`. Each step SHALL be individually `.catch(() => undefined)`-guarded (best-effort, never throws to the caller).
+2. WHEN the escape is invoked THEN a single `fb_aymh_cookie_cleared` event SHALL be emitted with `step` and `detail: 'device_cookies_cleared_then_force_credential_login'` — visible in production logs so we can distinguish the P13 path from a lucky natural resolution.
+3. WHEN `state === 'aymh_chooser'` is classified a second time within the same `attemptLogin` call THEN the one-shot guard `didAymhCookieClear` SHALL prevent a second cookie clear. The next iteration falls through to the standard `prevState === state` no-progress bail with `unknown_login_page`. We MUST NOT loop or re-clear.
+4. WHEN the fingerprint's `buttonLabels` field is captured THEN it SHALL query BOTH native `<button>` AND `[role="button"]` elements — an element's text SHALL be its `aria-label` if present, otherwise its trimmed `textContent`. This closes the diagnostic gap that let P12's dialog CTA go undetected.
+5. WHEN cookies are cleared THEN cookie *values* SHALL never touch logs (unchanged invariant). Only cookie *names* appear via the pre-existing `cookieNames` fingerprint field. `clearCookies` accepts a `{ name }` filter — call it per name, never with an empty filter (that would wipe locale/consent cookies too).
+6. The removed selectors `removeProfilesFromBrowser` and `removeProfilesConfirmInDialog` MUST be deleted from `SELECTORS`. No dead selectors left behind.
+
+**Independent Test**:
+
+- `attemptLogin`: `aymh_chooser` → (goto advances) → `full_login` → `home_feed` ⇒ `clearedCookieNames` sorted equals the seven `AYMH_DEVICE_COOKIE_NAMES` sorted; a `fb_aymh_cookie_cleared` log line is captured; credentials typed; outcome `{ success: true }`.
+- One-shot defense: `aymh_chooser × 2` (goto advances but classifier still returns AYMH — simulates FB re-issuing device cookies from server session state) ⇒ `clearedCookieNames.length === 7` (exactly one clear), outcome `{ success: false, reason: 'unknown_login_page' }`.
+- Fingerprint widening: no unit test change needed — the fix is defensive coverage for a diagnostic that only fires in production; production-side proof is that the next AYMH dialog trace will show the confirm-button label in `buttonLabels`.
+
+---
+
 ## Success Criteria
 
 - [ ] No `fb_login_success` is emitted while the page URL still contains `crypted_string=`.
