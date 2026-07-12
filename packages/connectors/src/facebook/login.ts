@@ -63,24 +63,22 @@ export const SELECTORS = {
   // bare profile Name (no "as" connector), so continueAsButton's aria-label
   // prefix can't match it. Detection via this hidden field is locale-stable.
   aymhMarker: 'input[name="aymh_profile_loaded_count"]',
-  // AYMH escape hatch — the *real* one. Production 2026-06-21 proved that
-  // clicking "Use another profile" submits the AYMH form with
-  // `aymh_profile_loaded_count+1` and FB just re-serves AYMH because the
-  // device cookies (datr, sb, fr, dpr, wd, ps_l, ps_n) still pin the profile.
-  // "Remove profiles from this browser" is the AYMH-internal action that
-  // clears the device-pinned profile fingerprint and exposes the bare
-  // credential form. aria-label exact match; locale variants added defensively.
-  removeProfilesFromBrowser:
-    'div[role="button"][aria-label="Remove profiles from this browser" i], div[role="button"][aria-label="הסר פרופילים מדפדפן זה" i], div[role="button"][aria-label="הסירי פרופילים מדפדפן זה" i], div[role="button"][aria-label="Eliminar perfiles de este navegador" i], div[role="button"][aria-label="Supprimer les profils de ce navigateur" i], div[role="button"][aria-label="Profile aus diesem Browser entfernen" i]',
-  // AYMH "Remove profiles" is a two-step flow (proven 2026-06-28): the
-  // page button above opens a [role="dialog"] confirmation modal whose
-  // primary CTA also bears aria-label="Remove profiles from this browser".
-  // Scoping the second click to [role="dialog"] descendants avoids racing
-  // the now-occluded page button under the modal scrim (Playwright would
-  // click the page button which is no longer the actionable element).
-  removeProfilesConfirmInDialog:
-    '[role="dialog"] div[role="button"][aria-label="Remove profiles from this browser" i], [role="dialog"] div[role="button"][aria-label="הסר פרופילים מדפדפן זה" i], [role="dialog"] div[role="button"][aria-label="הסירי פרופילים מדפדפן זה" i], [role="dialog"] div[role="button"][aria-label="Eliminar perfiles de este navegador" i], [role="dialog"] div[role="button"][aria-label="Supprimer les profils de ce navigateur" i], [role="dialog"] div[role="button"][aria-label="Profile aus diesem Browser entfernen" i]',
 } as const;
+
+// AYMH device-pinning cookies. FB serves the AYMH multi-profile chooser when
+// any of these are present with the corresponding profile fingerprint — even
+// after `c_user`/`xs` (auth session) are gone. Clearing them de-pins the
+// profile so the next navigation to FORCE_CREDENTIAL_LOGIN_URL shows the bare
+// credential form instead of AYMH. Cookie *names* only ever surface in logs
+// (`fb_page_fingerprint.cookieNames`); values are never touched.
+//
+// P8 (2026-06-14): tried FORCE_CREDENTIAL_LOGIN_URL alone — didn't bypass AYMH.
+// P10 (2026-06-21): tried "Use another profile" click — FB re-served AYMH.
+// P12 (2026-06-28): tried "Remove profiles from this browser" two-step click
+// with an in-dialog confirm — the dialog CTA wasn't a `[role="button"]` (native
+// `<button>` invisible in fingerprint), so the second click never landed.
+// P13 (this PR): clear the device cookies directly — cuts out the UI entirely.
+export const AYMH_DEVICE_COOKIE_NAMES = ['datr', 'sb', 'fr', 'dpr', 'wd', 'ps_l', 'ps_n'] as const;
 
 /** Clean credential-login URL — bypasses saved-session UI and exposes email+pass. */
 export const FORCE_CREDENTIAL_LOGIN_URL = 'https://www.facebook.com/login/?login_attempt=1&lwv=110';
@@ -98,14 +96,9 @@ export type LoginScreenState =
   // AYMH multi-profile chooser — saved-session UI variant where FB lists
   // known device profiles. Detected via the `aymh_profile_loaded_count`
   // hidden form field (continueAsButton aria-label prefix won't match). The
-  // FORCE_CREDENTIAL_LOGIN_URL fallback does NOT bypass it once the device
-  // cookies are pinned, and neither does "Use another profile" (production
-  // 2026-06-21 showed FB re-serves AYMH on `aymh_profile_loaded_count+1`).
-  // The reliable escape is the TWO-STEP "Remove profiles from this browser"
-  // flow (production 2026-06-28): clicking the page button opens a
-  // [role="dialog"] confirmation modal; the in-dialog CTA (same aria-label)
-  // performs the actual device-fingerprint clear and exposes the bare
-  // credential form.
+  // reliable escape is to clear the AYMH device-pinning cookies (see
+  // `AYMH_DEVICE_COOKIE_NAMES`) then navigate to `FORCE_CREDENTIAL_LOGIN_URL`
+  // — the click-based escapes have all failed in production (P8, P10, P12).
   | 'aymh_chooser'
   | 'password_only'
   | 'full_login'
@@ -246,6 +239,19 @@ async function clickFirstAvailable(locators: Locator[]): Promise<boolean> {
   return false;
 }
 
+/**
+ * Clear the AYMH device-pinning cookies from the current browser context.
+ * Playwright's `clearCookies` accepts a `name` filter, so this leaves other
+ * cookies (e.g. locale, consent) untouched. Best-effort per cookie so a single
+ * failure doesn't strand the rest.
+ */
+async function clearAymhDeviceCookies(page: Page): Promise<void> {
+  const context = page.context();
+  for (const name of AYMH_DEVICE_COOKIE_NAMES) {
+    await context.clearCookies({ name }).catch(() => undefined);
+  }
+}
+
 export interface AttemptLoginOptions {
   maxSteps?: number;
   timeoutMs?: number;
@@ -268,6 +274,11 @@ export async function attemptLogin(
   // does not break out of continue_as_user, the next iteration falls through
   // to the normal no-progress bail.
   let didForceCredentialRecovery = false;
+  // One-shot guard for the AYMH cookie-clear + force-credential escape.
+  // Clearing device cookies is destructive to the browser profile, so we
+  // only do it once per attempt; a second AYMH classification falls through
+  // to the no-progress bail.
+  let didAymhCookieClear = false;
 
   try {
     for (let step = 0; step < maxSteps; step++) {
@@ -364,32 +375,30 @@ export async function attemptLogin(
         continue;
       }
 
-      if (state === 'aymh_chooser') {
-        // AYMH "Remove profiles from this browser" is a TWO-STEP flow
-        // (proven 2026-06-28): clicking the page button opens a
-        // [role="dialog"] confirmation modal whose primary CTA shares the
-        // same aria-label; the actual fingerprint-clearing action requires
-        // the second click. Sequenced in one handler invocation: click the
-        // page button → wait briefly for the modal to render → click the
-        // in-dialog confirm. If either click finds no matching element
-        // (no-modal FB variant, button absent), it skips and the
-        // no-progress guard handles bail on the next iteration.
-        //
-        // Force-navigating to the credential URL does NOT bypass AYMH once
-        // device cookies pin a profile, and clicking "Use another profile"
-        // just submits the AYMH form with `aymh_profile_loaded_count+1`
-        // so FB re-serves AYMH (production 2026-06-21).
-        await withNavigation(page, async () => {
-          const trigger = page.locator(SELECTORS.removeProfilesFromBrowser).first();
-          if ((await trigger.count()) > 0) {
-            await trigger.click({ timeout: LOGIN_NAVIGATION_TIMEOUT_MS });
-          }
-          await page.waitForTimeout(HUMAN_PAUSE_BEFORE_SUBMIT_MS);
-          const confirm = page.locator(SELECTORS.removeProfilesConfirmInDialog).first();
-          if ((await confirm.count()) > 0) {
-            await confirm.click({ timeout: LOGIN_NAVIGATION_TIMEOUT_MS });
-          }
+      if (state === 'aymh_chooser' && !didAymhCookieClear) {
+        // AYMH escape (P13, 2026-06-28): the click-based escapes all failed
+        // in production (P8: "Use another profile"; P10: single-click Remove
+        // profiles; P12: two-step Remove profiles with in-dialog confirm —
+        // the dialog CTA turned out not to be a `[role="button"]` and our
+        // fingerprint didn't capture it). AYMH is driven by device cookies
+        // (`AYMH_DEVICE_COOKIE_NAMES`) that pin the browser profile to a FB
+        // account even after `c_user`/`xs` expire; clearing them de-pins
+        // the profile and the credential URL then renders the bare login
+        // form. One-shot: if the classifier still returns aymh_chooser on
+        // the next iteration, the normal no-progress guard bails.
+        didAymhCookieClear = true;
+        logEvent({
+          event: 'fb_aymh_cookie_cleared',
+          step,
+          detail: 'device_cookies_cleared_then_force_credential_login',
         });
+        await clearAymhDeviceCookies(page).catch(() => undefined);
+        await page
+          .goto(FORCE_CREDENTIAL_LOGIN_URL, { waitUntil: 'domcontentloaded' })
+          .catch(() => undefined);
+        await page
+          .waitForLoadState('networkidle', { timeout: LOGIN_NAVIGATION_TIMEOUT_MS })
+          .catch(() => undefined);
         continue;
       }
 

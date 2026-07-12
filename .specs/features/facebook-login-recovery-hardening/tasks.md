@@ -505,3 +505,45 @@ T20
 - [x] Defense test `aymh_chooser × 2` (both buttons absent) still passes — no loop, bail with `unknown_login_page`.
 - [x] No new fields containing cookies/credentials in fingerprint payloads.
 - [x] Full `pnpm exec vitest run` green; `pnpm typecheck` clean.
+
+---
+
+## Addendum (2026-06-28b): P13 — shipped in branch `fix/fb-aymh-cookie-clear-escape`
+
+### Phase J: AYMH escape — clear device cookies
+
+```
+T21
+```
+
+---
+
+### T21: Escape AYMH by clearing device-pinning cookies then force-navigating to the credential URL ✅ DONE
+
+**What**: After P12 shipped (PR #60), the 2026-06-28 post-merge trace proved the two-step click still didn't advance — step 0→1 showed the modal opened (`"Close"` in buttonLabels, htmlLen +51KB) but the in-dialog confirm was never clicked. Root cause: diagnostics' `buttonLabels` query used `[role="button"]` only, so FB's native `<button>` modal CTA was invisible in the fingerprint and the P12 selector `[role="dialog"] div[role="button"][aria-label="Remove profiles from this browser" i]` guessed wrong.
+
+Three click-based escapes have now failed on AYMH (P8, P10, P12) — each on a different UI subtlety. Instead of iterating on the click chain, escape via the underlying mechanism: AYMH is driven by device-pinning cookies (`datr`, `sb`, `fr`, `dpr`, `wd`, `ps_l`, `ps_n`). Clear them with `context.clearCookies({ name })` per name, then `page.goto(FORCE_CREDENTIAL_LOGIN_URL)` — no UI required. One-shot guard `didAymhCookieClear` prevents loops if FB re-issues cookies from server state.
+
+Also widen `buttonLabels` fingerprint to include native `<button>` elements and fall back to `textContent` when `aria-label` is absent — closes the diagnostic gap that let P12 fail silently.
+
+**Where**:
+- `packages/connectors/src/facebook/login.ts`: export `AYMH_DEVICE_COOKIE_NAMES`; remove now-dead `SELECTORS.removeProfilesFromBrowser` and `SELECTORS.removeProfilesConfirmInDialog`; add private `clearAymhDeviceCookies(page)` helper; replace `aymh_chooser` handler with cookie-clear + goto sequence gated by `didAymhCookieClear`; update `LoginScreenState` AYMH comment.
+- `packages/connectors/src/facebook/diagnostics.ts`: change `buttonLabels` query from `[role="button"]` to `button, [role="button"]`; prefer `aria-label`, fall back to `textContent`.
+- `packages/connectors/src/facebook/__tests__/login-attempt.test.ts`: add `context()` mock returning a `clearCookies({ name })` stub that records into `clearedCookieNames`; replace the two P10/P12 click tests with a P13 cookie-clear success test and update the persist-defense test to assert one-shot behaviour.
+- Docs: `spec.md` P13 story, `PLAYBOOK.md` Escape Paths matrix (add cookie-clear as the current AYMH escape; mark click-based as historical).
+
+**Depends on**: T20 (removes the selectors T20 added).
+**Reuses**: `FORCE_CREDENTIAL_LOGIN_URL`, `LOGIN_NAVIGATION_TIMEOUT_MS`, `logEvent`, one-shot recovery pattern (mirrors `didForceCredentialRecovery`).
+
+**Tools**: MCP: NONE · Skill: NONE
+
+**Done when**:
+- [x] `AYMH_DEVICE_COOKIE_NAMES` exported: `['datr', 'sb', 'fr', 'dpr', 'wd', 'ps_l', 'ps_n']`.
+- [x] `SELECTORS.removeProfilesFromBrowser` and `SELECTORS.removeProfilesConfirmInDialog` removed. No dead selector references remain.
+- [x] `clearAymhDeviceCookies(page)` iterates `AYMH_DEVICE_COOKIE_NAMES` and calls `page.context().clearCookies({ name })` per name; each call `.catch(() => undefined)`-guarded.
+- [x] `aymh_chooser` handler: if `!didAymhCookieClear` → set flag → emit `fb_aymh_cookie_cleared` → clearAymhDeviceCookies → `page.goto(FORCE_CREDENTIAL_LOGIN_URL)` → `waitForLoadState('networkidle')`. All navigation calls `.catch(() => undefined)`-guarded.
+- [x] `buttonLabels` query changed to `button, [role="button"]`; prefers aria-label, falls back to trimmed `textContent`.
+- [x] Test: `aymh_chooser → goto → full_login → home_feed` ⇒ `clearedCookieNames` sorted equals the seven cookie names sorted; `fb_aymh_cookie_cleared` in captured logs; outcome `{ success: true }`.
+- [x] One-shot defense test: `aymh_chooser × 2` ⇒ `clearedCookieNames.length === 7` (exactly once), outcome `{ success: false, reason: 'unknown_login_page' }`.
+- [x] No new fields containing cookie *values* in fingerprint payloads. `clearCookies` filter includes `{ name }` — never empty.
+- [x] Full `pnpm test` green; `pnpm typecheck` clean.

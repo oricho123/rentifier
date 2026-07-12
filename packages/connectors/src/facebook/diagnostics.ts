@@ -141,14 +141,23 @@ export async function pageFingerprint(page: Page): Promise<FacebookPageFingerpri
     withTimeout(
       page
         .evaluate(
+          // Query native `<button>` AND `[role="button"]` — earlier variants
+          // caught only `[role="button"]` divs, which meant the AYMH P12
+          // confirmation modal's native `<button>` CTA was invisible in the
+          // fingerprint. For each element prefer aria-label; fall back to
+          // trimmed innerText so a labelless native button (e.g. "Remove")
+          // still surfaces. Content is UI chrome only, never user text.
           `(() => {
             try {
-              var els = Array.from(document.querySelectorAll('[role="button"]'));
+              var els = Array.from(document.querySelectorAll('button, [role="button"]'));
               var labels = [];
               for (var i = 0; i < els.length; i++) {
                 var al = els[i].getAttribute('aria-label');
-                if (al && al.trim().length > 0) {
-                  labels.push(al.trim().slice(0, ${MAX_LABEL_LEN}));
+                var text = al && al.trim().length > 0
+                  ? al.trim()
+                  : (els[i].textContent || '').trim();
+                if (text.length > 0) {
+                  labels.push(text.slice(0, ${MAX_LABEL_LEN}));
                   if (labels.length >= ${MAX_BUTTON_LABELS}) break;
                 }
               }
